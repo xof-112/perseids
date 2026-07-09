@@ -1,0 +1,26 @@
+CompileFlags:
+  CompilationDatabase: .
+  Remove:
+    - -nostdlib
+  Add:
+    - --target=arm-none-eabi
+    - --gcc-toolchain=C:/Users/xof/.platformio/packages/toolchain-gccarmnoneeabi
+    - -mcpu=cortex-m7
+    - -mfloat-abi=hard
+    - -mfpu=fpv5-d16
+    - -Wno-unknown-warning-option
+    - -isystem
+    - C:/Users/xof/.platformio/packages/toolchain-gccarmnoneeabi/arm-none-eabi/include/c++/12.3.1
+    - -isystem
+    - C:/Users/xof/.platformio/packages/toolchain-gccarmnoneeabi/arm-none-eabi/include/c++/12.3.1/arm-none-eabi
+    - -isystem
+    - C:/Users/xof/.platformio/packages/toolchain-gccarmnoneeabi/arm-none-eabi/include/c++/12.3.1/backward
+    - -isystem
+    - C:/Users/xof/.platformio/packages/toolchain-gccarmnoneeabi/lib/gcc/arm-none-eabi/12.3.1/include
+    - -isystem
+    - C:/Users/xof/.platformio/packages/toolchain-gccarmnoneeabi/lib/gcc/arm-none-eabi/12.3.1/include-fixed
+    - -isystem
+    - C:/Users/xof/.platformio/packages/toolchain-gccarmnoneeabi/arm-none-eabi/include
+
+QueryDriver:
+  - C:/Users/xof/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-*
