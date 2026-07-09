@@ -143,7 +143,7 @@ class SSD130x4WireSpiTransport
                      SpiHandle::EndCallbackFunctionPtr end_callback,
                      void*                             context)
     {
-        SCB_CleanInvalidateDCache_by_Addr(buff, size);
+        SCB_CleanInvalidateDCache_by_Addr((uint32_t*)(uintptr_t)buff, size);
         pin_dc_.Write(1);
         spi_.DmaTransmit(buff, size, NULL, end_callback, context);
     };
