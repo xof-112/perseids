@@ -1,0 +1,7 @@
+---
+description: Perseids Firmware Architecture
+alwaysApply: true
+---
+Lies vor jedem Code-Vorschlag ARCHITECTURE.md im Projekt-Root. Beachte die Hardware-Grenzen
+der Electrosmith Daisy Seed und die C++/DSP-Leitplanken in Abschnitt 2. Schreibe ausschließlich
+Embedded-ARM-Cortex-M7-Code (libDaisy/DaisySP), keinen generischen Desktop-C++-Code.
