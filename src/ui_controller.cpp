@@ -39,6 +39,7 @@ void UiController::Init(daisy::DaisySeed&  seed,
     mux_.Init(seed);
     display_.Init(seed);
     cycle_btn_.Init(hw::kCycleButton, kLongPressMs);
+    trails_.Init(seed);
 
     mux_.Process();
     for(size_t i = 0; i < row_count_; ++i)
@@ -60,8 +61,10 @@ void UiController::HandleCycleButton(ButtonGesture::Event event)
     {
         if(event == ButtonGesture::Event::ShortPress)
         {
+            trails_.ResetAll();
             reset_confirm_ = false;
             playing_       = true;
+            screen_        = UiScreen::Dashboard;
             TouchActivity();
         }
         return;
@@ -133,6 +136,8 @@ void UiController::HandlePotTurn(size_t row_idx, float pot_norm, float delta)
 
 void UiController::PollControls()
 {
+    trails_.BeginFrame();
+
     mux_.Process();
 
     for(size_t i = 0; i < row_count_; ++i)
@@ -141,6 +146,8 @@ void UiController::PollControls()
         rows_[i].UpdatePotPosition(mux_.Get(map.chain, map.channel));
     }
 
+    // Cycle button: same order as working build e867e3c — debounce, pots, poll
+    // with no heavy work in between.
     cycle_btn_.Debounce();
 
     const bool cycle_held = cycle_btn_.IsHeld();
@@ -165,7 +172,9 @@ void UiController::PollControls()
     }
     cycle_held_prev_ = cycle_held;
 
-    bool pot_moved = false;
+    const bool was_reset_confirm = reset_confirm_;
+
+    bool pot_cancel_reset = false;
 
     for(size_t i = 0; i < pot_count_; ++i)
     {
@@ -173,10 +182,14 @@ void UiController::PollControls()
         const float norm  = mux_.Get(map.chain, map.channel);
         const float delta = mux_.GetDelta(map.chain, map.channel);
 
-        if(std::fabs(delta) > kTurnThreshold)
+        if(std::fabs(delta) > kResetCancelThreshold)
+            pot_cancel_reset = true;
+
+        // Intentional scroll movement only — mux jitter must not block long-press delete.
+        if(cycle_held && i < row_count_)
         {
-            pot_moved = true;
-            if(cycle_held && std::fabs(delta) > kPotActivityDuringHold)
+            const float moved = norm - scroll_anchor_[i];
+            if(std::fabs(moved) >= kScrollStepThreshold * 0.5f)
                 pot_moved_during_hold_ = true;
         }
 
@@ -186,7 +199,18 @@ void UiController::PollControls()
 
     HandleCycleButton(cycle_btn_.Poll());
 
-    if(reset_confirm_ && pot_moved)
+    // Trail encoders/buttons after cycle handling — must not delay Debounce→Poll.
+    trails_.PollEncoders();
+    trails_.Process();
+    trails_.ApplyEncoderSteps();
+
+    if(trails_.ActivityThisFrame() && !cycle_held)
+    {
+        TouchActivity();
+        screen_ = UiScreen::Dashboard;
+    }
+
+    if(was_reset_confirm && (pot_cancel_reset || trails_.ActivityThisFrame()))
         reset_confirm_ = false;
 
     if(reset_confirm_ && daisy::System::GetNow() >= reset_deadline_ms_)
@@ -206,7 +230,7 @@ void UiController::UpdateScreen()
         {
             secs_left = (reset_deadline_ms_ - daisy::System::GetNow() + 999) / 1000;
         }
-        display_.DrawDashboard(playing_, reset_confirm_, secs_left, &mux_);
+        display_.DrawDashboard(playing_, reset_confirm_, secs_left, trails_);
     }
     else
     {

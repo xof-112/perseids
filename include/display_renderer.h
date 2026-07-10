@@ -1,8 +1,8 @@
 #pragma once
 
 #include "cycle_row.h"
-#include "mux_adc.h"
 #include "param_registry.h"
+#include "trail_level.h"
 
 #include "daisy_seed.h"
 #include "dev/oled_ssd130x.h"
@@ -27,10 +27,10 @@ class DisplayRenderer
 
     void Init(daisy::DaisySeed& seed);
 
-    void DrawDashboard(bool          playing,
-                       bool          reset_confirm,
-                       uint32_t      reset_seconds_left,
-                       const MuxAdcPoller* mux);
+    void DrawDashboard(bool                     playing,
+                       bool                     reset_confirm,
+                       uint32_t                 reset_seconds_left,
+                       const TrailLevelController& trails);
 
     void DrawCycleView(const ParameterRegistry& reg,
                        const CycleRow&          row,

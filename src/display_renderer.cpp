@@ -22,8 +22,13 @@ void DisplayRenderer::Init(daisy::DaisySeed& seed)
 {
     (void)seed;
     daisy::OledDisplay<daisy::SSD130x4WireSpi128x64Driver>::Config cfg;
-    cfg.driver_config.transport_config.pin_config.dc    = hw::kOledDc;
-    cfg.driver_config.transport_config.pin_config.reset = hw::kOledReset;
+    cfg.driver_config.transport_config.spi_config.pin_config.sclk
+        = hw::kOledSck;
+    cfg.driver_config.transport_config.spi_config.pin_config.mosi
+        = hw::kOledMosi;
+    cfg.driver_config.transport_config.spi_config.pin_config.nss = hw::kOledCs;
+    cfg.driver_config.transport_config.pin_config.dc             = hw::kOledDc;
+    cfg.driver_config.transport_config.pin_config.reset          = hw::kOledReset;
     display_.Init(cfg);
     display_.Fill(false);
     display_.Update();
@@ -402,10 +407,10 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
     }
 }
 
-void DisplayRenderer::DrawDashboard(bool               playing,
-                                    bool               reset_confirm,
-                                    uint32_t           reset_seconds_left,
-                                    const MuxAdcPoller* mux)
+void DisplayRenderer::DrawDashboard(bool                     playing,
+                                    bool                     reset_confirm,
+                                    uint32_t                 reset_seconds_left,
+                                    const TrailLevelController& trails)
 {
     Clear();
 
@@ -425,38 +430,53 @@ void DisplayRenderer::DrawDashboard(bool               playing,
         return;
     }
 
-    display_.SetCursor(24, 0);
-    display_.WriteString("PERSEIDS", Font_7x10, true);
+    display_.SetCursor(0, 0);
+    display_.WriteString("PERSEIDS", Font_6x8, true);
 
-    display_.SetCursor(0, 16);
+    char rec_hdr[12];
+    if(trails.RecTrigActive())
+        snprintf(rec_hdr, sizeof(rec_hdr), "REC%u", trails.RecTrailSlot());
+    else
+        snprintf(rec_hdr, sizeof(rec_hdr), "R%u", trails.RecTrailSlot());
+    display_.SetCursor(54, 0);
+    display_.WriteString(rec_hdr, Font_6x8, true);
+
+    const int play_x = kWidth - (playing ? 4 : 5) * 6;
+    display_.SetCursor(play_x, 0);
     display_.WriteString(playing ? "PLAY" : "PAUSE", Font_6x8, true);
 
-    display_.SetCursor(0, 28);
-    display_.WriteString("Pots EMA:", Font_6x8, true);
+    display_.SetCursor(0, 9);
+    display_.WriteString("     LVL LK SO", Font_6x8, true);
 
-    if(mux != nullptr)
+    for(size_t i = 0; i < TrailLevelController::kCount; ++i)
     {
-        char line_a[24];
-        snprintf(line_a,
-                 sizeof(line_a),
-                 "A0:%3d%% A1:%3d%%",
-                 static_cast<int>(mux->Get(hw::kMuxChainA, hw::kPotMuxA0) * 100.f),
-                 static_cast<int>(mux->Get(hw::kMuxChainA, hw::kPotMuxA1) * 100.f));
-        display_.SetCursor(0, 38);
-        display_.WriteString(line_a, Font_6x8, true);
+        const TrailSnapshot& t = trails.Trail(i);
+        char                 line[20];
+        const unsigned pct
+            = static_cast<unsigned>(t.level * 100.f + 0.5f);
+        snprintf(line,
+                 sizeof(line),
+                 "T%u %3u%%",
+                 static_cast<unsigned>(i + 1),
+                 pct);
 
-        char line_b[24];
-        snprintf(line_b,
-                 sizeof(line_b),
-                 "B0:%3d%% B1:%3d%%",
-                 static_cast<int>(mux->Get(hw::kMuxChainB, hw::kPotMuxB0) * 100.f),
-                 static_cast<int>(mux->Get(hw::kMuxChainB, hw::kPotMuxB1) * 100.f));
-        display_.SetCursor(0, 48);
-        display_.WriteString(line_b, Font_6x8, true);
+        const int y = 17 + static_cast<int>(i) * 8;
+        display_.SetCursor(0, y);
+        display_.WriteString(line, Font_6x8, true);
+
+        int x = 66;
+        if(t.locked)
+        {
+            display_.SetCursor(x, y);
+            display_.WriteString("L", Font_6x8, true);
+            x += 18;
+        }
+        if(t.solo)
+        {
+            display_.SetCursor(x, y);
+            display_.WriteString("S", Font_6x8, true);
+        }
     }
-
-    display_.SetCursor(0, 58);
-    display_.WriteString("Hold+turn = cycle", Font_6x8, true);
 }
 
 } // namespace perseids
