@@ -1,3 +1,4 @@
+
 # Perseids
 
 Firmware for **Perseids**, a Eurorack-style granular/spectral audio module on the
@@ -15,6 +16,8 @@ Sound — independently designed, not affiliated.
 ## Status — Phase 3 · `dev-phase3v001`
 
 **Phase 3: v001 — started to work on resynth engine (tbc).**
+
+![Perseids Phase 3 v001 bench setup](images/dev-phase3v001.jpg)
 
 | Area | State |
 |------|--------|
