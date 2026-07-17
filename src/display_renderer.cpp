@@ -219,6 +219,48 @@ void DisplayRenderer::FormatValue(const ParameterDef& def,
     case ParamDisplayType::CountNum:
         snprintf(out, out_len, "%d", static_cast<int>(*def.value_ptr + 0.5f));
         break;
+    case ParamDisplayType::Seconds:
+    {
+        // Integer formatting — newlib-nano often omits %f support (would print only "s").
+        float s = *def.value_ptr;
+        if(s < 0.f)
+            s = 0.f;
+        if(s < 10.f)
+        {
+            const int hundredths = static_cast<int>(s * 100.f + 0.5f);
+            snprintf(out,
+                     out_len,
+                     "%d.%02ds",
+                     hundredths / 100,
+                     hundredths % 100);
+        }
+        else
+        {
+            const int tenths = static_cast<int>(s * 10.f + 0.5f);
+            snprintf(out, out_len, "%d.%ds", tenths / 10, tenths % 10);
+        }
+        break;
+    }
+    case ParamDisplayType::HoldTime:
+    {
+        float s = *def.value_ptr;
+        if(s > 30.f)
+        {
+            snprintf(out, out_len, "INF");
+        }
+        else if(s < 10.f)
+        {
+            if(s < 0.f)
+                s = 0.f;
+            const int tenths = static_cast<int>(s * 10.f + 0.5f);
+            snprintf(out, out_len, "%d.%ds", tenths / 10, tenths % 10);
+        }
+        else
+        {
+            snprintf(out, out_len, "%ds", static_cast<int>(s + 0.5f));
+        }
+        break;
+    }
     }
 }
 
@@ -380,6 +422,10 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
         case ParamDisplayType::CountNum:
             DrawCountNum(col, *def, active);
             break;
+        case ParamDisplayType::Seconds:
+        case ParamDisplayType::HoldTime:
+            DrawUnipolarBar(col, norm, active);
+            break;
         }
     }
 
@@ -407,10 +453,78 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
     }
 }
 
-void DisplayRenderer::DrawDashboard(bool                     playing,
-                                    bool                     reset_confirm,
-                                    uint32_t                 reset_seconds_left,
-                                    const TrailLevelController& trails)
+void DisplayRenderer::DrawTrailLifeBar(int                x0,
+                                       int                y,
+                                       int                w,
+                                       int                h,
+                                       const TrailLifeUi& life)
+{
+    const int x1 = x0 + w - 1;
+    const int y1 = y + h - 1;
+    display_.DrawRect(x0, y, x1, y1, true, false);
+
+    if(life.phase == TrailLifePhase::Empty)
+        return;
+
+    float fill = life.fill;
+    if(fill < 0.f)
+        fill = 0.f;
+    if(fill > 1.f)
+        fill = 1.f;
+
+    // FIN: solid fill L→R. Recording: striped (≠ FadeIn). FOUT: empty L→R.
+    const int inner_w = w - 2;
+    const int fill_w
+        = static_cast<int>(fill * static_cast<float>(inner_w) + 0.5f);
+    if(fill_w > 0)
+    {
+        if(life.phase == TrailLifePhase::FadeOut)
+        {
+            const int fx0 = x0 + 1 + (inner_w - fill_w);
+            display_.DrawRect(fx0, y + 1, x0 + inner_w, y1 - 1, true, true);
+        }
+        else if(life.phase == TrailLifePhase::Recording)
+        {
+            for(int x = x0 + 1; x <= x0 + fill_w; x += 2)
+                display_.DrawLine(x, y + 1, x, y1 - 1, true);
+        }
+        else
+        {
+            display_.DrawRect(x0 + 1, y + 1, x0 + fill_w, y1 - 1, true, true);
+        }
+    }
+
+    if(life.phase == TrailLifePhase::Hold && fill_w >= inner_w)
+    {
+        char label[8];
+        if(life.hold_sec < 0)
+            snprintf(label, sizeof(label), "INF");
+        else
+            snprintf(label, sizeof(label), "%ds", static_cast<int>(life.hold_sec));
+
+        // Font_4x6 fits inside the bar; Font_6x8 inverted bled past the frame.
+        constexpr int kGlyphW = 4;
+        const int     text_w  = static_cast<int>(strlen(label)) * kGlyphW;
+        int           tx      = x0 + (w - text_w) / 2;
+        if(tx < x0 + 1)
+            tx = x0 + 1;
+        const int ty = y; // 1px higher so Font_4x6 sits centered in the bar
+        display_.SetCursor(tx, ty);
+        display_.WriteString(label, Font_4x6, false);
+
+        // Restore bar outline in case the glyph cell clipped past the frame.
+        display_.DrawRect(x0, y, x1, y1, true, false);
+    }
+}
+
+void DisplayRenderer::DrawDashboard(bool                        playing,
+                                    bool                        reset_confirm,
+                                    uint32_t                    reset_seconds_left,
+                                    const TrailLevelController& trails,
+                                    float                       input_level,
+                                    float                       threshold,
+                                    const TrailLifeUi life[TrailLevelController::kCount],
+                                    size_t                      active_trail_count)
 {
     Clear();
 
@@ -422,7 +536,10 @@ void DisplayRenderer::DrawDashboard(bool                     playing,
         display_.SetCursor(16, 32);
         display_.WriteString("Trails?", Font_7x10, false);
         char countdown[12];
-        snprintf(countdown, sizeof(countdown), "%us", reset_seconds_left);
+        snprintf(countdown,
+                 sizeof(countdown),
+                 "%lus",
+                 static_cast<unsigned long>(reset_seconds_left));
         display_.SetCursor(88, 40);
         display_.WriteString(countdown, Font_6x8, false);
         display_.SetCursor(4, 54);
@@ -445,37 +562,83 @@ void DisplayRenderer::DrawDashboard(bool                     playing,
     display_.SetCursor(play_x, 0);
     display_.WriteString(playing ? "PLAY" : "PAUSE", Font_6x8, true);
 
-    display_.SetCursor(0, 9);
-    display_.WriteString("     LVL LK SO", Font_6x8, true);
+    // Input threshold VU (left)
+    constexpr int kVuX0 = 0;
+    constexpr int kVuX1 = 9;
+    constexpr int kVuY0 = 17;
+    constexpr int kVuY1 = 56;
+    display_.DrawRect(kVuX0, kVuY0, kVuX1, kVuY1, true, false);
 
-    for(size_t i = 0; i < TrailLevelController::kCount; ++i)
+    const float lvl
+        = input_level < 0.f ? 0.f : (input_level > 1.f ? 1.f : input_level);
+    const float thr
+        = threshold < 0.f ? 0.f : (threshold > 1.f ? 1.f : threshold);
+    const int span = kVuY1 - kVuY0 - 2;
+    const int fill = static_cast<int>(lvl * static_cast<float>(span) + 0.5f);
+    if(fill > 0)
+    {
+        display_.DrawRect(kVuX0 + 1,
+                          kVuY1 - 1 - fill,
+                          kVuX1 - 1,
+                          kVuY1 - 1,
+                          true,
+                          true);
+    }
+    const int thr_y
+        = kVuY1 - 1 - static_cast<int>(thr * static_cast<float>(span) + 0.5f);
+    for(int x = kVuX0; x <= kVuX1; ++x)
+        display_.DrawPixel(x, thr_y, true);
+
+    // Row layout: VU | T# | 3px | % | 1px | L | 1px | S | 1px | life bar
+    // Font_6x8: T#=12px, %%=24px ("100%"), L/S=6px each.
+    constexpr int kTx     = 12; // after VU — gap already matches previous layout
+    constexpr int kGapT   = 3;
+    constexpr int kGap    = 1;
+    constexpr int kTWidth = 12; // "T1"
+    constexpr int kPctW   = 24; // "100%"
+    constexpr int kFlagW  = 6;  // "L" / "S"
+    constexpr int kPctX   = kTx + kTWidth + kGapT;
+    constexpr int kLX     = kPctX + kPctW + kGap;
+    constexpr int kSX     = kLX + kFlagW + kGap;
+    constexpr int kBarX   = kSX + kFlagW + kGap;
+    constexpr int kBarR   = 126;
+    constexpr int kBarW   = kBarR - kBarX + 1;
+    constexpr int kBarH   = 7;
+
+    size_t shown = active_trail_count;
+    if(shown < 1)
+        shown = 1;
+    if(shown > TrailLevelController::kCount)
+        shown = TrailLevelController::kCount;
+
+    for(size_t i = 0; i < shown; ++i)
     {
         const TrailSnapshot& t = trails.Trail(i);
-        char                 line[20];
-        const unsigned pct
-            = static_cast<unsigned>(t.level * 100.f + 0.5f);
-        snprintf(line,
-                 sizeof(line),
-                 "T%u %3u%%",
-                 static_cast<unsigned>(i + 1),
-                 pct);
+        const int            y = 17 + static_cast<int>(i) * 8;
 
-        const int y = 17 + static_cast<int>(i) * 8;
-        display_.SetCursor(0, y);
-        display_.WriteString(line, Font_6x8, true);
+        char tlab[4];
+        snprintf(tlab, sizeof(tlab), "T%u", static_cast<unsigned>(i + 1));
+        display_.SetCursor(kTx, y);
+        display_.WriteString(tlab, Font_6x8, true);
 
-        int x = 66;
+        char pct[8];
+        const unsigned p = static_cast<unsigned>(t.level * 100.f + 0.5f);
+        snprintf(pct, sizeof(pct), "%3u%%", p);
+        display_.SetCursor(kPctX, y);
+        display_.WriteString(pct, Font_6x8, true);
+
         if(t.locked)
         {
-            display_.SetCursor(x, y);
+            display_.SetCursor(kLX, y);
             display_.WriteString("L", Font_6x8, true);
-            x += 18;
         }
         if(t.solo)
         {
-            display_.SetCursor(x, y);
+            display_.SetCursor(kSX, y);
             display_.WriteString("S", Font_6x8, true);
         }
+
+        DrawTrailLifeBar(kBarX, y, kBarW, kBarH, life[i]);
     }
 }
 

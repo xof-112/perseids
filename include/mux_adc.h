@@ -13,8 +13,8 @@ class MuxAdcPoller
   public:
     static constexpr size_t kChains    = 2;
     static constexpr size_t kChannels  = 16;
-    static constexpr float  kEmaAlphaIdle  = 0.35f;  // jitter filter when settled
-    static constexpr float  kEmaSnapThresh = 0.012f; // snap to raw when farther
+    static constexpr float  kEmaAlphaIdle  = 0.18f;  // heavier idle filter vs mux noise
+    static constexpr float  kEmaSnapThresh = 0.018f; // only snap on real pot moves
     static constexpr uint32_t kSettleUs = 80;
 
     void Init(daisy::DaisySeed& seed);

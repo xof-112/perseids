@@ -1,0 +1,30 @@
+---
+description: Pot end pickup/catch for params at min/max (Count, Hold INF, times)
+alwaysApply: true
+---
+# Pot end catch (pickup at 0 % / 100 %)
+
+Daisy mux pots rarely reach ADC 0.0 or 1.0. Parameters whose useful extremes sit
+at the travel ends must use the shared end-catch in `CycleRow` (see
+`UsesPotEndCatch` in `src/cycle_row.cpp`).
+
+## Rule
+
+When adding or changing a parameter that has a meaningful **min or max at the
+pot ends** (discrete counts, Hold INF, Buffer/Fade times, later Partials, etc.):
+
+1. Use a `ParamDisplayType` already covered by `UsesPotEndCatch`, **or** add the
+   new type there.
+2. Do **not** invent a one-off Hold-only hack — keep the shared helpers:
+   - catch band: pot / target ≥ 0.94 (top) or ≤ 0.06 (bottom)
+   - value snap: `SnapEndNorm` then denormalize
+3. Discrete integer params (`CountNum` / `CountBar`): round to nearest int after
+   denormalize.
+
+## Covered today
+
+`HoldTime`, `CountNum`, `CountBar`, `Seconds`.
+
+## Not covered (normal 2 % near-catch is enough)
+
+`Unipolar`, `Bipolar`, `Toggle`.

@@ -7,14 +7,14 @@ namespace perseids
 
 namespace
 {
-constexpr uint32_t kLongPressMs     = 800;
-constexpr uint32_t kRecPulseMs       = 600;
-constexpr float    kCoarseLevelStep  = 0.02f;  // 2 % per detent — fast turn
-constexpr float    kFineLevelStep    = 0.01f;  // 1 % per detent — slow turn
-// TODO(audio): Re-tune fine/coarse steps once real Trail level gain is wired (Phase 3+).
-constexpr uint32_t kFineIntervalMs   = 100;
-constexpr int      kEncoderPolls     = 32;
-}
+constexpr uint32_t kLongPressMs    = 800;
+constexpr uint32_t kRecPulseMs     = 600;
+constexpr float    kCoarseLevelStep = 0.02f;
+constexpr float    kFineLevelStep   = 0.01f;
+// TODO(audio): Re-tune fine/coarse steps once gain staging is finalized.
+constexpr uint32_t kFineIntervalMs = 100;
+constexpr int      kEncoderPolls   = 32;
+} // namespace
 
 void TrailLevelController::BeginFrame()
 {
@@ -47,25 +47,23 @@ void TrailLevelController::ResetAll()
         trails_[i].locked = false;
         trails_[i].solo   = false;
     }
-    rec_trail_slot_      = 1;
-    rec_pulse_slot_      = 1;
     activity_this_frame_ = true;
+    if(capture_)
+        capture_->ClearAll();
 }
 
-void TrailLevelController::Init(daisy::DaisySeed& seed)
+void TrailLevelController::Init(daisy::DaisySeed& seed, CaptureEngine* capture)
 {
     (void)seed;
-
-    rec_trail_slot_      = 1;
-    rec_pulse_slot_      = 1;
-    rec_trig_until_ms_   = 0;
+    capture_             = capture;
+    rec_flash_until_ms_  = 0;
     activity_this_frame_ = false;
 
     for(size_t i = 0; i < kCount; ++i)
     {
-        trails_[i].level  = 0.5f;
-        trails_[i].locked = false;
-        trails_[i].solo   = false;
+        trails_[i].level    = 0.5f;
+        trails_[i].locked   = false;
+        trails_[i].solo     = false;
         last_encoder_ms_[i] = 0;
         pending_steps_[i]   = 0;
 
@@ -78,17 +76,36 @@ void TrailLevelController::Init(daisy::DaisySeed& seed)
     trig_in_.Init(hw::kTrigInput, kLongPressMs);
 }
 
-void TrailLevelController::OnRecTrig()
+void TrailLevelController::FillMixerState(TrailMixerState out[kCount]) const
 {
-    rec_pulse_slot_      = rec_trail_slot_;
-    rec_trig_until_ms_   = daisy::System::GetNow() + kRecPulseMs;
-    activity_this_frame_ = true;
-    rec_trail_slot_      = (rec_trail_slot_ % 5) + 1;
+    for(size_t i = 0; i < kCount; ++i)
+    {
+        out[i].level  = trails_[i].level;
+        out[i].locked = trails_[i].locked;
+        out[i].solo   = trails_[i].solo;
+    }
+}
+
+uint8_t TrailLevelController::RecTrailSlot() const
+{
+    if(capture_)
+        return capture_->RecTrailSlot();
+    return 1;
 }
 
 bool TrailLevelController::RecTrigActive() const
 {
-    return daisy::System::GetNow() < rec_trig_until_ms_;
+    if(daisy::System::GetNow() < rec_flash_until_ms_)
+        return true;
+    return capture_ && capture_->RecActive();
+}
+
+void TrailLevelController::OnRecTrig()
+{
+    rec_flash_until_ms_  = daisy::System::GetNow() + kRecPulseMs;
+    activity_this_frame_ = true;
+    if(capture_)
+        capture_->RequestManualTrigger();
 }
 
 void TrailLevelController::HandlePush(size_t index, ButtonGesture::Event event)
@@ -136,7 +153,7 @@ void TrailLevelController::HandleEncoderStep(size_t index, int32_t steps)
     if(level > 1.f)
         level = 1.f;
 
-    trails_[index].level   = level;
+    trails_[index].level = level;
     activity_this_frame_ = true;
 }
 

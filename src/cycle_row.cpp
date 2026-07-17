@@ -5,6 +5,49 @@
 namespace perseids
 {
 
+namespace
+{
+// ADC rarely reaches exact 0.0 / 1.0 — catch & snap within this band at either end.
+constexpr float kEndCatchNorm = 0.94f;
+constexpr float kEndNearEps   = 0.06f;
+constexpr float kDefaultNear  = 0.02f;
+
+// Params whose min/max sit at pot ends and must remain catchable (Count, Hold INF,
+// Buffer/Fade times, etc.). Apply the same end-catch for every new such param.
+bool UsesPotEndCatch(ParamDisplayType type)
+{
+    switch(type)
+    {
+    case ParamDisplayType::HoldTime:
+    case ParamDisplayType::CountNum:
+    case ParamDisplayType::CountBar:
+    case ParamDisplayType::Seconds:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool EndCatchReady(float target_norm, float pot_norm)
+{
+    const bool top
+        = target_norm >= kEndCatchNorm && pot_norm >= kEndCatchNorm;
+    const bool bottom
+        = target_norm <= (1.f - kEndCatchNorm)
+          && pot_norm <= (1.f - kEndCatchNorm);
+    return top || bottom;
+}
+
+float SnapEndNorm(float norm)
+{
+    if(norm >= kEndCatchNorm)
+        return 1.f;
+    if(norm <= (1.f - kEndCatchNorm))
+        return 0.f;
+    return norm;
+}
+} // namespace
+
 CycleRow::CycleRow(const char*     block_name,
                    const uint16_t* param_ids,
                    size_t          param_count)
@@ -34,7 +77,7 @@ const ParameterDef* CycleRow::ScrollParam(const ParameterRegistry& reg) const
 }
 
 const ParameterDef* CycleRow::ParamAt(const ParameterRegistry& reg,
-                                      size_t                  index) const
+                                      size_t                   index) const
 {
     return index < param_count_ ? reg.Find(param_ids_[index]) : nullptr;
 }
@@ -66,19 +109,25 @@ void CycleRow::ChangeValue(const ParameterRegistry& reg, float pot_norm)
     physical_pot_norm_ = pot_norm;
     pickup_pot_norm_   = pot_norm;
 
+    const bool end_catch = UsesPotEndCatch(def->display_type);
+
     if(pickup_active_)
     {
         if(last_pot_valid_)
         {
-            const bool crossed_up
+            const float near_eps = end_catch ? kEndNearEps : kDefaultNear;
+            const bool  crossed_up
                 = last_pot_norm_ < pickup_target_norm_
                   && pot_norm >= pickup_target_norm_;
             const bool crossed_down
                 = last_pot_norm_ > pickup_target_norm_
                   && pot_norm <= pickup_target_norm_;
-            const bool near = std::fabs(pot_norm - pickup_target_norm_) < 0.02f;
+            const bool near
+                = std::fabs(pot_norm - pickup_target_norm_) < near_eps;
+            const bool ends
+                = end_catch && EndCatchReady(pickup_target_norm_, pot_norm);
 
-            if(crossed_up || crossed_down || near)
+            if(crossed_up || crossed_down || near || ends)
                 pickup_active_ = false;
         }
 
@@ -99,9 +148,21 @@ void CycleRow::ChangeValue(const ParameterRegistry& reg, float pot_norm)
         return;
     }
 
-    *def->value_ptr
-        = ParameterRegistry::Clamp(*def,
-                                   ParameterRegistry::Denormalize(*def, norm));
+    if(end_catch)
+        norm = SnapEndNorm(norm);
+
+    float value = ParameterRegistry::Clamp(
+        *def, ParameterRegistry::Denormalize(*def, norm));
+
+    // Discrete counts: store whole numbers after end-snap / denormalize.
+    if(def->display_type == ParamDisplayType::CountNum
+       || def->display_type == ParamDisplayType::CountBar)
+    {
+        value = static_cast<float>(static_cast<int>(value + 0.5f));
+        value = ParameterRegistry::Clamp(*def, value);
+    }
+
+    *def->value_ptr = value;
 }
 
 void CycleRow::CommitScrollBinding(const ParameterRegistry& reg)
@@ -134,7 +195,11 @@ void CycleRow::BeginPickup(const ParameterDef& def)
     last_pot_norm_      = physical_pot_norm_;
     last_pot_valid_     = true;
 
-    if(std::fabs(physical_pot_norm_ - pickup_target_norm_) < 0.02f)
+    const bool  end_catch = UsesPotEndCatch(def.display_type);
+    const float near_eps  = end_catch ? kEndNearEps : kDefaultNear;
+
+    if(std::fabs(physical_pot_norm_ - pickup_target_norm_) < near_eps
+       || (end_catch && EndCatchReady(pickup_target_norm_, physical_pot_norm_)))
         pickup_active_ = false;
 }
 

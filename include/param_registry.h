@@ -13,6 +13,8 @@ enum class ParamDisplayType : uint8_t
     Toggle,    // two states, side by side
     CountBar,  // numeric label + unipolar-style bar (e.g. Partials)
     CountNum,  // large number only (e.g. Trail count)
+    Seconds,   // time in seconds (Buffer, Fade In/Out)
+    HoldTime,  // Hold seconds; values >30 display as INF
 };
 
 struct ParameterDef

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "capture_params.h"
 #include "cycle_row.h"
 #include "param_registry.h"
 #include "trail_level.h"
@@ -18,7 +19,7 @@ class DisplayRenderer
     static constexpr int kWidth  = 128;
     static constexpr int kHeight = 64;
 
-    static constexpr int kHeaderY       = 0;
+    static constexpr int kHeaderY     = 0;
     static constexpr int kCeilingY    = 10;
     static constexpr int kSegRowY     = 52;
     static constexpr int kSegRowH     = 12;
@@ -27,10 +28,14 @@ class DisplayRenderer
 
     void Init(daisy::DaisySeed& seed);
 
-    void DrawDashboard(bool                     playing,
-                       bool                     reset_confirm,
-                       uint32_t                 reset_seconds_left,
-                       const TrailLevelController& trails);
+    void DrawDashboard(bool                        playing,
+                       bool                        reset_confirm,
+                       uint32_t                    reset_seconds_left,
+                       const TrailLevelController& trails,
+                       float                       input_level,
+                       float                       threshold,
+                       const TrailLifeUi life[TrailLevelController::kCount],
+                       size_t                      active_trail_count);
 
     void DrawCycleView(const ParameterRegistry& reg,
                        const CycleRow&          row,
@@ -57,13 +62,13 @@ class DisplayRenderer
                          float             norm,
                          bool              active);
     void DrawBipolarBar(const ColumnGeom& col, float norm, bool active);
-    void DrawToggle(const ColumnGeom&  col,
+    void DrawToggle(const ColumnGeom&   col,
                     const ParameterDef& def,
                     bool                active);
-    void DrawCountBar(const ColumnGeom&  col,
+    void DrawCountBar(const ColumnGeom&   col,
                       const ParameterDef& def,
                       bool                active);
-    void DrawCountNum(const ColumnGeom&  col,
+    void DrawCountNum(const ColumnGeom&   col,
                       const ParameterDef& def,
                       bool                active);
     void DrawSegmentedRow(const ParameterRegistry& reg,
@@ -76,6 +81,11 @@ class DisplayRenderer
     void DrawValueHeader(const ParameterRegistry& reg,
                          const CycleRow&          row,
                          size_t                   active_col);
+    void DrawTrailLifeBar(int                x0,
+                          int                y,
+                          int                w,
+                          int                h,
+                          const TrailLifeUi& life);
 
     void FormatValue(const ParameterDef& def, char* out, size_t out_len) const;
     void FormatPosition(size_t index, size_t count, char* out, size_t out_len) const;

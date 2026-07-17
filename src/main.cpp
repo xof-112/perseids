@@ -1,5 +1,7 @@
 #include "daisy_seed.h"
 
+#include "capture_engine.h"
+#include "capture_params.h"
 #include "cycle_row.h"
 #include "hw_pins.h"
 #include "param_registry.h"
@@ -10,70 +12,105 @@ using namespace daisy;
 namespace
 {
 
-enum ParamId : uint16_t
-{
-    // Dummy block 1 — unipolar (4 params, like most blocks)
-    kD1Level = 1,
-    kD1Width,
-    kD1Depth,
-    kD1Send,
+perseids::CaptureParamValues g_params;
+perseids::CaptureEngine      g_capture;
 
-    // Dummy block 2 — toggle
-    kD2On,
-    kD2Mode,
-    kD2Sync,
-    kD2Link,
+const uint16_t kTrailsIds[]
+    = {perseids::kTrailsCount,
+       perseids::kTrailsThreshold,
+       perseids::kTrailsContRec,
+       perseids::kTrailsOnOff};
 
-    // Dummy block 3 — bipolar
-    kD3Macro,
-    kD3Vel,
-    kD3Pan,
-    kD3Tilt,
-};
-
-float g_d1_level = 0.5f;
-float g_d1_width = 0.35f;
-float g_d1_depth = 0.7f;
-float g_d1_send  = 0.25f;
-
-float g_d2_on   = 1.f;
-float g_d2_mode = 0.f;
-float g_d2_sync = 1.f;
-float g_d2_link = 0.f;
-
-float g_d3_macro = 0.5f;
-float g_d3_vel   = 0.4f;
-float g_d3_pan   = 0.55f;
-float g_d3_tilt  = 0.48f;
-
-const uint16_t kD1Ids[] = {kD1Level, kD1Width, kD1Depth, kD1Send};
-const uint16_t kD2Ids[] = {kD2On, kD2Mode, kD2Sync, kD2Link};
-const uint16_t kD3Ids[] = {kD3Macro, kD3Vel, kD3Pan, kD3Tilt};
+const uint16_t kTimeIds[] = {perseids::kTimeBuffer,
+                             perseids::kTimeHold,
+                             perseids::kTimeFadeIn,
+                             perseids::kTimeFadeOut};
 
 const perseids::PotMapping kPotMappings[] = {
-    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA0}, // Pot 1 → D1
-    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA1}, // Pot 2 → D2
-    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB0}, // Pot 3 → D3
-    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB1}, // Pot 4 → mux B test
+    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA0}, // Pot 1 → Trails
+    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA1}, // Pot 2 → Time
+    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB0}, // Pot 3 spare
+    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB1}, // Pot 4 spare
 };
 
-bool RegisterDummyParams(perseids::ParameterRegistry& reg)
+bool RegisterCaptureParams(perseids::ParameterRegistry& reg)
 {
+    using DT = perseids::ParamDisplayType;
+
     const perseids::ParameterDef defs[] = {
-        {kD1Level, "Level", "LVL", 0.f, 1.f, 0.5f, &g_d1_level, perseids::ParamDisplayType::Unipolar, false},
-        {kD1Width, "Width", "WID", 0.f, 1.f, 0.35f, &g_d1_width, perseids::ParamDisplayType::Unipolar, false},
-        {kD1Depth, "Depth", "DEP", 0.f, 1.f, 0.7f, &g_d1_depth, perseids::ParamDisplayType::Unipolar, false},
-        {kD1Send, "Send", "SND", 0.f, 1.f, 0.25f, &g_d1_send, perseids::ParamDisplayType::Unipolar, false},
+        {perseids::kTrailsCount,
+         "Count",
+         "CNT",
+         1.f,
+         5.f,
+         3.f,
+         &g_params.count,
+         DT::CountNum,
+         false},
+        {perseids::kTrailsThreshold,
+         "Threshold",
+         "THR",
+         0.f,
+         1.f,
+         0.12f,
+         &g_params.threshold,
+         DT::Unipolar,
+         false},
+        {perseids::kTrailsContRec,
+         "Cont. Rec",
+         "CRE",
+         0.f,
+         1.f,
+         0.f,
+         &g_params.cont_rec,
+         DT::Toggle,
+         false},
+        {perseids::kTrailsOnOff,
+         "On/Off",
+         "ON",
+         0.f,
+         1.f,
+         1.f,
+         &g_params.on_off,
+         DT::Toggle,
+         false},
 
-        {kD2On, "On/Off", "ON", 0.f, 1.f, 1.f, &g_d2_on, perseids::ParamDisplayType::Toggle, false},
-        {kD2Mode, "Mode A/B", "MOD", 0.f, 1.f, 0.f, &g_d2_mode, perseids::ParamDisplayType::Toggle, false},
-        {kD2Sync, "Sync", "SYN", 0.f, 1.f, 1.f, &g_d2_sync, perseids::ParamDisplayType::Toggle, false},
-        {kD2Link, "Link", "LNK", 0.f, 1.f, 0.f, &g_d2_link, perseids::ParamDisplayType::Toggle, false},
-
-        {kD3Macro, "Macro", "MAC", 0.f, 1.f, 0.5f, &g_d3_macro, perseids::ParamDisplayType::Bipolar, true},
-        {kD3Vel, "Velocity", "VEL", 0.f, 1.f, 0.4f, &g_d3_vel, perseids::ParamDisplayType::Bipolar, true},
-        {kD3Pan, "Pan", "PAN", 0.f, 1.f, 0.55f, &g_d3_pan, perseids::ParamDisplayType::Bipolar, true},
-        {kD3Tilt, "Tilt", "TLT", 0.f, 1.f, 0.48f, &g_d3_tilt, perseids::ParamDisplayType::Bipolar, true},
+        {perseids::kTimeBuffer,
+         "Buffer",
+         "BUF",
+         0.1f,
+         5.f,
+         2.f,
+         &g_params.buffer_s,
+         DT::Seconds,
+         false},
+        {perseids::kTimeHold,
+         "Hold",
+         "HLD",
+         0.f,
+         31.f,
+         15.f,
+         &g_params.hold_s,
+         DT::HoldTime,
+         false},
+        {perseids::kTimeFadeIn,
+         "Fade In",
+         "FIN",
+         0.001f,
+         5.f,
+         3.f,
+         &g_params.fade_in_s,
+         DT::Seconds,
+         false},
+        {perseids::kTimeFadeOut,
+         "Fade Out",
+         "FOUT",
+         0.001f,
+         5.f,
+         3.f,
+         &g_params.fade_out_s,
+         DT::Seconds,
+         false},
     };
 
     for(const auto& def : defs)
@@ -84,6 +121,13 @@ bool RegisterDummyParams(perseids::ParameterRegistry& reg)
     return true;
 }
 
+void AudioCallback(AudioHandle::InputBuffer  in,
+                   AudioHandle::OutputBuffer out,
+                   size_t                    size)
+{
+    g_capture.Process(in[0], in[1], out[0], out[1], size);
+}
+
 } // namespace
 
 DaisySeed hw;
@@ -91,15 +135,18 @@ DaisySeed hw;
 int main(void)
 {
     hw.Init();
+    hw.SetAudioBlockSize(48);
+    hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
     hw.SetLed(true);
 
+    g_capture.Init(hw.AudioSampleRate());
+
     perseids::ParameterRegistry registry;
-    RegisterDummyParams(registry);
+    RegisterCaptureParams(registry);
 
     perseids::CycleRow rows[] = {
-        perseids::CycleRow("D1 Mix", kD1Ids, 4),
-        perseids::CycleRow("D2 Tog", kD2Ids, 4),
-        perseids::CycleRow("D3 Bi", kD3Ids, 4),
+        perseids::CycleRow("Trails", kTrailsIds, 4),
+        perseids::CycleRow("Time", kTimeIds, 4),
     };
 
     perseids::UiController ui;
@@ -108,7 +155,11 @@ int main(void)
             rows,
             sizeof(rows) / sizeof(rows[0]),
             kPotMappings,
-            sizeof(kPotMappings) / sizeof(kPotMappings[0]));
+            sizeof(kPotMappings) / sizeof(kPotMappings[0]),
+            g_capture,
+            g_params);
+
+    hw.StartAudio(AudioCallback);
 
     while(true)
         ui.Process();

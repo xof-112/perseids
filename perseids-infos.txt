@@ -1,0 +1,46 @@
+Aus einem Datenblatt: 
+GND (Ground / Masse) – gemeinsamer Rückleiter für die Drehbewegung.: ist so angeschlossen
+DT (Phase B) – Signal-Pin für die Drehrichtung.: ist an Mux A, Kanäle C2–C6
+CLK (Phase A) – Signal-Pin für die Erkennung der Drehschritte (Clock).: war an 3,3v ist nicht mehr angeschlossen
+
+
+| SSD1309 Pin | Daisy Seed Pin (Physisch / Aufdruck) | Beschreibung |
+| VCC | Pin 38 (3v3 Digital) | Stromversorgung |
+| GND | Pin 40 (DGND) | Masse |
+| SCL / D0 (SCK) | Pin 9 (D8 / SPI1 SCK) | Clock Signal |
+| SDA / D1 (MOSI) | Pin 11 (D10 / SPI1 MOSI) | Data Signal |
+| RES (RST) | Pin 12 (D11) | Reset |
+| DC | Pin 10 (D9) | Data/Command |
+| CS | Pin 8 (D7 / SPI1 NSS) | Chip Select |
+
+
+D0–D3   Mux Select S0–S3
+D4      Trail 1 Encoder CLK rechts
+D5      Cycle-Button
+D6      — frei —
+D7      OLED CS (SPI1 NSS)
+D8      OLED SCK (SPI1 SCK)
+D9      OLED DC
+D10     OLED MOSI (SPI1 MOSI)
+D11     OLED RST (RES)
+D12     Rec-Button
+D13     Trig-Eingang (3,5-mm-Jack)
+D14     Trail 1 Push (Lock/Solo)
+D15     Mux A ADC (A0)
+D16     Mux B ADC (A1)
+D17     Trail 2 Push
+D18     Trail 3 Push
+D19     Trail 4 Push
+D20     Trail 5 Push
+D21     Trail 1 Encoder DT links
+D22     Trail 2 Encoder CLK
+D23     Trail 2 Encoder DT
+D24     Trail 3 Encoder CLK
+D25     Trail 3 Encoder DT
+D26     Trail 4 Encoder CLK
+D27     Trail 4 Encoder DT
+D28     Trail 5 Encoder CLK
+D29     Trail 5 Encoder DT
+D30     — frei —
+D31     — frei —
+D32     — frei —
