@@ -38,10 +38,11 @@ inline float BipolarNorm(float v, float min_v, float max_v)
     return Clampf((v - mid) / half, -1.f, 1.f);
 }
 
-// Hann coherent gain ≈ 0.5 → unit sine peak mag ≈ N/4. Scale mag → linear amp.
+// Hann coherent gain ≈ 0.5 → unit sine peak mag ≈ N/4.
+// Extra makeup so quiet Trail taps still speak through the oscillator bank.
 constexpr float MagToAmp()
 {
-    return 4.f / static_cast<float>(SpectraEngine::kFftSize);
+    return (4.f / static_cast<float>(SpectraEngine::kFftSize)) * 2.5f;
 }
 } // namespace
 
@@ -194,8 +195,8 @@ void SpectraEngine::PickPartials(const float* mags, size_t bins)
         Clampf(12000.f / bin_hz_, 2.f, static_cast<float>(bins - 2)));
 
     // Absolute silence floor — below this the frame is treated as quiet.
-    // Unit sine ≈ N/4 ≈ 128; ~0.4 ≈ −50 dBFS peak bin.
-    constexpr float kSilenceMag = 0.4f;
+    // Unit sine ≈ N/4 ≈ 128; keep this low so soft Trails still resynthesize.
+    constexpr float kSilenceMag = 0.08f;
 
     float max_mag = 0.f;
     for(size_t i = 2; i < max_bin; ++i)

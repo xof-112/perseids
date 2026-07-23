@@ -311,7 +311,7 @@ void DisplayRenderer::DrawValueHeader(const ParameterRegistry& reg,
             pct = 999;
 
         char cpu[8];
-        snprintf(cpu, sizeof(cpu), "C%u", static_cast<unsigned>(pct));
+        snprintf(cpu, sizeof(cpu), "C%u%%", static_cast<unsigned>(pct));
         const int cpu_w = static_cast<int>(strlen(cpu)) * kGlyphW;
         constexpr int kGap = 2;
         display_.SetCursor(kWidth - pos_w - kGap - cpu_w, kHeaderY + 1);
@@ -669,7 +669,10 @@ void DisplayRenderer::DrawDashboard(bool                playing,
         }
         else if(show_cpu_meter)
         {
-            snprintf(meter, sizeof(meter), "C%u", static_cast<unsigned>(cpu_pct));
+            snprintf(meter,
+                     sizeof(meter),
+                     "C%u%%",
+                     static_cast<unsigned>(cpu_pct));
         }
         else
         {

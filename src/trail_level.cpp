@@ -7,18 +7,21 @@ namespace perseids
 
 namespace
 {
-constexpr uint32_t kLongPressMs    = 800;
-constexpr uint32_t kRecPulseMs     = 600;
+constexpr uint32_t kLongPressMs     = 800;
+constexpr uint32_t kRecPulseMs      = 600;
 constexpr float    kCoarseLevelStep = 0.02f;
 constexpr float    kFineLevelStep   = 0.01f;
 // TODO(audio): Re-tune fine/coarse steps once gain staging is finalized.
 constexpr uint32_t kFineIntervalMs = 100;
 constexpr int      kEncoderPolls   = 32;
+// Lock out Rec/Trig re-fires (floating Trig used to spam every UI frame).
+constexpr uint32_t kRecRetrigMs = 80;
 } // namespace
 
 void TrailLevelController::BeginFrame()
 {
-    activity_this_frame_ = false;
+    activity_this_frame_   = false;
+    level_edit_activity_   = false;
     for(size_t i = 0; i < kCount; ++i)
         pending_steps_[i] = 0;
 }
@@ -48,6 +51,7 @@ void TrailLevelController::ResetAll()
         trails_[i].solo   = false;
     }
     activity_this_frame_ = true;
+    level_edit_activity_ = true;
     if(capture_)
         capture_->ClearAll();
 }
@@ -57,7 +61,9 @@ void TrailLevelController::Init(daisy::DaisySeed& seed, CaptureEngine* capture)
     (void)seed;
     capture_             = capture;
     rec_flash_until_ms_  = 0;
+    last_rec_trig_ms_    = 0;
     activity_this_frame_ = false;
+    level_edit_activity_ = false;
 
     for(size_t i = 0; i < kCount; ++i)
     {
@@ -102,8 +108,12 @@ bool TrailLevelController::RecTrigActive() const
 
 void TrailLevelController::OnRecTrig()
 {
-    rec_flash_until_ms_  = daisy::System::GetNow() + kRecPulseMs;
-    activity_this_frame_ = true;
+    const uint32_t now = daisy::System::GetNow();
+    if(now - last_rec_trig_ms_ < kRecRetrigMs)
+        return;
+    last_rec_trig_ms_    = now;
+    rec_flash_until_ms_  = now + kRecPulseMs;
+    activity_this_frame_ = true; // flash / UI only — not LevelEditActivity
     if(capture_)
         capture_->RequestManualTrigger();
 }
@@ -115,6 +125,7 @@ void TrailLevelController::HandlePush(size_t index, ButtonGesture::Event event)
     case ButtonGesture::Event::ShortPress:
         trails_[index].locked = !trails_[index].locked;
         activity_this_frame_  = true;
+        level_edit_activity_  = true;
         break;
 
     case ButtonGesture::Event::LongPress:
@@ -128,6 +139,7 @@ void TrailLevelController::HandlePush(size_t index, ButtonGesture::Event event)
             }
         }
         activity_this_frame_ = true;
+        level_edit_activity_ = true;
         break;
 
     default:
@@ -155,6 +167,10 @@ void TrailLevelController::HandleEncoderStep(size_t index, int32_t steps)
 
     trails_[index].level = level;
     activity_this_frame_ = true;
+    // Single-step bounce is common on floating/noisy encoders — still nudge
+    // level, but only clearer turns kick the UI back to Dashboard.
+    if(steps >= 2 || steps <= -2)
+        level_edit_activity_ = true;
 }
 
 void TrailLevelController::Process()
@@ -166,12 +182,15 @@ void TrailLevelController::Process()
     }
 
     rec_btn_.Debounce();
-    if(rec_btn_.Poll() == ButtonGesture::Event::ShortPress)
+    // Fire on press (RisingEdge). ShortPress-on-release alone missed quick taps
+    // and differed from the Trig edge path.
+    if(rec_btn_.RisingEdge())
         OnRecTrig();
 
     trig_in_.Debounce();
-    if(trig_in_.Poll() == ButtonGesture::Event::ShortPress
-       || trig_in_.RisingEdge() || trig_in_.FallingEdge())
+    // Hardware may present either polarity; accept either edge but rate-limit
+    // so a floating jack cannot spam every frame (dashboard kick is separate).
+    if(trig_in_.RisingEdge() || trig_in_.FallingEdge())
         OnRecTrig();
 }
 

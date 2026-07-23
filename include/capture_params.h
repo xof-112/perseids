@@ -41,7 +41,7 @@ struct CaptureParamValues
     float hold_s     = 15.f;  // seconds; >30 = infinite
     float fade_in_s  = 3.f;
     float fade_out_s = 3.f;
-    float cpu_meter  = 0.f;   // Settings: CPU meter On/Off (default Off)
+    float cpu_meter  = 1.f;   // TODO(release): default Off (0.f) — On for bench/debug
     float ram_meter  = 0.f;   // Settings: RAM/SDRAM meter On/Off (default Off)
     float routing    = 0.f;   // 0 Stereo, 1 Sidechain
 };

@@ -29,6 +29,8 @@ class TrailLevelController
     void ResetAll();
 
     bool ActivityThisFrame() const { return activity_this_frame_; }
+    // Encoder turn / Lock / Solo only — Rec/Trig must not kick the Cycle view.
+    bool LevelEditActivityThisFrame() const { return level_edit_activity_; }
 
     const TrailSnapshot& Trail(size_t index) const { return trails_[index]; }
 
@@ -51,8 +53,10 @@ class TrailLevelController
     TrailSnapshot trails_[kCount];
     uint32_t      rec_flash_until_ms_;
     uint32_t      last_encoder_ms_[kCount];
+    uint32_t      last_rec_trig_ms_;
     int32_t       pending_steps_[kCount];
     bool          activity_this_frame_;
+    bool          level_edit_activity_;
 };
 
 } // namespace perseids

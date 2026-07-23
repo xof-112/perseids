@@ -6,16 +6,23 @@
 namespace perseids
 {
 
-// Non-blocking round-robin poller for two CD74HC4067 mux chains with EMA smoothing.
-// One channel is serviced per Process() call (Section 2.6).
+// Pot poller on two CD74HC4067 mux chains using libDaisy's native ADC mux
+// support (AdcChannelConfig::InitMux). libDaisy advances the shared select
+// lines inside the ADC/DMA callback: each cached sample is guaranteed to be
+// from the channel that was selected while it was converted.
+//
+// The previous hand-rolled select→settle→read state machine raced the
+// free-running DMA ADC and produced cross-channel bleed (values jumping
+// between two pots' positions). Do not reintroduce manual select switching.
 class MuxAdcPoller
 {
   public:
-    static constexpr size_t kChains    = 2;
-    static constexpr size_t kChannels  = 16;
-    static constexpr float  kEmaAlphaIdle  = 0.18f;  // heavier idle filter vs mux noise
-    static constexpr float  kEmaSnapThresh = 0.018f; // only snap on real pot moves
-    static constexpr uint32_t kSettleUs = 80;
+    static constexpr size_t kChains       = 2;
+    static constexpr size_t kChannels     = 16;
+    static constexpr size_t kPollChannels = 3; // C0–C2 = current bench pots
+    // EMA smoothing on top of the hardware-synced cache.
+    static constexpr float kEmaAlphaIdle  = 0.15f;
+    static constexpr float kEmaSnapThresh = 0.05f;
 
     void Init(daisy::DaisySeed& seed);
 
@@ -26,17 +33,12 @@ class MuxAdcPoller
     float GetDelta(size_t chain, size_t channel) const;
 
   private:
-    void SetSelect(uint8_t channel);
     void UpdateEma(size_t chain, size_t channel, float sample);
 
     daisy::AdcHandle adc_;
-    daisy::GPIO      sel_[4];
-    uint8_t          adc_chain_idx_[kChains];
+    daisy::GPIO      sel_hi_[2]; // 4067 S2/S3 held low (only C0–C7 addressable)
     float            ema_[kChains][kChannels];
     float            prev_ema_[kChains][kChannels];
-    uint8_t          current_ch_;
-    uint8_t          state_;
-    uint32_t         settle_deadline_us_;
 };
 
 } // namespace perseids

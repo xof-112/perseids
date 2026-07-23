@@ -31,17 +31,28 @@ class CaptureEngine
     static_assert(kTrailSdramBytes < 64u * 1024u * 1024u,
                   "Trail buffers exceed SDRAM budget");
 
+    // Per-trail snapshot for Swarm grain reads (written each audio block in Process).
+    struct SwarmTrailView
+    {
+        uint32_t length; // 0 = not playable
+        float    gain;   // mixer level × fade_gain (pre global play_gain)
+    };
+
     void Init(float sample_rate);
 
     // Audio thread — non-blocking.
     // Writes dry monitor to out_l/out_r and the pre-fader trail mix (× play_gain)
-    // into trail_mix (may be null if unused). Spectra/Swarm take trail_mix as wet.
+    // into trail_mix (may be null if unused). Spectra takes trail_mix; Swarm reads
+    // trail_buffer via SwarmViews() filled in the same Process call.
     void Process(const float* in_l,
                  const float* in_r,
                  float*       out_l,
                  float*       out_r,
                  float*       trail_mix,
                  size_t       size);
+
+    // Same-callback reader for Swarm (after Capture::Process).
+    static const SwarmTrailView* SwarmViews() { return swarm_views_; }
 
     float PlayGain() const { return play_gain_; }
 
@@ -130,6 +141,8 @@ class CaptureEngine
 
     daisysp::OnePole hp_;
     daisysp::OnePole lp_;
+
+    static SwarmTrailView swarm_views_[kTrailCount];
 };
 
 // External SDRAM storage — Section 2 point 2.

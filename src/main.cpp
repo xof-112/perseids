@@ -8,6 +8,8 @@
 #include "param_registry.h"
 #include "spectra_engine.h"
 #include "spectra_params.h"
+#include "swarm_engine.h"
+#include "swarm_params.h"
 #include "ui_controller.h"
 
 #include <atomic>
@@ -19,14 +21,17 @@ namespace
 
 perseids::CaptureParamValues g_capture_params;
 perseids::SpectraParamValues g_spectra_params;
+perseids::SwarmParamValues   g_swarm_params;
 perseids::CaptureEngine      g_capture;
 perseids::SpectraEngine      g_spectra;
+perseids::SwarmEngine        g_swarm;
 CpuLoadMeter                 g_cpu_meter;
 std::atomic<float>           g_cpu_load{0.f};
 
-// Scratch for AudioCallback trail mix → Spectra analysis / wet path.
 float g_trail_mix[128];
 float g_spectra_out[128];
+float g_swarm_out_l[128];
+float g_swarm_out_r[128];
 
 const uint16_t kTrailsIds[]
     = {perseids::kTrailsCount,
@@ -39,14 +44,21 @@ const uint16_t kTimeIds[] = {perseids::kTimeBuffer,
                              perseids::kTimeFadeIn,
                              perseids::kTimeFadeOut};
 
-// Block 3 — Pitch Spectra only in Phase 4 (Blend / Pitch Swarm in Phase 5/6).
-const uint16_t kEnginesIds[] = {perseids::kEnginesPitchSpectra};
+// Block 3 — Pitch Spectra/Swarm + temporary A/B (Blend = Phase 6).
+const uint16_t kEnginesIds[] = {perseids::kEnginesSelect,
+                                perseids::kEnginesPitchSpectra,
+                                perseids::kEnginesPitchSwarm};
 
 const uint16_t kSpectraIds[]
     = {perseids::kSpectraPartials,
        perseids::kSpectraWaveshape,
        perseids::kSpectraUmbraAurora,
        perseids::kSpectraEnsemble};
+
+const uint16_t kSwarmIds[] = {perseids::kSwarmSize,
+                              perseids::kSwarmSpread,
+                              perseids::kSwarmScan,
+                              perseids::kSwarmAtmosphere};
 
 const uint16_t kSettingsIds[]
     = {perseids::kSettingsCpuMeter, perseids::kSettingsRamMeter};
@@ -56,7 +68,8 @@ const perseids::PotMapping kPotMappings[] = {
     {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA1}, // Pot 2 → Time
     {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA2}, // Pot 3 → Engines
     {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB0}, // Pot 4 → Spectra
-    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB1}, // Pot 5 → Settings
+    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB1}, // Pot 5 → Swarm
+    // Settings (B2) unmapped until a 6th pot is wired — floating B2 thrashs UI.
 };
 
 bool RegisterAllParams(perseids::ParameterRegistry& reg)
@@ -138,6 +151,16 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          DT::Seconds,
          false},
 
+        // Engines: A/B first (default Spectra), then pitches.
+        {perseids::kEnginesSelect,
+         "Swarm",
+         "SWM",
+         0.f,
+         1.f,
+         0.f,
+         &g_swarm_params.engine_swarm,
+         DT::Toggle,
+         false},
         {perseids::kEnginesPitchSpectra,
          "Pitch Spectra",
          "PSP",
@@ -145,6 +168,15 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          1.f,
          0.f,
          &g_spectra_params.pitch_spectra,
+         DT::Bipolar,
+         true},
+        {perseids::kEnginesPitchSwarm,
+         "Pitch Swarm",
+         "PSW",
+         -1.f,
+         1.f,
+         0.f,
+         &g_swarm_params.pitch_swarm,
          DT::Bipolar,
          true},
 
@@ -185,12 +217,49 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          DT::Unipolar,
          false},
 
+        {perseids::kSwarmSize,
+         "Size",
+         "SIZ",
+         0.f,
+         1.f,
+         0.45f,
+         &g_swarm_params.size,
+         DT::Unipolar,
+         false},
+        {perseids::kSwarmSpread,
+         "Spread",
+         "SPR",
+         0.f,
+         1.f,
+         0.35f,
+         &g_swarm_params.spread,
+         DT::Unipolar,
+         false},
+        {perseids::kSwarmScan,
+         "Scan",
+         "SCN",
+         0.f,
+         1.f,
+         0.2f,
+         &g_swarm_params.scan,
+         DT::Unipolar,
+         false},
+        {perseids::kSwarmAtmosphere,
+         "Atmosphere",
+         "ATM",
+         -1.f,
+         1.f,
+         0.f,
+         &g_swarm_params.atmosphere,
+         DT::Bipolar,
+         true},
+
         {perseids::kSettingsCpuMeter,
          "CPU meter",
          "CPU",
          0.f,
          1.f,
-         0.f,
+         1.f, // TODO(release): default 0.f — On while Settings pot is out
          &g_capture_params.cpu_meter,
          DT::Toggle,
          false},
@@ -223,16 +292,53 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         size = 128;
 
     g_capture.Process(in[0], in[1], out[0], out[1], g_trail_mix, size);
-    g_spectra.PushInput(g_trail_mix, size);
-    g_spectra.Process(g_spectra_out, g_spectra_out, size);
 
-    // Listen-through dry + Spectra wet (Phase 3 scaffolding dry gain kept).
-    constexpr float kDryGain = 0.85f;
-    for(size_t i = 0; i < size; ++i)
+    const bool use_swarm = g_swarm_params.engine_swarm >= 0.5f;
+
+    // Bench scaffolding until Multi Dry/Wet (Phase 11):
+    //   dry input listen-through + direct Trail tap + selected engine.
+    // Without the Trail tap, playback is silent whenever engines are quiet /
+    // Spectra silence-gated and no live input is present.
+    constexpr float kDryGain   = 0.70f;
+    constexpr float kTrailGain = 0.55f;
+    constexpr float kWetGain   = 1.15f;
+
+    if(use_swarm)
     {
-        const float sample = out[0][i] * kDryGain + g_spectra_out[i];
-        out[0][i]          = sample;
-        out[1][i]          = sample;
+        g_swarm.Process(g_swarm_out_l, g_swarm_out_r, size);
+        for(size_t i = 0; i < size; ++i)
+        {
+            float l = out[0][i] * kDryGain + g_trail_mix[i] * kTrailGain
+                      + g_swarm_out_l[i] * kWetGain;
+            float r = out[1][i] * kDryGain + g_trail_mix[i] * kTrailGain
+                      + g_swarm_out_r[i] * kWetGain;
+            if(l > 1.2f)
+                l = 1.2f;
+            else if(l < -1.2f)
+                l = -1.2f;
+            if(r > 1.2f)
+                r = 1.2f;
+            else if(r < -1.2f)
+                r = -1.2f;
+            out[0][i] = l;
+            out[1][i] = r;
+        }
+    }
+    else
+    {
+        g_spectra.PushInput(g_trail_mix, size);
+        g_spectra.Process(g_spectra_out, g_spectra_out, size);
+        for(size_t i = 0; i < size; ++i)
+        {
+            float sample = out[0][i] * kDryGain + g_trail_mix[i] * kTrailGain
+                           + g_spectra_out[i] * kWetGain;
+            if(sample > 1.2f)
+                sample = 1.2f;
+            else if(sample < -1.2f)
+                sample = -1.2f;
+            out[0][i] = sample;
+            out[1][i] = sample;
+        }
     }
 
     g_cpu_meter.OnBlockEnd();
@@ -246,13 +352,13 @@ DaisySeed hw;
 int main(void)
 {
     hw.Init();
-    // 128 samples @ 48 kHz ≈ 2.7 ms budget — Spectra + Capture need the headroom.
     hw.SetAudioBlockSize(128);
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
     hw.SetLed(true);
 
     g_capture.Init(hw.AudioSampleRate());
     g_spectra.Init(hw.AudioSampleRate());
+    g_swarm.Init(hw.AudioSampleRate());
     g_cpu_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
 
     perseids::ParameterRegistry registry;
@@ -261,8 +367,9 @@ int main(void)
     perseids::CycleRow rows[] = {
         perseids::CycleRow("Trails", kTrailsIds, 4),
         perseids::CycleRow("Time", kTimeIds, 4),
-        perseids::CycleRow("Engines", kEnginesIds, 1),
+        perseids::CycleRow("Engines", kEnginesIds, 3),
         perseids::CycleRow("Spectra", kSpectraIds, 4),
+        perseids::CycleRow("Swarm", kSwarmIds, 4),
         perseids::CycleRow("Settings", kSettingsIds, 2),
     };
 
@@ -277,6 +384,8 @@ int main(void)
             g_capture_params,
             g_spectra,
             g_spectra_params,
+            g_swarm,
+            g_swarm_params,
             &g_cpu_load);
 
     hw.StartAudio(AudioCallback);
@@ -285,12 +394,15 @@ int main(void)
     while(true)
     {
         ui.Process();
-        // Cap FFT rate so mux/UI keep getting CPU (hop audio ≈ 5 ms; 10 ms is enough).
-        const uint32_t now = daisy::System::GetNow();
-        if(now - last_fft_ms >= 10)
+        // FFT after UI so pot/menu response stays snappy; 20 ms is enough tracking.
+        if(g_swarm_params.engine_swarm < 0.5f)
         {
-            g_spectra.ProcessAnalysis();
-            last_fft_ms = now;
+            const uint32_t now = daisy::System::GetNow();
+            if(now - last_fft_ms >= 20)
+            {
+                g_spectra.ProcessAnalysis();
+                last_fft_ms = now;
+            }
         }
     }
 }

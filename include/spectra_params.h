@@ -6,9 +6,9 @@ namespace perseids
 {
 
 // Parameter IDs — Block 3 (Engines, partial) + Block 4 (Spectra).
+// Pitch Swarm / Engine A/B live in swarm_params.h (Phase 5).
 enum SpectraParamId : uint16_t
 {
-    // Block 3 — Pitch Spectra only for Phase 4; Blend/Pitch Swarm arrive in Phase 5/6.
     kEnginesPitchSpectra = 30,
 
     // Block 4 — Spectra Parameters

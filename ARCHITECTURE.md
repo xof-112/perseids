@@ -176,9 +176,23 @@ count in Section 2, point 6. The 5 Trail Level encoders and the Multi encoder ar
 | 10 | **Filter Mix** | Cutoff, Resonance, Feedback (Drive), Destination |
 | 11 | **Multi** (Encoder) | Global Dry/Wet, Macro1, Macro2, Time Unit (Clock↔Seconds, see 4.1a), Settings |
 
-**Block 3 interim (verified Phase 4):** only **Pitch Spectra** is wired (±1 octave,
-bipolar, 4% deadzone). Blend and Pitch Swarm arrive in Phase 5/6 — do not treat a missing
-Blend pot as a bug during Phase 4 bench testing.
+**Block 3 interim (verified Phase 5):** Engines CycleRow is **Swarm** (A/B toggle:
+OFF=Spectra, ON=Swarm), **Pitch Spectra**, **Pitch Swarm**. Continuous Blend arrives in
+Phase 6 — the toggle is deliberate scaffolding, not the final Blend control.
+
+**Block 5 / Swarm engine (verified Phase 5 — implementation contract):**
+
+- **Role:** granular cloud over Trail SDRAM buffers (`trail_buffer`), not the dry input.
+  Complements Spectra’s stylized additive body; A/B select for now (Blend = Phase 6).
+- **Trail access:** `CaptureEngine` publishes per-block `SwarmTrailView` (length + gain =
+  level × fade × play_gain) after `Process`; Swarm reads the same callback. Recording /
+  empty / solo-muted trails are skipped.
+- **Grains:** up to **16** overlapping grains, linear-interpolated buffer reads, Hann window
+  at Atmosphere center. Size maps ~8–180 ms. Spread = stereo pan width. Scan = scrub rate
+  through each trail (0 = freeze). Pitch Swarm = `2^(±1 octave)` on grain playback rate.
+- **Atmosphere:** Blur (negative) flattens grain envelopes; Radiation (positive) adds
+  sample-hold lo-fi + BBD-style output slew.
+- **Pot map:** Mux B C1 = Swarm, Mux B C2 = Settings (Spectra remains B C0).
 
 **Block 8 detail (Phase):** Controls the phase offset between the per-Trail-independent Pan
 Drift LFOs (0% = all Trails drift in sync, 100% = maximally offset against each other) —
@@ -249,7 +263,10 @@ exclusive (one knob, two directions), not combinable at the same time.
 through **Input → Spectra → Swarm → Reverb**.
 
 **Block 11 Settings submenu** (own cycle entry point via "Settings" in the Multi cycle list):
-1. CPU/SDRAM meter (On/Off, display on screen)
+1. CPU/SDRAM meter (On/Off, display on screen). **Bench interim:** CPU meter boots **On**
+   while the Settings pot is unwired (`// TODO(release)` markers in `capture_params.h` /
+   `main.cpp`) — final firmware must default it back to Off. Display format: CPU-only shows a
+   trailing percent sign (`C42%`); combined CPU+RAM stays compact without it (`C42 R12`).
 2. Instant Playback Mode (On/Off) — ON: resynthesis starts immediately, analysis refines live
    as the buffer fills up (reactive like a reverb/resonator). OFF: waits for a full buffer,
    then a single analysis pass (behaves like a delay/looper)
@@ -447,7 +464,7 @@ inputs (A0/A1, not a shared common line), and the OLED runs on SPI1 in 4-wire mo
 needed, display is write-only). D6 and D30–D32 are free for future use (e.g. mod slots,
 Multi encoder, jack detection lines — not yet assigned as of Phase 2).
 
-**Phase 4 bench pot map (`hw_pins.h`, firmware expects 5 block pots):**
+**Phase 5 bench pot map (`hw_pins.h` / `main.cpp`, currently 5 pots mapped):**
 
 | Mux | Channel | Block row |
 |---|---|---|
@@ -455,10 +472,16 @@ Multi encoder, jack detection lines — not yet assigned as of Phase 2).
 | A | C1 | Time |
 | A | C2 | Engines |
 | B | C0 | Spectra |
-| B | C1 | Settings |
+| B | C1 | Swarm |
+| B | C2 | Settings — **unmapped** (6th bench pot removed; re-add to `kPotMappings` when wired) |
 
-If the physical bench only wires 3 pots, unused mux channels can float and spuriously open
-Cycle views — treat that as a wiring limitation, not a firmware regression.
+Only map mux channels that physically have a pot: unmapped-but-polled floating channels
+spuriously open Cycle views. `EnterDashboard` must be a **no-op when already on the
+Dashboard** — an unconditional version re-armed timers/baselines every frame from
+Trail-encoder noise and permanently locked the Block menus (symptom: works right after a
+power-cycle, then sticks on the Dashboard). Trail-encoder/Level activity **no longer forces
+a Dashboard return** at all (removed for the same reason); the idle timeout is the only
+automatic return path until the Multi encoder (explicit return, 4.7a) exists.
 
 ### 4.6 Universal Cycle Mechanism (10 block pots + 4 mod pots + 1 Multi encoder)
 
@@ -504,15 +527,27 @@ section):**
     (`kEndCatchPot`) — slightly wider than the snap band because the ADC often tops out
     before 0.94 (otherwise Count=5 / Hold INF cannot be picked up).
   - Discrete counts round to the nearest whole number after denormalizing.
-- **Turn thresholds (Dashboard vs. Cycle view):** raw mux noise was previously enough to
-  spuriously open the Cycle view ("Time" flickering open unintentionally). Fixed with two
-  separate thresholds: a value only actually changes once pot movement exceeds ~1.2% delta
-  (`kTurnThreshold = 0.012`); the Dashboard only switches into the Cycle view once movement
-  exceeds ~2.2% delta (`kOpenCycleThreshold = 0.022`, deliberately higher than the value-change
-  threshold so tiny noise never flips the display). A pending "delete all" confirmation (4.7)
-  aborts on pot movement ≥ ~3%.
-- **Mux EMA filtering:** smoothing constants tuned firmer than an initial guess to suppress
-  jitter — idle alpha ≈ 0.18, snap threshold ≈ 0.018.
+- **Dashboard→CycleView opening & focus policy (verified, Phase 5 UI stabilization):**
+  opening requires **cumulative pot travel ≥ ~4%** (`kOpenThreshold = 0.040`) measured from a
+  baseline captured when the Dashboard was entered. Two hard lessons baked into this:
+  (a) never gate opening on per-frame EMA deltas — slow turns stay below any frame threshold
+  and menus become unreachable; (b) never let the baseline re-center while idle ("quiet
+  tracking") — it silently absorbs slow turns with the same symptom. Exactly **one winner per
+  frame** (the pot with the largest travel) opens its Block; all baselines re-arm on open.
+  **While a Block is open, only its own pot edits — all other pots are ignored** until the
+  idle timeout returns to the Dashboard. This single-owner rule is what stopped Block menus
+  thrashing (Trails↔Time↔Engines) from multi-pot ADC noise. The active pot drives
+  `ChangeValue` **every frame**: pickup catch and post-catch tracking need continuous samples;
+  gating edits behind a per-frame step threshold (~1.5%) froze values right after the catch.
+  The small step threshold (`kEditThreshold = 0.015`) only feeds the activity/idle timer.
+  A pending "delete all" confirmation (4.7) still aborts on pot movement ≥ ~3%.
+- **Mux reading (verified — hard requirement):** use libDaisy's native mux support
+  (`AdcChannelConfig::InitMux` + `GetMuxFloat`). libDaisy advances the select lines inside
+  the ADC/DMA callback *after* caching the sample, so every value is guaranteed to come from
+  the selected channel. A hand-rolled select→settle→read state machine in the main loop
+  **races the free-running DMA ADC** and produces cross-channel bleed (values jumping between
+  two pots' positions, e.g. bipolar flipping +99↔−50). Never reintroduce manual select
+  switching. On top of the cache, apply light EMA (alpha ≈ 0.15, snap ≈ 0.05).
 - **Cycle button read order (UI tick):** must be Mux poll → `cycle_btn_.Debounce()` → pot
   handling → `cycle_btn_.Poll()`/gesture evaluation → only then Trail encoders / Rec / Trig.
   libDaisy's `Switch` needs `Debounce()` and `Poll()` called without heavy work in between, or
@@ -556,7 +591,10 @@ other:
    only the display changes, no controls get unbound. 7s is a starting value (target range
    5–10s, see the calibration note in 4.11) — long enough to read a value calmly, short enough
    to avoid staying unnecessarily "stuck" on a cycle display. Fine-tune this in practical use
-   on real hardware.
+   on real hardware. **Bench interim (Phase 5 UI stabilization): `kInactivityMs = 4000`
+   (4s)** — deliberately shorter while the idle timeout is the *only* automatic return path
+   (see 4.5a note: Trail-encoder return removed, Multi encoder not built yet). Revisit toward
+   the 5–10s target once the explicit return gesture exists.
 
 ### 4.7b Imprint (new global function)
 
@@ -837,7 +875,7 @@ determined yet.
 | 2 | Trail Level pushes, Rec button/Trig, menu button gestures | Lock/Solo/Level on dummy values, clean debouncing |
 | 3 | Capture engine (SDRAM ring buffer, round-robin, Cont. Rec, Time block) | Real record/playback, threshold VU meter, hold countdown |
 | 4 | Spectra engine (additive) ✔ | Partials/Waveshape/Umbra-Aurora/Ensemble-Drift audible (stylized; see 4.1 contract) |
-| 5 | Swarm engine (granular) | Size/Spread/Scan/Atmosphere audible |
+| 5 | Swarm engine (granular) ✔ | Size/Spread/Scan/Atmosphere audible; A/B vs Spectra |
 | 6 | Engine blend (Block 3) | Continuous crossfading Spectra↔Swarm |
 | 7 | Spectral Resonator | Mix/Decay/Pitch/Quantized active, intonation from Settings effective |
 | 8 | Reverb & Filter Mix | ReverbSc with Character Macro, SVF filter with feedback drive, destination routing |
@@ -962,17 +1000,17 @@ ParameterRegistry. Listen-through dry×0.85 + Spectra wet.
 
 ### Phase 5 — Swarm Engine
 
+**✔ Completed (verified against implementation).** See Block 5 / Swarm engine contract above.
+
 ```
-Prompt for Cursor:
+Prompt for Cursor (historical — already implemented):
 
 Read ARCHITECTURE.md first, especially 4.1 (Block 3+5).
 
-Implement the granular Swarm engine on the Trail ring buffers. Real CycleRow for
-Block 5: Size (grain length), Spread (stereo spread of individual grains), Scan
-(scrubbing speed, 0=freeze), Atmosphere Macro (bipolar: Blur↔Radiation, 4%
-deadzone, see the 4.1 detail description incl. BBD-style slew on Radiation).
-Pitch Swarm set directly for now. An A/B switch with Spectra is sufficient for
-this phase (real blending follows in Phase 6).
+Implement granular Swarm on trail_buffer via Capture SwarmTrailView snapshots.
+CycleRow Block 5: Size, Spread, Scan, Atmosphere (Blur↔Radiation + BBD slew).
+Pitch Swarm + temporary Engines A/B toggle (Swarm ON/OFF). Register in
+ParameterRegistry. Audio: dry×0.85 + selected engine wet.
 ```
 
 ### Phase 6 — Engine Blend

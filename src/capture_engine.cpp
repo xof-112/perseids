@@ -8,6 +8,9 @@ namespace perseids
 float DSY_SDRAM_BSS trail_buffer[CaptureEngine::kTrailCount]
                                 [CaptureEngine::kMaxBufferSamples];
 
+CaptureEngine::SwarmTrailView
+    CaptureEngine::swarm_views_[CaptureEngine::kTrailCount];
+
 namespace
 {
 inline float Clampf(float x, float lo, float hi)
@@ -46,6 +49,8 @@ void CaptureEngine::Init(float sample_rate)
     {
         mixer_[i] = TrailMixerState{};
         voices_[i] = TrailVoice{};
+        swarm_views_[i].length = 0;
+        swarm_views_[i].gain   = 0.f;
         hold_remaining_norm_[i].store(0.f, std::memory_order_relaxed);
         life_phase_[i].store(static_cast<uint8_t>(TrailLifePhase::Empty),
                               std::memory_order_relaxed);
@@ -463,6 +468,37 @@ void CaptureEngine::Process(const float* in_l,
             trail_mix[n] = wet;
         out_l[n] = dry_mon;
         out_r[n] = dry_mon;
+    }
+
+    // Swarm grain sources — same audio callback, after this Process returns.
+    {
+        bool any_solo = false;
+        for(size_t i = 0; i < kTrailCount; ++i)
+        {
+            if(mixer_[i].solo)
+            {
+                any_solo = true;
+                break;
+            }
+        }
+        const int count = ActiveCount();
+        for(size_t i = 0; i < kTrailCount; ++i)
+        {
+            SwarmTrailView& sv = swarm_views_[i];
+            sv.length          = 0;
+            sv.gain            = 0.f;
+            if(i >= static_cast<size_t>(count))
+                continue;
+            const TrailVoice& v = voices_[i];
+            if(v.state == TrailState::Empty || v.state == TrailState::Recording)
+                continue;
+            if(v.length < 2)
+                continue;
+            if(any_solo && !mixer_[i].solo)
+                continue;
+            sv.length = static_cast<uint32_t>(v.length);
+            sv.gain   = mixer_[i].level * v.fade_gain * play_gain_;
+        }
     }
 
     // Mild display boost — avoid noise floor filling the VU on a quiet bench.
