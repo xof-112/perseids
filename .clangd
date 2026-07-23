@@ -10,6 +10,12 @@ CompileFlags:
     - -mfloat-abi=hard
     - -mfpu=fpv5-d16
     - -Wno-unknown-warning-option
+    # Absolute paths so header-only / interpolated TUs always find DaisySP + project headers
+    - -IC:/Users/xof/OneDrive/Dokumente/Cursor-Code/003-Daisy-Perseiden/lib/DaisySP/Source
+    - -IC:/Users/xof/OneDrive/Dokumente/Cursor-Code/003-Daisy-Perseiden/lib/DaisySP/Source/Utility
+    - -IC:/Users/xof/OneDrive/Dokumente/Cursor-Code/003-Daisy-Perseiden/lib/libDaisy/src
+    - -IC:/Users/xof/OneDrive/Dokumente/Cursor-Code/003-Daisy-Perseiden/include
+    - -IC:/Users/xof/OneDrive/Dokumente/Cursor-Code/003-Daisy-Perseiden/src
     - -isystem
     - C:/Users/xof/.platformio/packages/toolchain-gccarmnoneeabi/arm-none-eabi/include/c++/12.3.1
     - -isystem

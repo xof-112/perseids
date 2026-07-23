@@ -74,7 +74,8 @@ float CaptureEngine::FilterInput(float x)
 
 size_t CaptureEngine::BufferLengthSamples() const
 {
-    const float secs = Clampf(params_.buffer_s, 0.05f, 5.f);
+    const float secs
+        = Clampf(params_.buffer_s, 0.05f, static_cast<float>(kMaxBufferSeconds));
     size_t      n    = static_cast<size_t>(secs * sample_rate_ + 0.5f);
     if(n < 64)
         n = 64;

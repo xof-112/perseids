@@ -1,10 +1,13 @@
 #pragma once
 
-#include <atomic>
+#include <cstddef>
 #include <cstdint>
 
 namespace perseids
 {
+
+// Shared trail pool size — UI, mixer, and CaptureEngine must agree.
+inline constexpr size_t kTrailCount = 5;
 
 // Parameter IDs for Block 1 (Trails) and Block 2 (Time) — Phase 3.
 enum ParamId : uint16_t
@@ -19,7 +22,11 @@ enum ParamId : uint16_t
     kTimeFadeIn  = 12,
     kTimeFadeOut = 13,
 
-    // Stub for Block 11 Settings — owned by CaptureEngine, not yet on a CycleRow.
+    // Block 11 Settings (partial — more entries arrive with Phase 11).
+    kSettingsCpuMeter = 110,
+    kSettingsRamMeter = 111,
+
+    // Stub — owned by CaptureEngine, not yet on a CycleRow.
     kAudioRouting = 100,
 };
 
@@ -30,10 +37,12 @@ struct CaptureParamValues
     float threshold  = 0.12f; // 0..1 — lower default for line-level benches
     float cont_rec   = 0.f;   // toggle
     float on_off     = 1.f;   // toggle, default ON
-    float buffer_s   = 2.f;   // seconds, max recording length
+    float buffer_s   = 2.f;   // seconds, max recording length (ceiling 30 s)
     float hold_s     = 15.f;  // seconds; >30 = infinite
     float fade_in_s  = 3.f;
     float fade_out_s = 3.f;
+    float cpu_meter  = 0.f;   // Settings: CPU meter On/Off (default Off)
+    float ram_meter  = 0.f;   // Settings: RAM/SDRAM meter On/Off (default Off)
     float routing    = 0.f;   // 0 Stereo, 1 Sidechain
 };
 
@@ -42,6 +51,14 @@ struct TrailMixerState
     float level  = 0.5f;
     bool  locked = false;
     bool  solo   = false;
+};
+
+// Dashboard / Trail Level UI snapshot (no Daisy/DaisySP dependency).
+struct TrailSnapshot
+{
+    float level; // 0..1 loudness
+    bool  locked;
+    bool  solo;
 };
 
 // Dashboard life-cycle bar — published by CaptureEngine for the UI thread.

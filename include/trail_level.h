@@ -2,6 +2,7 @@
 
 #include "button_gesture.h"
 #include "capture_engine.h"
+#include "capture_params.h"
 #include "daisy_seed.h"
 #include "quadrature_encoder.h"
 
@@ -11,18 +12,11 @@
 namespace perseids
 {
 
-struct TrailSnapshot
-{
-    float level; // 0..1 loudness
-    bool  locked;
-    bool  solo;
-};
-
 // Five Trail Level push+encoder controls — Section 4.2.
 class TrailLevelController
 {
   public:
-    static constexpr size_t kCount = 5;
+    static constexpr size_t kCount = kTrailCount;
 
     void Init(daisy::DaisySeed& seed, CaptureEngine* capture);
 

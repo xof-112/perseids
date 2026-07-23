@@ -3,11 +3,9 @@
 #include "capture_params.h"
 #include "cycle_row.h"
 #include "param_registry.h"
-#include "trail_level.h"
 
 #include "daisy_seed.h"
 #include "dev/oled_ssd130x.h"
-#include "util/oled_fonts.h"
 
 namespace perseids
 {
@@ -28,19 +26,26 @@ class DisplayRenderer
 
     void Init(daisy::DaisySeed& seed);
 
-    void DrawDashboard(bool                        playing,
-                       bool                        reset_confirm,
-                       uint32_t                    reset_seconds_left,
-                       const TrailLevelController& trails,
-                       float                       input_level,
-                       float                       threshold,
-                       const TrailLifeUi life[TrailLevelController::kCount],
-                       size_t                      active_trail_count);
+    void DrawDashboard(bool                playing,
+                       bool                reset_confirm,
+                       uint32_t            reset_seconds_left,
+                       uint8_t             rec_trail_slot,
+                       bool                rec_trig_active,
+                       const TrailSnapshot trails[kTrailCount],
+                       float               input_level,
+                       float               threshold,
+                       const TrailLifeUi   life[kTrailCount],
+                       size_t              active_trail_count,
+                       bool                show_cpu_meter = false,
+                       bool                show_ram_meter = false,
+                       float               cpu_load       = 0.f);
 
     void DrawCycleView(const ParameterRegistry& reg,
                        const CycleRow&          row,
                        size_t                   active_col,
-                       float                    modulated_norm = -1.f);
+                       float                    modulated_norm = -1.f,
+                       bool                     show_cpu_meter = false,
+                       float                    cpu_load       = 0.f);
 
     void Present();
 
@@ -80,7 +85,9 @@ class DisplayRenderer
                      ParamDisplayType  type);
     void DrawValueHeader(const ParameterRegistry& reg,
                          const CycleRow&          row,
-                         size_t                   active_col);
+                         size_t                   active_col,
+                         bool                     show_cpu_meter,
+                         float                    cpu_load);
     void DrawTrailLifeBar(int                x0,
                           int                y,
                           int                w,

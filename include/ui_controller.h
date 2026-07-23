@@ -10,6 +10,7 @@
 #include "param_registry.h"
 #include "trail_level.h"
 
+#include <atomic>
 #include <cstdint>
 
 namespace perseids
@@ -43,7 +44,8 @@ class UiController
               const PotMapping*      pot_mappings,
               size_t                 pot_count,
               CaptureEngine&         capture,
-              CaptureParamValues&    capture_params);
+              CaptureParamValues&    capture_params,
+              std::atomic<float>*    cpu_load = nullptr);
 
     void Process();
 
@@ -65,6 +67,7 @@ class UiController
     size_t               pot_count_;
     CaptureEngine*       capture_;
     CaptureParamValues*  capture_params_;
+    std::atomic<float>*  cpu_load_;
 
     MuxAdcPoller         mux_;
     DisplayRenderer      display_;

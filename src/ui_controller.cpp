@@ -14,7 +14,8 @@ void UiController::Init(daisy::DaisySeed&   seed,
                         const PotMapping*   pot_mappings,
                         size_t              pot_count,
                         CaptureEngine&      capture,
-                        CaptureParamValues& capture_params)
+                        CaptureParamValues& capture_params,
+                        std::atomic<float>* cpu_load)
 {
     seed_            = &seed;
     registry_        = &registry;
@@ -24,6 +25,7 @@ void UiController::Init(daisy::DaisySeed&   seed,
     pot_count_       = pot_count;
     capture_         = &capture;
     capture_params_  = &capture_params;
+    cpu_load_        = cpu_load;
 
     screen_                  = UiScreen::Dashboard;
     active_row_              = 0;
@@ -239,6 +241,13 @@ void UiController::PollControls()
 
 void UiController::UpdateScreen()
 {
+    const bool  show_cpu = capture_params_->cpu_meter >= 0.5f;
+    const bool  show_ram = capture_params_->ram_meter >= 0.5f;
+    const float cpu_load
+        = cpu_load_ != nullptr
+              ? cpu_load_->load(std::memory_order_relaxed)
+              : 0.f;
+
     if(reset_confirm_ || screen_ == UiScreen::Dashboard)
     {
         uint32_t secs_left = 0;
@@ -247,28 +256,36 @@ void UiController::UpdateScreen()
             secs_left
                 = (reset_deadline_ms_ - daisy::System::GetNow() + 999) / 1000;
         }
-        TrailLifeUi life[TrailLevelController::kCount];
+        TrailLifeUi life[kTrailCount];
         capture_->GetTrailLifeUi(life);
+        TrailSnapshot snaps[kTrailCount];
+        for(size_t i = 0; i < kTrailCount; ++i)
+            snaps[i] = trails_.Trail(i);
         size_t active = static_cast<size_t>(capture_params_->count + 0.5f);
         if(active < 1)
             active = 1;
-        if(active > TrailLevelController::kCount)
-            active = TrailLevelController::kCount;
+        if(active > kTrailCount)
+            active = kTrailCount;
         display_.DrawDashboard(playing_,
                                reset_confirm_,
                                secs_left,
-                               trails_,
+                               trails_.RecTrailSlot(),
+                               trails_.RecTrigActive(),
+                               snaps,
                                capture_->InputLevel(),
                                capture_params_->threshold,
                                life,
-                               active);
+                               active,
+                               show_cpu,
+                               show_ram,
+                               cpu_load);
     }
     else
     {
         const CycleRow& row = rows_[active_row_];
         const size_t    col
             = row.InCycleScroll() ? row.ScrollIndex() : row.BoundIndex();
-        display_.DrawCycleView(*registry_, row, col);
+        display_.DrawCycleView(*registry_, row, col, -1.f, show_cpu, cpu_load);
     }
 
     display_.Present();

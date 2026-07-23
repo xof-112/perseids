@@ -3,8 +3,8 @@
 #include "capture_params.h"
 #include "record_source.h"
 
-#include "daisy_seed.h"
-#include "daisysp.h"
+#include "dev/sdram.h"
+#include "Filters/onepole.h"
 
 #include <atomic>
 #include <cstddef>
@@ -18,9 +18,18 @@ namespace perseids
 class CaptureEngine
 {
   public:
-    static constexpr size_t kTrailCount        = 5;
-    static constexpr size_t kMaxBufferSamples  = 48000 * 5; // 5 s @ 48 kHz
+    static constexpr size_t kTrailCount = perseids::kTrailCount;
+    // Must match DaisySeed SAI sample rate configured in main (SAI_48KHZ).
+    static constexpr size_t kSampleRate       = 48000;
+    static constexpr size_t kMaxBufferSeconds = 30;
+    static constexpr size_t kMaxBufferSamples = kMaxBufferSeconds * kSampleRate;
     static constexpr float  kHoldInfiniteAbove = 30.f;
+
+    // 5 Trails × 30 s × 48 kHz × float ≈ 28.8 MB of 64 MB SDRAM.
+    static constexpr size_t kTrailSdramBytes
+        = kTrailCount * kMaxBufferSamples * sizeof(float);
+    static_assert(kTrailSdramBytes < 64u * 1024u * 1024u,
+                  "Trail buffers exceed SDRAM budget");
 
     void Init(float sample_rate);
 

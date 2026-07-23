@@ -20,9 +20,9 @@ constexpr daisy::Pin kMuxSel3 = daisy::seed::D3;
 constexpr daisy::Pin kMuxAdcA = daisy::seed::A0;
 constexpr daisy::Pin kMuxAdcB = daisy::seed::A1;
 
-// Phase 1 test wiring: 2 pots per mux chain
-//   Mux A C0, C1  →  UI rows D1, D2
-//   Mux B C0, C1  →  UI row D3 + spare mux test on dashboard
+// Phase 1+ test wiring: pots on mux chains
+//   Mux A C0, C1  →  Trails, Time
+//   Mux B C0      →  Settings (CPU meter + RAM meter toggles)
 constexpr uint8_t kMuxChainA = 0;
 constexpr uint8_t kMuxChainB = 1;
 

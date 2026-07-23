@@ -1,5 +1,6 @@
 #include "display_renderer.h"
 
+#include "capture_engine.h"
 #include "hw_pins.h"
 
 #include <cstdio>
@@ -274,7 +275,9 @@ void DisplayRenderer::FormatPosition(size_t index,
 
 void DisplayRenderer::DrawValueHeader(const ParameterRegistry& reg,
                                       const CycleRow&          row,
-                                      size_t                   active_col)
+                                      size_t                   active_col,
+                                      bool                     show_cpu_meter,
+                                      float                    cpu_load)
 {
     char pos[8];
     FormatPosition(active_col, row.ParamCount(), pos, sizeof(pos));
@@ -282,9 +285,32 @@ void DisplayRenderer::DrawValueHeader(const ParameterRegistry& reg,
     display_.SetCursor(0, kHeaderY);
     display_.WriteString(row.BlockName(), Font_6x8, true);
 
-    const int pos_w = static_cast<int>(strlen(pos)) * 6;
-    display_.SetCursor(kWidth - pos_w, kHeaderY);
-    display_.WriteString(pos, Font_6x8, true);
+    constexpr int kGlyphW = 4;
+    const int     pos_w   = static_cast<int>(strlen(pos)) * kGlyphW;
+
+    if(show_cpu_meter)
+    {
+        float load = cpu_load;
+        if(load < 0.f)
+            load = 0.f;
+        if(load > 9.99f)
+            load = 9.99f;
+        int pct = static_cast<int>(load * 100.f + 0.5f);
+        if(pct < 0)
+            pct = 0;
+        if(pct > 999)
+            pct = 999;
+
+        char cpu[8];
+        snprintf(cpu, sizeof(cpu), "C%u", static_cast<unsigned>(pct));
+        const int cpu_w = static_cast<int>(strlen(cpu)) * kGlyphW;
+        constexpr int kGap = 2;
+        display_.SetCursor(kWidth - pos_w - kGap - cpu_w, kHeaderY + 1);
+        display_.WriteString(cpu, Font_4x6, true);
+    }
+
+    display_.SetCursor(kWidth - pos_w, kHeaderY + 1);
+    display_.WriteString(pos, Font_4x6, true);
 
     const ParameterDef* def = row.ParamAt(reg, active_col);
     if(def == nullptr || def->display_type == ParamDisplayType::Toggle)
@@ -386,7 +412,9 @@ void DisplayRenderer::DrawSegmentedRow(const ParameterRegistry& reg,
 void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
                                     const CycleRow&          row,
                                     size_t                   active_col,
-                                    float                    modulated_norm)
+                                    float                    modulated_norm,
+                                    bool                     show_cpu_meter,
+                                    float                    cpu_load)
 {
     Clear();
     DrawCeilingLine();
@@ -429,7 +457,7 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
         }
     }
 
-    DrawValueHeader(reg, row, active_col);
+    DrawValueHeader(reg, row, active_col, show_cpu_meter, cpu_load);
     DrawSegmentedRow(reg, row, active_col);
 
     if(row.PickupActive())
@@ -517,14 +545,19 @@ void DisplayRenderer::DrawTrailLifeBar(int                x0,
     }
 }
 
-void DisplayRenderer::DrawDashboard(bool                        playing,
-                                    bool                        reset_confirm,
-                                    uint32_t                    reset_seconds_left,
-                                    const TrailLevelController& trails,
-                                    float                       input_level,
-                                    float                       threshold,
-                                    const TrailLifeUi life[TrailLevelController::kCount],
-                                    size_t                      active_trail_count)
+void DisplayRenderer::DrawDashboard(bool                playing,
+                                    bool                reset_confirm,
+                                    uint32_t            reset_seconds_left,
+                                    uint8_t             rec_trail_slot,
+                                    bool                rec_trig_active,
+                                    const TrailSnapshot trails[kTrailCount],
+                                    float               input_level,
+                                    float               threshold,
+                                    const TrailLifeUi   life[kTrailCount],
+                                    size_t              active_trail_count,
+                                    bool                show_cpu_meter,
+                                    bool                show_ram_meter,
+                                    float               cpu_load)
 {
     Clear();
 
@@ -551,16 +584,65 @@ void DisplayRenderer::DrawDashboard(bool                        playing,
     display_.WriteString("PERSEIDS", Font_6x8, true);
 
     char rec_hdr[12];
-    if(trails.RecTrigActive())
-        snprintf(rec_hdr, sizeof(rec_hdr), "REC%u", trails.RecTrailSlot());
+    if(rec_trig_active)
+        snprintf(rec_hdr, sizeof(rec_hdr), "REC%u", rec_trail_slot);
     else
-        snprintf(rec_hdr, sizeof(rec_hdr), "R%u", trails.RecTrailSlot());
+        snprintf(rec_hdr, sizeof(rec_hdr), "R%u", rec_trail_slot);
     display_.SetCursor(54, 0);
     display_.WriteString(rec_hdr, Font_6x8, true);
 
-    const int play_x = kWidth - (playing ? 4 : 5) * 6;
-    display_.SetCursor(play_x, 0);
-    display_.WriteString(playing ? "PLAY" : "PAUSE", Font_6x8, true);
+    // PLAY/PAUSE right-aligned; optional C… / R… meters immediately left (4.9).
+    const char* play_str = playing ? "PLAY" : "PAUSE";
+    const int   play_w   = static_cast<int>(strlen(play_str)) * 6;
+    int         right_x  = kWidth - play_w;
+
+    if(show_cpu_meter || show_ram_meter)
+    {
+        float load = cpu_load;
+        if(load < 0.f)
+            load = 0.f;
+        if(load > 9.99f)
+            load = 9.99f;
+        int cpu_pct = static_cast<int>(load * 100.f + 0.5f);
+        if(cpu_pct < 0)
+            cpu_pct = 0;
+        if(cpu_pct > 999)
+            cpu_pct = 999;
+
+        constexpr unsigned long long kSdramTotal
+            = 64ull * 1024ull * 1024ull;
+        constexpr unsigned kSdramPct = static_cast<unsigned>(
+            (100ull * CaptureEngine::kTrailSdramBytes + kSdramTotal / 2)
+            / kSdramTotal);
+
+        char meter[20];
+        meter[0] = '\0';
+        if(show_cpu_meter && show_ram_meter)
+        {
+            snprintf(meter,
+                     sizeof(meter),
+                     "C%u R%u",
+                     static_cast<unsigned>(cpu_pct),
+                     kSdramPct);
+        }
+        else if(show_cpu_meter)
+        {
+            snprintf(meter, sizeof(meter), "C%u", static_cast<unsigned>(cpu_pct));
+        }
+        else
+        {
+            snprintf(meter, sizeof(meter), "R%u", kSdramPct);
+        }
+
+        constexpr int kGlyphW = 4;
+        const int     meter_w = static_cast<int>(strlen(meter)) * kGlyphW;
+        constexpr int kGap    = 2;
+        display_.SetCursor(right_x - kGap - meter_w, 1);
+        display_.WriteString(meter, Font_4x6, true);
+    }
+
+    display_.SetCursor(right_x, 0);
+    display_.WriteString(play_str, Font_6x8, true);
 
     // Input threshold VU (left)
     constexpr int kVuX0 = 0;
@@ -608,12 +690,12 @@ void DisplayRenderer::DrawDashboard(bool                        playing,
     size_t shown = active_trail_count;
     if(shown < 1)
         shown = 1;
-    if(shown > TrailLevelController::kCount)
-        shown = TrailLevelController::kCount;
+    if(shown > kTrailCount)
+        shown = kTrailCount;
 
     for(size_t i = 0; i < shown; ++i)
     {
-        const TrailSnapshot& t = trails.Trail(i);
+        const TrailSnapshot& t = trails[i];
         const int            y = 17 + static_cast<int>(i) * 8;
 
         char tlab[4];
