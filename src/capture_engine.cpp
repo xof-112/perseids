@@ -282,6 +282,7 @@ void CaptureEngine::Process(const float* in_l,
                             const float* in_r,
                             float*       out_l,
                             float*       out_r,
+                            float*       trail_mix,
                             size_t       size)
 {
     // Clear-all from UI
@@ -455,13 +456,13 @@ void CaptureEngine::Process(const float* in_l,
             }
         }
 
-        // Phase 3 listen-through so one-in/one-out benches hear the input
-        // while trails fill; wet trails sit on top.
-        constexpr float kDryGain = 0.85f;
-        const float     wet      = mix * play_gain_;
-        const float     out      = wet + dry_mon * kDryGain;
-        out_l[n]                 = out;
-        out_r[n]                 = out;
+        // Dry monitor only here — Spectra (Phase 4+) owns the wet path.
+        // trail_mix is the pre-fader Trail sum × global play gain (Section 2.5).
+        const float wet = mix * play_gain_;
+        if(trail_mix != nullptr)
+            trail_mix[n] = wet;
+        out_l[n] = dry_mon;
+        out_r[n] = dry_mon;
     }
 
     // Mild display boost — avoid noise floor filling the VU on a quiet bench.

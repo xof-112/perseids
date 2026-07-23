@@ -34,11 +34,16 @@ class CaptureEngine
     void Init(float sample_rate);
 
     // Audio thread — non-blocking.
+    // Writes dry monitor to out_l/out_r and the pre-fader trail mix (× play_gain)
+    // into trail_mix (may be null if unused). Spectra/Swarm take trail_mix as wet.
     void Process(const float* in_l,
                  const float* in_r,
                  float*       out_l,
                  float*       out_r,
+                 float*       trail_mix,
                  size_t       size);
+
+    float PlayGain() const { return play_gain_; }
 
     // UI thread — copy registry params + mixer state before/after audio use.
     void SyncFromUi(const CaptureParamValues& params,

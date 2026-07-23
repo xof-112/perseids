@@ -21,13 +21,14 @@ constexpr daisy::Pin kMuxAdcA = daisy::seed::A0;
 constexpr daisy::Pin kMuxAdcB = daisy::seed::A1;
 
 // Phase 1+ test wiring: pots on mux chains
-//   Mux A C0, C1  →  Trails, Time
-//   Mux B C0      →  Settings (CPU meter + RAM meter toggles)
+//   Mux A C0, C1, C2  →  Trails, Time, Engines
+//   Mux B C0, C1      →  Spectra, Settings
 constexpr uint8_t kMuxChainA = 0;
 constexpr uint8_t kMuxChainB = 1;
 
 constexpr uint8_t kPotMuxA0 = 0;
 constexpr uint8_t kPotMuxA1 = 1;
+constexpr uint8_t kPotMuxA2 = 2;
 constexpr uint8_t kPotMuxB0 = 0;
 constexpr uint8_t kPotMuxB1 = 1;
 
@@ -82,7 +83,9 @@ constexpr daisy::Pin kTrailPushPins[5]
 // Legacy aliases
 constexpr uint8_t kPotRow0 = kPotMuxA0;
 constexpr uint8_t kPotRow1 = kPotMuxA1;
-constexpr uint8_t kPotRow2 = kPotMuxB0;
+constexpr uint8_t kPotRow2 = kPotMuxA2;
+constexpr uint8_t kPotRow3 = kPotMuxB0;
+constexpr uint8_t kPotRow4 = kPotMuxB1;
 
 // Cycle button (momentary, active low with internal pull-up)
 constexpr daisy::Pin kCycleButton = daisy::seed::D5;

@@ -8,7 +8,8 @@ namespace perseids
 namespace
 {
 // ADC rarely reaches exact 0.0 / 1.0 — catch & snap within this band at either end.
-constexpr float kEndCatchNorm = 0.94f;
+constexpr float kEndCatchNorm = 0.94f; // snap-to-end when writing
+constexpr float kEndCatchPot  = 0.90f; // pot band to *meet* a stored end (mux tops out early)
 constexpr float kEndNearEps   = 0.06f;
 constexpr float kDefaultNear  = 0.02f;
 
@@ -30,11 +31,13 @@ bool UsesPotEndCatch(ParamDisplayType type)
 
 bool EndCatchReady(float target_norm, float pot_norm)
 {
+    // Stored value at travel end (snap band) + pot in the slightly wider mux end band.
+    // Fixes Count=5 / Hold INF pickup when the ADC never quite reaches 0.94.
     const bool top
-        = target_norm >= kEndCatchNorm && pot_norm >= kEndCatchNorm;
+        = target_norm >= kEndCatchNorm && pot_norm >= kEndCatchPot;
     const bool bottom
         = target_norm <= (1.f - kEndCatchNorm)
-          && pot_norm <= (1.f - kEndCatchNorm);
+          && pot_norm <= (1.f - kEndCatchPot);
     return top || bottom;
 }
 
@@ -167,18 +170,36 @@ void CycleRow::ChangeValue(const ParameterRegistry& reg, float pot_norm)
 
 void CycleRow::CommitScrollBinding(const ParameterRegistry& reg)
 {
-    if(scroll_index_ != bound_index_)
-    {
-        bound_index_ = scroll_index_;
-        if(const ParameterDef* def = BoundParam(reg))
-            BeginPickup(*def);
-    }
+    // Always re-arm on cycle release — pot rarely matches the newly shown value.
+    bound_index_ = scroll_index_;
+    if(const ParameterDef* def = BoundParam(reg))
+        BeginPickup(*def);
 }
 
 void CycleRow::InitPickup(const ParameterRegistry& reg)
 {
     if(const ParameterDef* def = BoundParam(reg))
         BeginPickup(*def);
+}
+
+void CycleRow::ArmPickupIfNeeded(const ParameterRegistry& reg)
+{
+    if(const ParameterDef* def = BoundParam(reg))
+    {
+        if(def->display_type == ParamDisplayType::Toggle)
+            return;
+
+        const float target    = ParameterRegistry::Normalize(*def, *def->value_ptr);
+        const bool  end_catch = UsesPotEndCatch(def->display_type);
+        const float near_eps  = end_catch ? kEndNearEps : kDefaultNear;
+
+        if(std::fabs(physical_pot_norm_ - target) < near_eps)
+            return;
+        if(end_catch && EndCatchReady(target, physical_pot_norm_))
+            return;
+
+        BeginPickup(*def);
+    }
 }
 
 void CycleRow::BeginPickup(const ParameterDef& def)

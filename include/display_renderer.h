@@ -79,7 +79,9 @@ class DisplayRenderer
     void DrawSegmentedRow(const ParameterRegistry& reg,
                           const CycleRow&          row,
                           size_t                   active_col);
-    void DrawPickupLine(const ColumnGeom& col, float pot_norm);
+    void DrawPickupLine(const ColumnGeom&  col,
+                        float              pot_norm,
+                        ParamDisplayType   type);
     void DrawModDots(const ColumnGeom& col,
                      float             mod_norm,
                      ParamDisplayType  type);

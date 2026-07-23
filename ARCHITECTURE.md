@@ -176,6 +176,10 @@ count in Section 2, point 6. The 5 Trail Level encoders and the Multi encoder ar
 | 10 | **Filter Mix** | Cutoff, Resonance, Feedback (Drive), Destination |
 | 11 | **Multi** (Encoder) | Global Dry/Wet, Macro1, Macro2, Time Unit (Clock↔Seconds, see 4.1a), Settings |
 
+**Block 3 interim (verified Phase 4):** only **Pitch Spectra** is wired (±1 octave,
+bipolar, 4% deadzone). Blend and Pitch Swarm arrive in Phase 5/6 — do not treat a missing
+Blend pot as a bug during Phase 4 bench testing.
+
 **Block 8 detail (Phase):** Controls the phase offset between the per-Trail-independent Pan
 Drift LFOs (0% = all Trails drift in sync, 100% = maximally offset against each other) —
 prevents multiple Trails from panning in exactly the same rhythm.
@@ -201,6 +205,32 @@ over the partials for harmonic vocal emphasis (note tracking).
 **Block 4 detail (Ensemble/Drift):** Slew-limiting on the FFT tracking plus slight detuning of
 odd/even partials against each other — produces an organic chorus natively in the oscillator
 bank, without external delay lines.
+
+**Block 4 / Spectra engine (verified Phase 4 — implementation contract):**
+
+- **Role:** stylized additive sound body, **not** a transparent 1:1 clone of the Trail audio.
+  Peak-picked sine (or waveshaped) partials deliberately omit phase reconstruction and noise
+  residual — later engines (Swarm, Resonator, Reverb) complete the cloud. Do not “fix”
+  Spectra toward studio-fidelity resynthesis unless this contract is explicitly revised.
+- **Analysis input:** pre-fader Trail sum × play gain (`trail_mix` from `CaptureEngine`), never
+  the dry monitor path. Dry listen-through stays separate (see below).
+- **Threading:** FFT only in the main loop (`ProcessAnalysis`); AudioCallback may only
+  `PushInput` + run the oscillator bank (`Process`). Targets publish via seqlock (odd = write
+  in progress, even = stable snapshot).
+- **CMSIS-DSP:** classic in-place `arm_rfft_fast_f32(S, p, pOut, ifftFlag)` — no separate F32
+  tmpBuf API in this tree. Hann window via `arm_mult_f32`, magnitudes via `arm_cmplx_mag_f32`.
+  Full prebuilt `libarm_cortexM7lfdp_math.a` overflowed the 128 KB flash budget (~+51 KB); the
+  build uses a **lite CMSIS** object set from `link_cmsis_dsp.py` (selective RFFT-512 tables +
+  required transform/basicmath sources).
+- **Sizes (CPU/Flash budget):** FFT **512**, hop **256**, Partials UI/engine **4…32** (default
+  16). Architecture examples that mention 64 partials are aspirational — raise only when audio
+  CPU and flash headroom allow. Audio block size **128** @ 48 kHz.
+- **Resynthesis:** custom phasor bank + cheap FastSin (not 32× DaisySP `Oscillator`). Waveshape
+  bipolar: center = sine, left → saw mix, right → wavefold. Peak pick + **frequency-continuity
+  matching** across hops (nearest previous partial within ~2.5 bins / 8% relative). Absolute
+  magnitude→amplitude scaling + silence/relative floor — **never** renormalize so peak sum =
+  constant loudness (that boosted noise floor into “line interference”).
+- **Pitch Spectra:** multiplies all partial target frequencies by `2^(bipolar ±1 octave)`.
 
 **Block 5 detail (Atmosphere Macro, bipolar, 4% deadzone):** 0% = clean grains with a Hann
 window. Negative values (Blur) smooth the grain envelopes heavily for edgeless ambient clouds.
@@ -252,12 +282,11 @@ so Sidechain mode (Phase 11) is a mode switch later, not a rewire.
     Spectra/Swarm/Reverb — a live instrument can be "commented on" this way by a completely
     independent audio source, without the two signals interfering with each other's analysis
 
-**Listen-through (temporary, Phase 3 bench only):** while Spectra/Swarm/Reverb don't exist yet
-(Phases 4–8), Stereo mode dry-monitors the capture signal onto Out at ~85% so the one-in/one-
-out signal path is audible on the bench before/while Trails are actually running. This is a
-scaffolding feature for testing, not part of the final design — it gets replaced/overridden by
-the real Dry/Wet control (Multi encoder, Block 11) once that exists. Don't treat the 85% figure
-as a final mix value; it's just enough to confirm signal presence during Phase 3 development.
+**Listen-through (temporary bench scaffolding through Phase 11 Dry/Wet):** Stereo mode still
+dry-monitors the capture signal onto Out at ~85%. From Phase 4 onward, Spectra wet is **added**
+on top of that dry path (`out = dry×0.85 + spectra`). This remains a scaffolding mix for
+A/B listening on the bench, not the final design — it gets replaced/overridden by the real
+Dry/Wet control (Multi encoder, Block 11). Don't treat the 85% figure as a final mix value.
 
 ### 4.1a Time Unit (Clock ↔ Seconds) for Buffer and Hold
 
@@ -418,6 +447,19 @@ inputs (A0/A1, not a shared common line), and the OLED runs on SPI1 in 4-wire mo
 needed, display is write-only). D6 and D30–D32 are free for future use (e.g. mod slots,
 Multi encoder, jack detection lines — not yet assigned as of Phase 2).
 
+**Phase 4 bench pot map (`hw_pins.h`, firmware expects 5 block pots):**
+
+| Mux | Channel | Block row |
+|---|---|---|
+| A | C0 | Trails |
+| A | C1 | Time |
+| A | C2 | Engines |
+| B | C0 | Spectra |
+| B | C1 | Settings |
+
+If the physical bench only wires 3 pots, unused mux channels can float and spuriously open
+Cycle views — treat that as a wiring limitation, not a firmware regression.
+
 ### 4.6 Universal Cycle Mechanism (10 block pots + 4 mod pots + 1 Multi encoder)
 
 | State | Action |
@@ -437,6 +479,11 @@ arise: cycle rebinding (here), later preset recall (see Section 8), and eventual
 of mod-slot amplitude. Does **not** apply to the Multi encoder — as an endless encoder with no
 fixed physical position, no discrepancy can arise there, so pickup isn't needed.
 
+**Pickup arming (verified Phase 4):** arm pickup **once** when entering CycleView from the
+Dashboard (if pot and stored value disagree), and **always** re-arm on cycle commit (button
+release after scroll). Do **not** re-arm on every pot tick while already in CycleView — that
+locks the value in perpetual catch-up while the pickup marker still moves.
+
 **Display coupling (see 4.11):** During the catch-up phase, a solid horizontal line appears
 showing the pot's actual physical position, while the bar itself keeps showing the stored,
 not-yet-adopted value. Once the two coincide, the line "snaps" into the bar, and the pot takes
@@ -450,10 +497,13 @@ section):**
 
 - **Pot-end-catch:** mux pots rarely reach exactly 0% or 100% at physical end of travel. For
   parameter types where a clean extreme value matters (`HoldTime`, `CountNum`, `CountBar`,
-  `Seconds`, and any future type with the same kind of endpoint), a catch/snap band applies:
-  ≥0.94 physical position snaps to 100%, ≤0.06 snaps to 0%. Discrete counts round to the
-  nearest whole number after denormalizing. This is a shared helper inside `CycleRow`, not a
-  one-off hack for Hold alone — apply it uniformly to every parameter of these types.
+  `Seconds`, and any future type with the same kind of endpoint), shared helpers in `CycleRow`
+  apply (not a Hold-only hack):
+  - **Value snap** when writing: pot ≥0.94 → 100%, ≤0.06 → 0% (`kEndCatchNorm`).
+  - **Pickup meet-band** for a stored end value: pot ≥0.90 (top) / ≤0.10 (bottom)
+    (`kEndCatchPot`) — slightly wider than the snap band because the ADC often tops out
+    before 0.94 (otherwise Count=5 / Hold INF cannot be picked up).
+  - Discrete counts round to the nearest whole number after denormalizing.
 - **Turn thresholds (Dashboard vs. Cycle view):** raw mux noise was previously enough to
   spuriously open the Cycle view ("Time" flickering open unintentionally). Fixed with two
   separate thresholds: a value only actually changes once pot movement exceeds ~1.2% delta
@@ -716,13 +766,21 @@ line, centered above its column.
 
 4. **Count value (fixed unit without a % reference, e.g. Partials, small second-based values
    like Fade In/Out)** — two sub-cases:
-   - Value range large enough to benefit from a bar (e.g. Partials, 4–64): identical mechanism
-     to unipolar, but the label shows the actual number instead of a percentage, and the
-     ceiling line gets a small additional maximum indicator top right, next to the position
-     display (e.g. "1/4 · max 64").
+   - Value range large enough to benefit from a bar (e.g. Partials, **4–32** as of Phase 4;
+     64 remains an aspirational ceiling if CPU/flash allow later): identical mechanism to
+     unipolar, but the label shows the actual number instead of a percentage, and the ceiling
+     line gets a small additional maximum indicator top right, next to the position display
+     (e.g. "1/4 · max 32").
    - Value range small/quickly readable (e.g. Fade In/Out, Trail count): **no bar**, just the
      number itself — active: large and centered between the two side lines; inactive: small,
      at the bottom edge of the column.
+
+**Unipolar zero floor (verified Phase 4):** an active unipolar bar at exactly 0% still draws a
+**1px** floor on the baseline so the column does not look empty (e.g. Ensemble at default 0%).
+The numeric header still shows `0%`.
+
+**Pickup line style (verified Phase 4):** catch-up uses **horizontal stubs only**, with a 1px
+gap from the value bar — no vertical ticks.
 
 **Enums with ≥3 named options** (Destination, Scale, Intonation, Audio Routing, Auto-Mod) do
 NOT fall under this four-type system — they get their own horizontal segmented-control screen
@@ -778,7 +836,7 @@ determined yet.
 | 1 | ParameterRegistry, cycle mechanism, ADC mux polling, display skeleton | Cycle button + dummy rows work, EMA-smoothed mux values visible |
 | 2 | Trail Level pushes, Rec button/Trig, menu button gestures | Lock/Solo/Level on dummy values, clean debouncing |
 | 3 | Capture engine (SDRAM ring buffer, round-robin, Cont. Rec, Time block) | Real record/playback, threshold VU meter, hold countdown |
-| 4 | Spectra engine (additive) | Partials/Waveshape/Umbra-Aurora/Ensemble-Drift audible |
+| 4 | Spectra engine (additive) ✔ | Partials/Waveshape/Umbra-Aurora/Ensemble-Drift audible (stylized; see 4.1 contract) |
 | 5 | Swarm engine (granular) | Size/Spread/Scan/Atmosphere audible |
 | 6 | Engine blend (Block 3) | Continuous crossfading Spectra↔Swarm |
 | 7 | Spectral Resonator | Mix/Decay/Pitch/Quantized active, intonation from Settings effective |
@@ -883,30 +941,23 @@ Implement the capture engine:
 
 ### Phase 4 — Spectra Engine
 
+**✔ Completed (verified against implementation).** Key decisions locked in the Block 4 /
+Spectra engine contract above; do not re-litigate FFT-in-callback, sum-normalization, or
+Partials=64 without revising that contract first.
+
 ```
-Prompt for Cursor:
+Prompt for Cursor (historical — already implemented):
 
-Read ARCHITECTURE.md first, especially 4.1 (Block 3+4).
+Read ARCHITECTURE.md first, especially 4.1 (Block 3+4) and the Spectra engine contract.
 
-Implement the additive Spectra engine: FFT analysis via CMSIS-DSP (DaisySP itself
-has no FFT module of its own; libDaisy does link the native ARM CMSIS-DSP library
-for the Cortex-M7, though). Specifically: `arm_rfft_fast_f32`/
-`arm_rfft_fast_init_f32` for the real FFT (faster/lower memory than a complex FFT,
-since our audio signal is real-valued), then `arm_cmplx_mag_f32` to compute the
-partial magnitudes. Before implementing, check whether the project's CMSIS-DSP
-version uses the newer API (separate temporary buffer for F32 RFFT/CFFT) or the
-older in-place API, and adapt the code accordingly. Multiply the audio with a Hann
-or Blackman-Harris window before the FFT (`arm_mult_f32`) against spectral
-leakage. Do NOT run the FFT inside the high-priority AudioCallback; instead run it
-block-wise (e.g. 256–512 sample hop size) in the main loop or a lower-priority
-block cycle. Resynthesis via a bank of 32–64 DaisySP oscillators, whose
-frequencies/amplitudes are set directly from the partial magnitudes (no IFFT
-needed). Real CycleRow for Block 4: Partials, Waveshape (Sine↔Saw↔Fold, bipolar
-around the center position, 4% deadzone mandatory per Section 2 point 8),
-Umbra/Aurora Macro (bipolar, 4% deadzone, see the 4.1 detail description),
-Ensemble/Drift (slew-limiting + partial detuning for native chorus). Pitch Spectra
-set directly for now (full Block 3 integration follows in Phase 6). Register
-everything in the ParameterRegistry.
+Implement the additive Spectra engine: CMSIS-DSP classic in-place
+`arm_rfft_fast_f32` / `arm_rfft_fast_init_f32` + Hann (`arm_mult_f32`) +
+`arm_cmplx_mag_f32`. FFT 512 / hop 256 in the main loop only; AudioCallback =
+PushInput + phasor bank (FastSin; waveshape sine/saw/fold). Partials 4–32.
+Peak continuity matching; absolute mag→amp scaling (no sum renormalize). Analyse
+pre-fader trail_mix. Lite CMSIS via link_cmsis_dsp.py if full math lib overflows
+flash. CycleRow Block 4 + Pitch Spectra only in Block 3. Register in
+ParameterRegistry. Listen-through dry×0.85 + Spectra wet.
 ```
 
 ### Phase 5 — Swarm Engine
@@ -1041,6 +1092,9 @@ Implement:
 ## 8. Open Points
 
 - **~~Exact GPIO pin assignment~~ Resolved:** see 4.5a (verified against Phase 2 implementation, D6/D30–D32 still free for later phases)
+- **~~Spectra Phase 4 engine contract~~ Resolved:** see 4.1 Block 4 / Spectra engine (FFT 512, 32 partials, trail_mix analysis, stylized additive — not 1:1). Partials→64 only if CPU/flash allow later
+- **~~Phase 4 bench pot map~~ Resolved:** see 4.5a (Mux A Trails/Time/Engines, Mux B Spectra/Settings)
+- **~~Pickup arming / pot-end meet-band~~ Resolved:** see 4.6 (one-shot arm + `kEndCatchPot` 0.90)
 
 - **~~Umbra/Corona name collision~~ Resolved:** the macro is now called Umbra/Aurora (incl. Section 2, point 8)
 - **~~"Spread" assigned twice~~ Resolved:** Block 8 is now called Phase instead of Spread

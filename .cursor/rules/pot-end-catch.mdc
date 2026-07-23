@@ -6,7 +6,7 @@ alwaysApply: true
 
 Daisy mux pots rarely reach ADC 0.0 or 1.0. Parameters whose useful extremes sit
 at the travel ends must use the shared end-catch in `CycleRow` (see
-`UsesPotEndCatch` in `src/cycle_row.cpp`).
+`UsesPotEndCatch` in `src/cycle_row.cpp`). Full detail: `ARCHITECTURE.md` §4.6.
 
 ## Rule
 
@@ -16,8 +16,8 @@ pot ends** (discrete counts, Hold INF, Buffer/Fade times, later Partials, etc.):
 1. Use a `ParamDisplayType` already covered by `UsesPotEndCatch`, **or** add the
    new type there.
 2. Do **not** invent a one-off Hold-only hack — keep the shared helpers:
-   - catch band: pot / target ≥ 0.94 (top) or ≤ 0.06 (bottom)
-   - value snap: `SnapEndNorm` then denormalize
+   - value snap: pot ≥ 0.94 / ≤ 0.06 → 100% / 0% (`SnapEndNorm` / `kEndCatchNorm`)
+   - pickup meet-band for a *stored* end: pot ≥ 0.90 / ≤ 0.10 (`kEndCatchPot`)
 3. Discrete integer params (`CountNum` / `CountBar`): round to nearest int after
    denormalize.
 

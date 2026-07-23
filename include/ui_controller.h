@@ -8,6 +8,8 @@
 #include "hw_pins.h"
 #include "mux_adc.h"
 #include "param_registry.h"
+#include "spectra_engine.h"
+#include "spectra_params.h"
 #include "trail_level.h"
 
 #include <atomic>
@@ -45,6 +47,8 @@ class UiController
               size_t                 pot_count,
               CaptureEngine&         capture,
               CaptureParamValues&    capture_params,
+              SpectraEngine&         spectra,
+              SpectraParamValues&    spectra_params,
               std::atomic<float>*    cpu_load = nullptr);
 
     void Process();
@@ -57,7 +61,7 @@ class UiController
     void HandlePotTurn(size_t row_idx, float pot_norm, float delta);
     void TouchActivity();
     void UpdateScreen();
-    void SyncCapture();
+    void SyncEngines();
 
     daisy::DaisySeed*    seed_;
     ParameterRegistry*   registry_;
@@ -67,6 +71,8 @@ class UiController
     size_t               pot_count_;
     CaptureEngine*       capture_;
     CaptureParamValues*  capture_params_;
+    SpectraEngine*       spectra_;
+    SpectraParamValues*  spectra_params_;
     std::atomic<float>*  cpu_load_;
 
     MuxAdcPoller         mux_;

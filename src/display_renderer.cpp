@@ -15,8 +15,10 @@ namespace
 constexpr int kMargin        = 2;
 constexpr int kBarWide       = 14;
 constexpr int kBarNarrow     = 6;
-constexpr int kPickupInset   = 3; // catch-up line spans active column interior
-constexpr int kModDotOutset  = 2; // mod dots sit outside pickup line ends
+// Catch-up: horizontal stubs only, 1px gap from the value bar (no vertical ticks).
+constexpr int kPickupOverhang = 5;
+constexpr int kPickupBarGap   = 1;
+constexpr int kModDotOutset   = 2;
 }
 
 void DisplayRenderer::Init(daisy::DaisySeed& seed)
@@ -88,10 +90,17 @@ void DisplayRenderer::DrawUnipolarBar(const ColumnGeom& col,
     const int base_y = kSegRowY - 1;
     const int top_y  = kCeilingY + 1;
     const int span   = base_y - top_y;
-    const int h      = static_cast<int>(norm * static_cast<float>(span) + 0.5f);
+    int       h      = static_cast<int>(norm * static_cast<float>(span) + 0.5f);
 
-    if(h > 0)
-        display_.DrawRect(bar_x, base_y - h, bar_x + bar_w - 1, base_y, true, true);
+    // Active at 0%: still show a 1px floor so the column doesn't look empty (e.g. ENS).
+    if(h <= 0)
+    {
+        if(!active)
+            return;
+        h = 1;
+    }
+
+    display_.DrawRect(bar_x, base_y - h, bar_x + bar_w - 1, base_y, true, true);
 }
 
 void DisplayRenderer::DrawBipolarBar(const ColumnGeom& col,
@@ -326,15 +335,42 @@ void DisplayRenderer::DrawValueHeader(const ParameterRegistry& reg,
     display_.WriteString(val, Font_6x8, true);
 }
 
-void DisplayRenderer::DrawPickupLine(const ColumnGeom& col, float pot_norm)
+void DisplayRenderer::DrawPickupLine(const ColumnGeom& col,
+                                     float             pot_norm,
+                                     ParamDisplayType  type)
 {
+    // Physical pot 0…1 → bottom→top. Gap the line around the value bar (4.6).
+    (void)type;
     const int base_y = kSegRowY - 1;
     const int top_y  = kCeilingY + 1;
     const int span   = base_y - top_y;
-    const int y      = base_y - static_cast<int>(pot_norm * static_cast<float>(span));
-    const int x0       = col.x + kPickupInset;
-    const int x1       = col.x + col.w - kPickupInset - 1;
-    display_.DrawLine(x0, y, x1, y, true);
+    float     n      = pot_norm;
+    if(n < 0.f)
+        n = 0.f;
+    if(n > 1.f)
+        n = 1.f;
+    const int y = base_y - static_cast<int>(n * static_cast<float>(span) + 0.5f);
+
+    const int bar_half = kBarWide / 2;
+    const int bar_l    = col.cx - bar_half;
+    const int bar_r    = col.cx + bar_half - 1;
+
+    int outer_l = col.cx - bar_half - kPickupOverhang;
+    int outer_r = col.cx + bar_half + kPickupOverhang - 1;
+    if(outer_l < col.x + 1)
+        outer_l = col.x + 1;
+    if(outer_r > col.x + col.w - 2)
+        outer_r = col.x + col.w - 2;
+
+    // Left stub: … up to 1px before the value bar.
+    const int left_end = bar_l - kPickupBarGap - 1;
+    if(left_end >= outer_l)
+        display_.DrawLine(outer_l, y, left_end, y, true);
+
+    // Right stub: from 1px after the value bar …
+    const int right_start = bar_r + kPickupBarGap + 1;
+    if(right_start <= outer_r)
+        display_.DrawLine(right_start, y, outer_r, y, true);
 }
 
 void DisplayRenderer::DrawModDots(const ColumnGeom& col,
@@ -360,13 +396,15 @@ void DisplayRenderer::DrawModDots(const ColumnGeom& col,
         y = base_y - static_cast<int>(mod_norm * static_cast<float>(base_y - top_y));
     }
 
-    const int x0 = col.x + kPickupInset;
-    const int x1 = col.x + col.w - kPickupInset - 1;
+    // Outside the catch-up line's reach (bar/2 + overhang + outset).
+    const int half = kBarWide / 2 + kPickupOverhang + kModDotOutset;
+    const int x0   = col.cx - half;
+    const int x1   = col.cx + half;
 
-    display_.DrawPixel(x0 - kModDotOutset, y, true);
-    display_.DrawPixel(x0 - kModDotOutset - 2, y, true);
-    display_.DrawPixel(x1 + kModDotOutset, y, true);
-    display_.DrawPixel(x1 + kModDotOutset + 2, y, true);
+    display_.DrawPixel(x0, y, true);
+    display_.DrawPixel(x0 - 2, y, true);
+    display_.DrawPixel(x1, y, true);
+    display_.DrawPixel(x1 + 2, y, true);
 }
 
 void DisplayRenderer::DrawSegmentedRow(const ParameterRegistry& reg,
@@ -460,14 +498,18 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
     DrawValueHeader(reg, row, active_col, show_cpu_meter, cpu_load);
     DrawSegmentedRow(reg, row, active_col);
 
-    if(row.PickupActive())
+    // Catch-up line on the bound column (solid + end ticks), not while scrolling
+    // the cycle list — only the physical pot vs. stored value matters (4.6).
+    if(row.PickupActive() && !row.InCycleScroll())
     {
-        if(const ParameterDef* def = row.ParamAt(reg, active_col))
+        const size_t bound = row.BoundIndex();
+        if(const ParameterDef* def = row.ParamAt(reg, bound))
         {
             if(def->display_type != ParamDisplayType::Toggle)
             {
-                const ColumnGeom col = ColumnGeometry(active_col, count);
-                DrawPickupLine(col, row.PickupPotNorm());
+                DrawPickupLine(ColumnGeometry(bound, count),
+                               row.PickupPotNorm(),
+                               def->display_type);
             }
         }
     }

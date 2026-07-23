@@ -37,6 +37,10 @@ class CycleRow
 
     void InitPickup(const ParameterRegistry& reg);
 
+    // Arm catch-up once when opening a cycle view if pot ≠ stored value.
+    // Do NOT call every turn — ADC jitter would re-lock pickup and freeze values.
+    void ArmPickupIfNeeded(const ParameterRegistry& reg);
+
     // Latest physical pot reading — keeps catch-up line aligned without a jump.
     void UpdatePotPosition(float pot_norm);
 

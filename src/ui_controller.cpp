@@ -15,6 +15,8 @@ void UiController::Init(daisy::DaisySeed&   seed,
                         size_t              pot_count,
                         CaptureEngine&      capture,
                         CaptureParamValues& capture_params,
+                        SpectraEngine&      spectra,
+                        SpectraParamValues& spectra_params,
                         std::atomic<float>* cpu_load)
 {
     seed_            = &seed;
@@ -25,6 +27,8 @@ void UiController::Init(daisy::DaisySeed&   seed,
     pot_count_       = pot_count;
     capture_         = &capture;
     capture_params_  = &capture_params;
+    spectra_         = &spectra;
+    spectra_params_  = &spectra_params;
     cpu_load_        = cpu_load;
 
     screen_                  = UiScreen::Dashboard;
@@ -55,14 +59,15 @@ void UiController::Init(daisy::DaisySeed&   seed,
         rows_[i].InitPickup(registry);
     }
 
-    SyncCapture();
+    SyncEngines();
 }
 
-void UiController::SyncCapture()
+void UiController::SyncEngines()
 {
     TrailMixerState mixer[TrailLevelController::kCount];
     trails_.FillMixerState(mixer);
     capture_->SyncFromUi(*capture_params_, mixer, playing_);
+    spectra_->SyncFromUi(*spectra_params_);
 }
 
 void UiController::TouchActivity()
@@ -113,6 +118,8 @@ void UiController::HandlePotTurn(size_t row_idx, float pot_norm, float delta)
     if(row_idx >= row_count_)
         return;
 
+    const bool opening_cycle = (screen_ == UiScreen::Dashboard);
+
     TouchActivity();
     active_row_ = row_idx;
     screen_     = UiScreen::CycleView;
@@ -144,6 +151,9 @@ void UiController::HandlePotTurn(size_t row_idx, float pot_norm, float delta)
     }
     else
     {
+        // One-shot catch-up when entering CycleView from Dashboard (4.6).
+        if(opening_cycle)
+            row.ArmPickupIfNeeded(*registry_);
         row.SetCycleScrollActive(false);
         row.ChangeValue(*registry_, pot_norm);
     }
@@ -220,7 +230,7 @@ void UiController::PollControls()
     trails_.Process();
     trails_.ApplyEncoderSteps();
 
-    SyncCapture();
+    SyncEngines();
 
     if(trails_.ActivityThisFrame() && !cycle_held)
     {
