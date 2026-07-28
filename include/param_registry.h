@@ -28,6 +28,16 @@ struct ParameterDef
     float*           value_ptr;
     ParamDisplayType display_type;
     bool             bipolar_deadzone; // Section 2.8 — only for bipolar types
+    // Subtle 50% marker dots beside a unipolar bar (crossfade-style params
+    // like Blend, where the middle is an equal mix — NOT a bipolar zero).
+    // Omitted in aggregate init → false.
+    bool             center_mark;
+    // Optional dynamic side hint behind the abbrev in the segmented row
+    // (crossfade-style params): lowercase label of the side the value is
+    // currently on — low label below 50%, high label above, nothing at
+    // exactly 50% ("sp"/"sw" for Blend). Omitted in aggregate init → nullptr.
+    const char*      seg_hint_low;
+    const char*      seg_hint_high;
 };
 
 class ParameterRegistry

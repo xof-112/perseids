@@ -13,29 +13,29 @@ Sound — independently designed, not affiliated.
 
 ---
 
-## Status — Phase 5 · `dev-phase5v002`
+## Status — Phase 6 · `dev-phase6v001`
 
-**Both resynthesis engines are running:** Spectra (additive, FFT 512 + phasor bank) and
-Swarm (granular over the Trail SDRAM buffers), switchable A/B via the Engines block.
-On top of that, a UI stabilization pass: mux reading now uses libDaisy's native mux
-support (no more cross-channel bleed), and Block menus follow a strict single-pot focus
-policy (open on cumulative pot travel, only the active pot edits, idle timeout returns
-to the Dashboard).
+**Engine Blend is in:** the Engines block now crossfades continuously between Spectra
+(additive, FFT 512 + phasor bank) and Swarm (granular over the Trail SDRAM buffers) —
+equal-power, pre-fader, with a subtle 50% marker and an SP/SW side hint on the display.
+All 10 block pots are wired: Blocks 6–10 (Reverb, Resonator, Pan Drift, Crossfade,
+Filter) already open full dummy menus for bench feedback until their engine phases land.
 
 ![Perseids Phase 3 v001 bench setup](images/dev-phase3v001.jpg)
 
 | Area | State |
 |------|--------|
-| UI / ParameterRegistry / Cycle rows | Working (Trails, Time, Engines, Spectra, Swarm) |
+| UI / ParameterRegistry / Cycle rows | Working (all 10 block pots) |
 | Trail Level, Lock/Solo, Rec/Trig | Working |
 | Capture engine (SDRAM rings, threshold, Cont.Rec, Hold/FIN/FOUT) | Working |
 | Dashboard (VU, life bars, Count-limited trails, CPU meter) | Working |
 | Spectra engine (additive: Partials, Waveshape, Umbra/Aurora, Ensemble) | Working |
 | Swarm engine (granular: Size, Spread, Scan, Atmosphere) | Working |
-| Mux/pot input (libDaisy native mux, single-pot menu focus) | Working |
-| Engine blend (continuous Spectra↔Swarm) | **Next** — Phase 6 |
+| Engine blend (continuous Spectra↔Swarm, equal-power, pre-fader) | Working |
+| Blocks 6–10 (Reverb, Resonator, Pan Drift, Crossfade, Filter) | Dummy menus — engines follow in Phases 7–9 |
+| Spectral Resonator | **Next** — Phase 7 |
 
-Tag: **`dev-phase5v002`** · Full roadmap: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+Tag: **`dev-phase6v001`** · Full roadmap: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 
 ---
 
@@ -52,7 +52,7 @@ Tag: **`dev-phase5v002`** · Full roadmap: [`ARCHITECTURE.md`](./ARCHITECTURE.md
 ```bash
 git clone https://github.com/xof-112/perseids.git
 cd perseids
-git checkout dev-phase5v002   # this milestone
+git checkout dev-phase6v001   # this milestone
 git clone --recurse-submodules https://github.com/electro-smith/libDaisy.git lib/libDaisy
 git clone https://github.com/electro-smith/DaisySP.git lib/DaisySP
 pio run

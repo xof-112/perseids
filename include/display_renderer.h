@@ -63,6 +63,7 @@ class DisplayRenderer
     void DrawCeilingLine();
     void DrawColumnSides(const ColumnGeom& col, bool active);
     void DrawDashedCenterLine(const ColumnGeom& col, bool full_width);
+    void DrawCenterMark(const ColumnGeom& col, bool active);
     void DrawUnipolarBar(const ColumnGeom& col,
                          float             norm,
                          bool              active);

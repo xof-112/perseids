@@ -176,14 +176,30 @@ count in Section 2, point 6. The 5 Trail Level encoders and the Multi encoder ar
 | 10 | **Filter Mix** | Cutoff, Resonance, Feedback (Drive), Destination |
 | 11 | **Multi** (Encoder) | Global Dry/Wet, Macro1, Macro2, Time Unit (Clock↔Seconds, see 4.1a), Settings |
 
-**Block 3 interim (verified Phase 5):** Engines CycleRow is **Swarm** (A/B toggle:
-OFF=Spectra, ON=Swarm), **Pitch Spectra**, **Pitch Swarm**. Continuous Blend arrives in
-Phase 6 — the toggle is deliberate scaffolding, not the final Blend control.
+**Block 3 (verified Phase 6 — implementation contract):** Engines CycleRow is **Blend**,
+**Pitch Spectra**, **Pitch Swarm** — the Phase 5 A/B toggle is gone (`kEnginesSelect` /
+`engine_swarm` replaced by `kEnginesBlend` / `blend`). Blend is **unipolar** 0% = pure
+Spectra … 100% = pure Swarm (not bipolar — no center detent semantics, no 4% deadzone),
+boot default 0 (Spectra). The Blend column draws a **subtle 50% hint**: one dot per side
+at half bar height, equal gap to the bar (`center_mark` flag in `ParameterDef`, reusable
+for future crossfade-style unipolar params) — deliberately quieter than the bipolar dashed
+zero line, since the middle means "equal mix", not "no effect". The segmented row shows a
+**dynamic side hint** behind the abbrev, on the same text row as "BLD": **"SP"** while the
+value is below 50% (Spectra side), **"SW"** above 50% (Swarm side), **nothing at exactly
+50%** — capitals in the small 4×6 font, same understated size as the CPU% figure
+(`seg_hint_low`/`seg_hint_high` in `ParameterDef`, optional per parameter, reusable for
+future crossfade-style params). The crossfade is **equal-power** (`cos/sin` of `blend·π/2`) on the
+two engine outputs, applied **pre-fader** in the audio callback before the bench
+listen-through mix. Both engines run simultaneously mid-blend; at the extremes
+(gain ≤ 0.001) the silent engine's synthesis is skipped to save audio CPU. Spectra's
+`PushInput` always runs regardless of blend so the FFT analysis ring stays warm; the
+main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥ 0.98).
 
 **Block 5 / Swarm engine (verified Phase 5 — implementation contract):**
 
 - **Role:** granular cloud over Trail SDRAM buffers (`trail_buffer`), not the dry input.
-  Complements Spectra’s stylized additive body; A/B select for now (Blend = Phase 6).
+  Complements Spectra’s stylized additive body; blended continuously against Spectra via
+  Block 3 Blend (Phase 6).
 - **Trail access:** `CaptureEngine` publishes per-block `SwarmTrailView` (length + gain =
   level × fade × play_gain) after `Process`; Swarm reads the same callback. Recording /
   empty / solo-muted trails are skipped.
@@ -891,7 +907,7 @@ determined yet.
 | 3 | Capture engine (SDRAM ring buffer, round-robin, Cont. Rec, Time block) | Real record/playback, threshold VU meter, hold countdown |
 | 4 | Spectra engine (additive) ✔ | Partials/Waveshape/Umbra-Aurora/Ensemble-Drift audible (stylized; see 4.1 contract) |
 | 5 | Swarm engine (granular) ✔ | Size/Spread/Scan/Atmosphere audible; A/B vs Spectra |
-| 6 | Engine blend (Block 3) | Continuous crossfading Spectra↔Swarm |
+| 6 | Engine blend (Block 3) ✔ | Continuous crossfading Spectra↔Swarm |
 | 7 | Spectral Resonator | Mix/Decay/Pitch/Quantized active, intonation from Settings effective |
 | 8 | Reverb & Filter Mix | ReverbSc with Character Macro, SVF filter with feedback drive, destination routing |
 | 9 | Pan Drift & Crossfade & Wandering Beams | Phase-offset pan LFOs, crossfade slew, display visualization |
@@ -1030,8 +1046,11 @@ ParameterRegistry. Audio: dry×0.85 + selected engine wet.
 
 ### Phase 6 — Engine Blend
 
+**✔ Completed (verified against implementation).** See the Block 3 contract above
+(equal-power pre-fader crossfade, extreme-skip, FFT gating at blend ≥ 0.98).
+
 ```
-Prompt for Cursor:
+Prompt for Cursor (historical — already implemented):
 
 Read ARCHITECTURE.md first, especially 4.1 (Block 3).
 

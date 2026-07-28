@@ -14,6 +14,7 @@
 #include "ui_controller.h"
 
 #include <atomic>
+#include <cmath>
 
 using namespace daisy;
 
@@ -46,8 +47,8 @@ const uint16_t kTimeIds[] = {perseids::kTimeBuffer,
                              perseids::kTimeFadeIn,
                              perseids::kTimeFadeOut};
 
-// Block 3 — Pitch Spectra/Swarm + temporary A/B (Blend = Phase 6).
-const uint16_t kEnginesIds[] = {perseids::kEnginesSelect,
+// Block 3 — Phase 6: Blend (Spectra↔Swarm), Pitch Spectra, Pitch Swarm.
+const uint16_t kEnginesIds[] = {perseids::kEnginesBlend,
                                 perseids::kEnginesPitchSpectra,
                                 perseids::kEnginesPitchSwarm};
 
@@ -184,16 +185,19 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          DT::Seconds,
          false},
 
-        // Engines: A/B first (default Spectra), then pitches.
-        {perseids::kEnginesSelect,
-         "Swarm",
-         "SWM",
+        // Engines: Blend first (default entry), then pitches.
+        {perseids::kEnginesBlend,
+         "Blend",
+         "BLD",
          0.f,
          1.f,
          0.f,
-         &g_swarm_params.engine_swarm,
-         DT::Toggle,
-         false},
+         &g_swarm_params.blend,
+         DT::Unipolar,
+         false,
+         true,   // center_mark: subtle 50% dots (equal Spectra/Swarm mix)
+         "SP",   // seg row hint below 50% — Spectra side (Font_4x6, like CPU%)
+         "SW"},  // seg row hint above 50% — Swarm side (nothing at exactly 50%)
         {perseids::kEnginesPitchSpectra,
          "Pitch Spectra",
          "PSP",
@@ -485,52 +489,55 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 
     g_capture.Process(in[0], in[1], out[0], out[1], g_trail_mix, size);
 
-    const bool use_swarm = g_swarm_params.engine_swarm >= 0.5f;
+    // Phase 6 — continuous pre-fader Blend (Block 3): equal-power crossfade
+    // between the Spectra and Swarm outputs. At the extremes the silent
+    // engine's synthesis is skipped entirely to save audio CPU.
+    float blend = g_swarm_params.blend;
+    if(blend < 0.f)
+        blend = 0.f;
+    else if(blend > 1.f)
+        blend = 1.f;
+    const float wet_spectra = std::cos(blend * 1.5707964f);
+    const float wet_swarm   = std::sin(blend * 1.5707964f);
+    const bool  run_spectra = wet_spectra > 0.001f;
+    const bool  run_swarm   = wet_swarm > 0.001f;
+
+    // Keep the analysis ring fed even at full Swarm so blending back toward
+    // Spectra doesn't resume from an empty/stale FFT frame.
+    g_spectra.PushInput(g_trail_mix, size);
+
+    if(run_spectra)
+        g_spectra.Process(g_spectra_out, g_spectra_out, size);
+    if(run_swarm)
+        g_swarm.Process(g_swarm_out_l, g_swarm_out_r, size);
 
     // Bench scaffolding until Multi Dry/Wet (Phase 11):
-    //   dry input listen-through + direct Trail tap + selected engine.
+    //   dry input listen-through + direct Trail tap + blended engines.
     // Without the Trail tap, playback is silent whenever engines are quiet /
     // Spectra silence-gated and no live input is present.
     constexpr float kDryGain   = 0.70f;
     constexpr float kTrailGain = 0.55f;
     constexpr float kWetGain   = 1.15f;
 
-    if(use_swarm)
+    for(size_t i = 0; i < size; ++i)
     {
-        g_swarm.Process(g_swarm_out_l, g_swarm_out_r, size);
-        for(size_t i = 0; i < size; ++i)
-        {
-            float l = out[0][i] * kDryGain + g_trail_mix[i] * kTrailGain
-                      + g_swarm_out_l[i] * kWetGain;
-            float r = out[1][i] * kDryGain + g_trail_mix[i] * kTrailGain
-                      + g_swarm_out_r[i] * kWetGain;
-            if(l > 1.2f)
-                l = 1.2f;
-            else if(l < -1.2f)
-                l = -1.2f;
-            if(r > 1.2f)
-                r = 1.2f;
-            else if(r < -1.2f)
-                r = -1.2f;
-            out[0][i] = l;
-            out[1][i] = r;
-        }
-    }
-    else
-    {
-        g_spectra.PushInput(g_trail_mix, size);
-        g_spectra.Process(g_spectra_out, g_spectra_out, size);
-        for(size_t i = 0; i < size; ++i)
-        {
-            float sample = out[0][i] * kDryGain + g_trail_mix[i] * kTrailGain
-                           + g_spectra_out[i] * kWetGain;
-            if(sample > 1.2f)
-                sample = 1.2f;
-            else if(sample < -1.2f)
-                sample = -1.2f;
-            out[0][i] = sample;
-            out[1][i] = sample;
-        }
+        const float sp  = run_spectra ? g_spectra_out[i] * wet_spectra : 0.f;
+        const float swl = run_swarm ? g_swarm_out_l[i] * wet_swarm : 0.f;
+        const float swr = run_swarm ? g_swarm_out_r[i] * wet_swarm : 0.f;
+        float       l   = out[0][i] * kDryGain + g_trail_mix[i] * kTrailGain
+                  + (sp + swl) * kWetGain;
+        float r = out[1][i] * kDryGain + g_trail_mix[i] * kTrailGain
+                  + (sp + swr) * kWetGain;
+        if(l > 1.2f)
+            l = 1.2f;
+        else if(l < -1.2f)
+            l = -1.2f;
+        if(r > 1.2f)
+            r = 1.2f;
+        else if(r < -1.2f)
+            r = -1.2f;
+        out[0][i] = l;
+        out[1][i] = r;
     }
 
     g_cpu_meter.OnBlockEnd();
@@ -594,7 +601,9 @@ int main(void)
     {
         ui.Process();
         // FFT after UI so pot/menu response stays snappy; 20 ms is enough tracking.
-        if(g_swarm_params.engine_swarm < 0.5f)
+        // Skip only when Blend sits at (essentially) full Swarm — Spectra is
+        // silent there and its synthesis is skipped in the callback anyway.
+        if(g_swarm_params.blend < 0.98f)
         {
             const uint32_t now = daisy::System::GetNow();
             if(now - last_fft_ms >= 20)

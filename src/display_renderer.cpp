@@ -81,6 +81,20 @@ void DisplayRenderer::DrawDashedCenterLine(const ColumnGeom& col, bool full_widt
         display_.DrawPixel(x, y, true);
 }
 
+// 50% hint for crossfade-style unipolar params (e.g. Blend): one dot per
+// side at half bar height, equal gap to the bar — deliberately subtler than
+// the bipolar dashed zero line (the middle is an equal mix, not "no effect").
+void DisplayRenderer::DrawCenterMark(const ColumnGeom& col, bool active)
+{
+    const int y        = ((kCeilingY + 1) + (kSegRowY - 1)) / 2;
+    const int bar_w    = active ? kBarWide : kBarNarrow;
+    const int bar_x    = col.cx - bar_w / 2;
+    constexpr int kGap = 3;
+
+    display_.DrawPixel(bar_x - kGap, y, true);
+    display_.DrawPixel(bar_x + bar_w - 1 + kGap, y, true);
+}
+
 void DisplayRenderer::DrawUnipolarBar(const ColumnGeom& col,
                                       float             norm,
                                       bool              active)
@@ -444,6 +458,38 @@ void DisplayRenderer::DrawSegmentedRow(const ParameterRegistry& reg,
             display_.SetCursor(col.x + pad + 2, kSegRowY + 2);
             display_.WriteString(def->abbrev, Font_6x8, true);
         }
+
+        // Dynamic side hint behind the abbrev (e.g. "sp"/"sw" for Blend):
+        // shows which half of the travel the value sits in, nothing at
+        // exactly 50%. Same row height as the abbrev, same inversion as the
+        // cell, clipped if the column is too narrow.
+        if(def->seg_hint_low != nullptr && def->seg_hint_high != nullptr)
+        {
+            const float n
+                = ParameterRegistry::Normalize(*def, *def->value_ptr);
+            const int pct = static_cast<int>(n * 100.f + 0.5f);
+
+            const char* hint = nullptr;
+            if(pct < 50)
+                hint = def->seg_hint_low;
+            else if(pct > 50)
+                hint = def->seg_hint_high;
+
+            if(hint != nullptr)
+            {
+                // Font_4x6 — same understated size as the CPU% figure, offset
+                // like the header pairing (small font sits 1px below 6x8).
+                const int abbrev_w
+                    = static_cast<int>(strlen(def->abbrev)) * 6;
+                const int hint_w = static_cast<int>(strlen(hint)) * 4;
+                const int hx     = col.x + pad + 2 + abbrev_w + 2;
+                if(hx + hint_w <= col.x + col.w - pad - 1)
+                {
+                    display_.SetCursor(hx, kSegRowY + 3);
+                    display_.WriteString(hint, Font_4x6, !sel);
+                }
+            }
+        }
     }
 }
 
@@ -473,6 +519,8 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
         switch(def->display_type)
         {
         case ParamDisplayType::Unipolar:
+            if(def->center_mark)
+                DrawCenterMark(col, active);
             DrawUnipolarBar(col, norm, active);
             break;
         case ParamDisplayType::Bipolar:
