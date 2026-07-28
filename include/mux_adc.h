@@ -19,7 +19,7 @@ class MuxAdcPoller
   public:
     static constexpr size_t kChains       = 2;
     static constexpr size_t kChannels     = 16;
-    static constexpr size_t kPollChannels = 3; // C0–C2 = current bench pots
+    static constexpr size_t kPollChannels = 5; // C0–C4 per chain = 10 bench pots
     // EMA smoothing on top of the hardware-synced cache.
     static constexpr float kEmaAlphaIdle  = 0.15f;
     static constexpr float kEmaSnapThresh = 0.05f;
@@ -36,7 +36,7 @@ class MuxAdcPoller
     void UpdateEma(size_t chain, size_t channel, float sample);
 
     daisy::AdcHandle adc_;
-    daisy::GPIO      sel_hi_[2]; // 4067 S2/S3 held low (only C0–C7 addressable)
+    daisy::GPIO      sel_hi_; // 4067 S3 held low (libDaisy drives S0–S2, C0–C7)
     float            ema_[kChains][kChannels];
     float            prev_ema_[kChains][kChannels];
 };

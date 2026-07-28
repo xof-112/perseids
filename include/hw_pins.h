@@ -20,19 +20,23 @@ constexpr daisy::Pin kMuxSel3 = daisy::seed::D3;
 constexpr daisy::Pin kMuxAdcA = daisy::seed::A0;
 constexpr daisy::Pin kMuxAdcB = daisy::seed::A1;
 
-// Phase 1+ test wiring: pots on mux chains
-//   Mux A C0, C1, C2  →  Trails, Time, Engines
-//   Mux B C0, C1      →  Spectra, Swarm
-// Settings CycleRow exists; map B2 only when a 6th pot is wired.
+// Bench wiring, all 10 block pots (5 per mux chain, C0–C4):
+//   Mux A C0–C4  →  Trails, Time, Engines, Swarm, Spectra
+//   Mux B C0–C4  →  Pan Drift*, Resonator*, Reverb*, Crossfade*, Filter*
+// * = dummy rows until their engine phases land (see dummy_params.h).
 constexpr uint8_t kMuxChainA = 0;
 constexpr uint8_t kMuxChainB = 1;
 
 constexpr uint8_t kPotMuxA0 = 0;
 constexpr uint8_t kPotMuxA1 = 1;
 constexpr uint8_t kPotMuxA2 = 2;
+constexpr uint8_t kPotMuxA3 = 3;
+constexpr uint8_t kPotMuxA4 = 4;
 constexpr uint8_t kPotMuxB0 = 0;
 constexpr uint8_t kPotMuxB1 = 1;
 constexpr uint8_t kPotMuxB2 = 2;
+constexpr uint8_t kPotMuxB3 = 3;
+constexpr uint8_t kPotMuxB4 = 4;
 
 // Phase 2 — Trail Level rotary encoders (quadrature, NOT mux ADC).
 // Each encoder: common/GND to ground, CLK + DT to GPIO (internal pull-up).

@@ -18,15 +18,15 @@ void MuxAdcPoller::Init(daisy::DaisySeed& seed)
         }
     }
 
-    // 4067 upper address lines stay low — libDaisy drives S0/S1 for C0–C2.
-    sel_hi_[0].Init(hw::kMuxSel2, daisy::GPIO::Mode::OUTPUT);
-    sel_hi_[1].Init(hw::kMuxSel3, daisy::GPIO::Mode::OUTPUT);
-    sel_hi_[0].Write(false);
-    sel_hi_[1].Write(false);
+    // 4067 top address line stays low — libDaisy drives S0–S2 for C0–C4.
+    sel_hi_.Init(hw::kMuxSel3, daisy::GPIO::Mode::OUTPUT);
+    sel_hi_.Write(false);
 
     daisy::AdcChannelConfig cfg[kChains];
-    cfg[0].InitMux(hw::kMuxAdcA, kPollChannels, hw::kMuxSel0, hw::kMuxSel1);
-    cfg[1].InitMux(hw::kMuxAdcB, kPollChannels, hw::kMuxSel0, hw::kMuxSel1);
+    cfg[0].InitMux(
+        hw::kMuxAdcA, kPollChannels, hw::kMuxSel0, hw::kMuxSel1, hw::kMuxSel2);
+    cfg[1].InitMux(
+        hw::kMuxAdcB, kPollChannels, hw::kMuxSel0, hw::kMuxSel1, hw::kMuxSel2);
     adc_.Init(cfg, kChains);
     adc_.Start();
 

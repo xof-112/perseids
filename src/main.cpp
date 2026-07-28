@@ -4,6 +4,7 @@
 #include "capture_engine.h"
 #include "capture_params.h"
 #include "cycle_row.h"
+#include "dummy_params.h"
 #include "hw_pins.h"
 #include "param_registry.h"
 #include "spectra_engine.h"
@@ -19,9 +20,10 @@ using namespace daisy;
 namespace
 {
 
-perseids::CaptureParamValues g_capture_params;
-perseids::SpectraParamValues g_spectra_params;
-perseids::SwarmParamValues   g_swarm_params;
+perseids::CaptureParamValues    g_capture_params;
+perseids::SpectraParamValues    g_spectra_params;
+perseids::SwarmParamValues      g_swarm_params;
+perseids::DummyBlockParamValues g_dummy_params;
 perseids::CaptureEngine      g_capture;
 perseids::SpectraEngine      g_spectra;
 perseids::SwarmEngine        g_swarm;
@@ -63,13 +65,44 @@ const uint16_t kSwarmIds[] = {perseids::kSwarmSize,
 const uint16_t kSettingsIds[]
     = {perseids::kSettingsCpuMeter, perseids::kSettingsRamMeter};
 
+// Dummy cycle lists for Blocks 6–10 (see dummy_params.h) — real parameter
+// names/types per ARCHITECTURE.md 4.1, values go nowhere yet.
+const uint16_t kReverbIds[] = {perseids::kReverbMix,
+                               perseids::kReverbDecay,
+                               perseids::kReverbDamping,
+                               perseids::kReverbCharacter};
+
+const uint16_t kResoIds[] = {perseids::kResoMix,
+                             perseids::kResoDecay,
+                             perseids::kResoPitch,
+                             perseids::kResoQuantized};
+
+const uint16_t kPanIds[] = {perseids::kPanPhase,
+                            perseids::kPanAmplitude,
+                            perseids::kPanVelocity};
+
+const uint16_t kXfadeIds[]
+    = {perseids::kXfadeAmplitude, perseids::kXfadeVelocity};
+
+const uint16_t kFilterIds[] = {perseids::kFilterCutoff,
+                               perseids::kFilterResonance,
+                               perseids::kFilterFeedback,
+                               perseids::kFilterDestination};
+
+// Index i pairs with rows[i] in main() — keep both lists in the same order.
 const perseids::PotMapping kPotMappings[] = {
-    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA0}, // Pot 1 → Trails
-    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA1}, // Pot 2 → Time
-    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA2}, // Pot 3 → Engines
-    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB0}, // Pot 4 → Spectra
-    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB1}, // Pot 5 → Swarm
-    // Settings (B2) unmapped until a 6th pot is wired — floating B2 thrashs UI.
+    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA0}, // Pot 1  → Trails
+    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA1}, // Pot 2  → Time
+    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA2}, // Pot 3  → Engines
+    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA3}, // Pot 4  → Swarm
+    {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA4}, // Pot 5  → Spectra
+    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB0}, // Pot 6  → Pan Drift*
+    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB1}, // Pot 7  → Resonator*
+    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB2}, // Pot 8  → Reverb*
+    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB3}, // Pot 9  → Crossfade*
+    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB4}, // Pot 10 → Filter*
+    // Settings row has no pot (Block 11 = Multi encoder, Phase 11);
+    // CPU meter stays default-On for the bench (TODO(release)).
 };
 
 bool RegisterAllParams(perseids::ParameterRegistry& reg)
@@ -254,6 +287,165 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          DT::Bipolar,
          true},
 
+        // --- Dummy Blocks 6–10 (no DSP yet, display feedback only) ---
+        {perseids::kReverbMix,
+         "Mix",
+         "MIX",
+         0.f,
+         1.f,
+         0.25f,
+         &g_dummy_params.rev_mix,
+         DT::Unipolar,
+         false},
+        {perseids::kReverbDecay,
+         "Decay",
+         "DEC",
+         0.f,
+         1.f,
+         0.5f,
+         &g_dummy_params.rev_decay,
+         DT::Unipolar,
+         false},
+        {perseids::kReverbDamping,
+         "Damping",
+         "DMP",
+         0.f,
+         1.f,
+         0.5f,
+         &g_dummy_params.rev_damping,
+         DT::Unipolar,
+         false},
+        {perseids::kReverbCharacter,
+         "Character",
+         "CHR",
+         -1.f,
+         1.f,
+         0.f,
+         &g_dummy_params.rev_character,
+         DT::Bipolar,
+         true},
+
+        {perseids::kResoMix,
+         "Mix",
+         "MIX",
+         0.f,
+         1.f,
+         0.25f,
+         &g_dummy_params.reso_mix,
+         DT::Unipolar,
+         false},
+        {perseids::kResoDecay,
+         "Decay",
+         "DEC",
+         0.f,
+         1.f,
+         0.5f,
+         &g_dummy_params.reso_decay,
+         DT::Unipolar,
+         false},
+        {perseids::kResoPitch,
+         "Pitch",
+         "PIT",
+         -1.f,
+         1.f,
+         0.f,
+         &g_dummy_params.reso_pitch,
+         DT::Bipolar,
+         true},
+        {perseids::kResoQuantized,
+         "Quantized",
+         "QNT",
+         0.f,
+         1.f,
+         0.f,
+         &g_dummy_params.reso_quantized,
+         DT::Toggle,
+         false},
+
+        {perseids::kPanPhase,
+         "Phase",
+         "PHS",
+         0.f,
+         1.f,
+         0.f,
+         &g_dummy_params.pan_phase,
+         DT::Unipolar,
+         false},
+        {perseids::kPanAmplitude,
+         "Amplitude",
+         "AMP",
+         0.f,
+         1.f,
+         0.3f,
+         &g_dummy_params.pan_amplitude,
+         DT::Unipolar,
+         false},
+        {perseids::kPanVelocity,
+         "Velocity",
+         "VEL",
+         -1.f,
+         1.f,
+         0.f,
+         &g_dummy_params.pan_velocity,
+         DT::Bipolar,
+         true},
+
+        {perseids::kXfadeAmplitude,
+         "Amplitude",
+         "AMP",
+         0.f,
+         1.f,
+         0.f,
+         &g_dummy_params.xfade_amplitude,
+         DT::Unipolar,
+         false},
+        {perseids::kXfadeVelocity,
+         "Velocity",
+         "VEL",
+         -1.f,
+         1.f,
+         0.f,
+         &g_dummy_params.xfade_velocity,
+         DT::Bipolar,
+         true},
+
+        {perseids::kFilterCutoff,
+         "Cutoff",
+         "CUT",
+         0.f,
+         1.f,
+         0.7f,
+         &g_dummy_params.flt_cutoff,
+         DT::Unipolar,
+         false},
+        {perseids::kFilterResonance,
+         "Resonance",
+         "RES",
+         0.f,
+         1.f,
+         0.2f,
+         &g_dummy_params.flt_resonance,
+         DT::Unipolar,
+         false},
+        {perseids::kFilterFeedback,
+         "Feedback",
+         "FBK",
+         0.f,
+         1.f,
+         0.f,
+         &g_dummy_params.flt_feedback,
+         DT::Unipolar,
+         false},
+        {perseids::kFilterDestination,
+         "Destination",
+         "DST",
+         1.f,
+         4.f,
+         1.f,
+         &g_dummy_params.flt_destination,
+         DT::CountNum,
+         false},
+
         {perseids::kSettingsCpuMeter,
          "CPU meter",
          "CPU",
@@ -364,12 +556,19 @@ int main(void)
     perseids::ParameterRegistry registry;
     RegisterAllParams(registry);
 
+    // Order pairs 1:1 with kPotMappings; rows past the pot count (Settings)
+    // are pot-less. * = dummy blocks, display feedback only.
     perseids::CycleRow rows[] = {
         perseids::CycleRow("Trails", kTrailsIds, 4),
         perseids::CycleRow("Time", kTimeIds, 4),
         perseids::CycleRow("Engines", kEnginesIds, 3),
-        perseids::CycleRow("Spectra", kSpectraIds, 4),
         perseids::CycleRow("Swarm", kSwarmIds, 4),
+        perseids::CycleRow("Spectra", kSpectraIds, 4),
+        perseids::CycleRow("Pan Drift", kPanIds, 3),    // *
+        perseids::CycleRow("Resonator", kResoIds, 4),   // *
+        perseids::CycleRow("Reverb", kReverbIds, 4),    // *
+        perseids::CycleRow("Crossfade", kXfadeIds, 2),  // *
+        perseids::CycleRow("Filter", kFilterIds, 4),    // *
         perseids::CycleRow("Settings", kSettingsIds, 2),
     };
 

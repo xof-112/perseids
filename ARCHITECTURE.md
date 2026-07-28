@@ -192,7 +192,11 @@ Phase 6 — the toggle is deliberate scaffolding, not the final Blend control.
   through each trail (0 = freeze). Pitch Swarm = `2^(±1 octave)` on grain playback rate.
 - **Atmosphere:** Blur (negative) flattens grain envelopes; Radiation (positive) adds
   sample-hold lo-fi + BBD-style output slew.
-- **Pot map:** Mux B C1 = Swarm, Mux B C2 = Settings (Spectra remains B C0).
+- **Pot map:** Mux A C3 = Swarm, Mux A C4 = Spectra (full bench map: see 4.5a; Settings
+  has no pot — Block 11 = Multi encoder).
+- **TODO — grain playback direction:** grains should be playable **forward, backward, or
+  random** (per-grain direction choice at spawn time). Not implemented yet — currently all
+  grains play forward. Open design questions in Section 8 (UI parameter vs. Scan coupling).
 
 **Block 8 detail (Phase):** Controls the phase offset between the per-Trail-independent Pan
 Drift LFOs (0% = all Trails drift in sync, 100% = maximally offset against each other) —
@@ -464,19 +468,30 @@ inputs (A0/A1, not a shared common line), and the OLED runs on SPI1 in 4-wire mo
 needed, display is write-only). D6 and D30–D32 are free for future use (e.g. mod slots,
 Multi encoder, jack detection lines — not yet assigned as of Phase 2).
 
-**Phase 5 bench pot map (`hw_pins.h` / `main.cpp`, currently 5 pots mapped):**
+**Bench pot map, all 10 block pots wired (`hw_pins.h` / `main.cpp`):**
 
 | Mux | Channel | Block row |
 |---|---|---|
 | A | C0 | Trails |
 | A | C1 | Time |
 | A | C2 | Engines |
-| B | C0 | Spectra |
-| B | C1 | Swarm |
-| B | C2 | Settings — **unmapped** (6th bench pot removed; re-add to `kPotMappings` when wired) |
+| A | C3 | Swarm |
+| A | C4 | Spectra |
+| B | C0 | Pan Drift *(dummy)* |
+| B | C1 | Resonator *(dummy)* |
+| B | C2 | Reverb *(dummy)* |
+| B | C3 | Crossfade *(dummy)* |
+| B | C4 | Filter *(dummy)* |
 
-Only map mux channels that physically have a pot: unmapped-but-polled floating channels
-spuriously open Cycle views. `EnterDashboard` must be a **no-op when already on the
+*(dummy)* = Blocks 6–10 have full CycleRows with registered dummy parameters
+(`dummy_params.h`) so every pot gives display feedback (value up/down, pickup, scroll)
+before its engine phase lands — Development Principle 5.1. Nothing reads these values in
+the audio path yet; when an engine phase arrives, move its IDs/values into the real param
+header. The Settings CycleRow exists but has **no pot** (Block 11 = Multi encoder,
+Phase 11); the CPU meter therefore stays default-On for the bench. Mux polling covers
+C0–C4 per chain via `InitMux` with three select lines (S0–S2, libDaisy-driven); only
+S3 is held low manually. Only map mux channels that physically have a pot:
+unmapped-but-polled floating channels spuriously open Cycle views. `EnterDashboard` must be a **no-op when already on the
 Dashboard** — an unconditional version re-armed timers/baselines every frame from
 Trail-encoder noise and permanently locked the Block menus (symptom: works right after a
 power-cycle, then sticks on the Dashboard). Trail-encoder/Level activity **no longer forces
@@ -1141,6 +1156,12 @@ Implement:
 - **~~Auto-Mod source Trail~~ Resolved:** youngest non-locked active Trail (fallback see 4.10)
 - **~~Crossfade wave vs. Lock/Solo~~ Resolved:** Solo overrides the wave, Lock doesn't protect against it (4.1, Block 9 detail)
 - **~~Both combination formula~~ Resolved:** arithmetic mean of Age and Pitch (4.10), deliberately subtle rather than heavy-handed
+- **TODO — Swarm grain playback direction (forward / backward / random):** grains should
+  support different playback directions — forward, backward, and random (per grain). Open:
+  how it's exposed in the UI (a new entry in the Block 5 cycle list vs. folding it into an
+  existing parameter such as negative Scan) and whether "random" means per-grain coin flip
+  or a probability blend. Implementation itself is cheap (negate the grain's playback rate
+  at spawn), the decision is UI/param design.
 - **Macro1/Macro2 target assignment:** currently fixed in code (Phase 11), no front-panel UI decided for it yet
 - **~~Multi encoder push function~~ Resolved:** short = step through the Multi cycle list, long = global return to the Home Dashboard (see 4.7a)
 - **Pot/encoder turn direction:** clockwise = which state for toggles (left/right, see 4.11), which direction for bipolar values — depends on the final hardware wiring, not yet determined

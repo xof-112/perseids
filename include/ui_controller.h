@@ -40,7 +40,7 @@ class UiController
     static constexpr float    kResetCancelThreshold = 0.04f;
     static constexpr float    kScrollStepThreshold  = 0.10f;
     static constexpr uint32_t kScrollMinIntervalMs  = 180;
-    static constexpr size_t   kMaxCycleRows         = 8;
+    static constexpr size_t   kMaxCycleRows         = 12;
     static constexpr uint32_t kDisplayMinIntervalMs = 33;
     static constexpr size_t   kMuxStepsPerTick      = 1; // Process reads full mux cache
     static constexpr uint32_t kLoopDelayMs          = 1;
