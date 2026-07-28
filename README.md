@@ -21,7 +21,7 @@ equal-power, pre-fader, with a subtle 50% marker and an SP/SW side hint on the d
 All 10 block pots are wired: Blocks 6–10 (Reverb, Resonator, Pan Drift, Crossfade,
 Filter) already open full dummy menus for bench feedback until their engine phases land.
 
-![Perseids Phase 3 v001 bench setup](images/dev-phase3v001.jpg)
+![Perseids Phase 3 v001 bench setup](images/dev-phase6v001.jpg)
 
 | Area | State |
 |------|--------|
