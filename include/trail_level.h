@@ -36,6 +36,17 @@ class TrailLevelController
 
     void FillMixerState(TrailMixerState out[kCount]) const;
 
+    // Imprint (4.7b): lock all currently active Trails; remember which ones
+    // this call locked (bits in `imprint_mask`). Returns the new mask.
+    uint8_t ImprintEngage(size_t active_count, uint8_t imprint_mask);
+    // Unlock only Trails locked by Imprint (bits in mask). Clears those bits.
+    uint8_t ImprintRelease(uint8_t imprint_mask);
+    // Unlock every Trail (manual + Imprint) — emergency release.
+    void    UnlockAllLocks();
+
+    void SetLocked(size_t index, bool locked);
+    bool Locked(size_t index) const;
+
     uint8_t RecTrailSlot() const;
     bool    RecTrigActive() const;
 

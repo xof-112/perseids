@@ -44,6 +44,8 @@ void UiController::Init(daisy::DaisySeed&   seed,
     last_display_ms_       = 0;
     cycle_held_prev_       = false;
     pot_moved_during_hold_ = false;
+    imprint_mask_          = 0;
+    imprint_engaged_       = false;
 
     for(size_t i = 0; i < kMaxCycleRows; ++i)
     {
@@ -57,6 +59,7 @@ void UiController::Init(daisy::DaisySeed&   seed,
     mux_.Init(seed);
     display_.Init(seed);
     cycle_btn_.Init(hw::kCycleButton, kLongPressMs);
+    imprint_btn_.Init(hw::kImprintButton, kLongPressMs);
     trails_.Init(seed, capture_);
 
     for(size_t n = 0; n < 48; ++n)
@@ -117,8 +120,10 @@ void UiController::HandleCycleButton(ButtonGesture::Event event)
         if(event == ButtonGesture::Event::ShortPress)
         {
             trails_.ResetAll();
-            reset_confirm_ = false;
-            playing_       = true;
+            imprint_mask_    = 0;
+            imprint_engaged_ = false;
+            reset_confirm_   = false;
+            playing_         = true;
             EnterDashboard();
         }
         return;
@@ -127,8 +132,8 @@ void UiController::HandleCycleButton(ButtonGesture::Event event)
     switch(event)
     {
     case ButtonGesture::Event::ShortPress:
-        playing_ = !playing_;
-        TouchActivity();
+        // Play/Pause lives on Imprint (D6). Ignore short after hold+scroll so
+        // cycling parameters cannot accidentally fire a leftover ShortPress.
         break;
 
     case ButtonGesture::Event::LongPress:
@@ -139,6 +144,44 @@ void UiController::HandleCycleButton(ButtonGesture::Event event)
             EnterDashboard();
         }
         break;
+
+    default:
+        break;
+    }
+}
+
+void UiController::HandleImprintButton(ButtonGesture::Event event)
+{
+    switch(event)
+    {
+    case ButtonGesture::Event::ShortPress:
+        // Global Play/Pause (moved off Cycle — ARCHITECTURE 4.7).
+        playing_ = !playing_;
+        TouchActivity();
+        break;
+
+    case ButtonGesture::Event::LongPress:
+    {
+        // Imprint lock toggle (4.7b): engage all active / selective release.
+        size_t active = static_cast<size_t>(capture_params_->count + 0.5f);
+        if(active < 1)
+            active = 1;
+        if(active > kTrailCount)
+            active = kTrailCount;
+
+        if(imprint_engaged_)
+        {
+            imprint_mask_    = trails_.ImprintRelease(imprint_mask_);
+            imprint_engaged_ = false;
+        }
+        else
+        {
+            imprint_mask_    = trails_.ImprintEngage(active, 0);
+            imprint_engaged_ = true;
+        }
+        TouchActivity();
+        break;
+    }
 
     default:
         break;
@@ -209,6 +252,7 @@ void UiController::PollControls()
     }
 
     cycle_btn_.Debounce();
+    imprint_btn_.Debounce();
 
     const bool cycle_held = cycle_btn_.IsHeld();
     if(cycle_held && !cycle_held_prev_)
@@ -297,6 +341,7 @@ void UiController::PollControls()
     }
 
     HandleCycleButton(cycle_btn_.Poll());
+    HandleImprintButton(imprint_btn_.Poll());
 
     trails_.PollEncoders();
     trails_.Process();

@@ -56,7 +56,7 @@ constexpr TrailEncoderPins kTrailEncoders[5] = {
 };
 
 // SSD1309 2.42" 128×64 — SPI1 (matches libDaisy SSD130x4WireSpi defaults).
-// VCC → 3v3 (pin 38), GND → DGND (pin 40). D6 is free (not used by display).
+// VCC → 3v3 (pin 38), GND → DGND (pin 40). D6 = Imprint button.
 //   SCK  D8  (pin 9)   SCL / SPI1 SCK
 //   MOSI D10 (pin 11)  SDA / SPI1 MOSI
 //   CS   D7  (pin 8)   SPI1 NSS
@@ -95,6 +95,10 @@ constexpr uint8_t kPotRow4 = kPotMuxB1;
 
 // Cycle button (momentary, active low with internal pull-up)
 constexpr daisy::Pin kCycleButton = daisy::seed::D5;
+
+// Imprint button (momentary, active low with internal pull-up) — Play/Pause +
+// Imprint lock gestures (ARCHITECTURE 4.7 / 4.7b). Was free GPIO.
+constexpr daisy::Pin kImprintButton = daisy::seed::D6;
 
 } // namespace hw
 

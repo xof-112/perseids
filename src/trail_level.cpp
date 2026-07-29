@@ -92,6 +92,66 @@ void TrailLevelController::FillMixerState(TrailMixerState out[kCount]) const
     }
 }
 
+void TrailLevelController::SetLocked(size_t index, bool locked)
+{
+    if(index >= kCount)
+        return;
+    trails_[index].locked = locked;
+    activity_this_frame_  = true;
+    level_edit_activity_  = true;
+}
+
+bool TrailLevelController::Locked(size_t index) const
+{
+    if(index >= kCount)
+        return false;
+    return trails_[index].locked;
+}
+
+uint8_t TrailLevelController::ImprintEngage(size_t active_count, uint8_t imprint_mask)
+{
+    if(active_count < 1)
+        active_count = 1;
+    if(active_count > kCount)
+        active_count = kCount;
+
+    uint8_t mask = imprint_mask;
+    for(size_t i = 0; i < active_count; ++i)
+    {
+        const uint8_t bit = static_cast<uint8_t>(1u << i);
+        // Only claim Trails that were unlocked — leave manual locks alone.
+        if(!trails_[i].locked)
+        {
+            trails_[i].locked = true;
+            mask |= bit;
+        }
+    }
+    activity_this_frame_ = true;
+    level_edit_activity_ = true;
+    return mask;
+}
+
+uint8_t TrailLevelController::ImprintRelease(uint8_t imprint_mask)
+{
+    for(size_t i = 0; i < kCount; ++i)
+    {
+        const uint8_t bit = static_cast<uint8_t>(1u << i);
+        if((imprint_mask & bit) != 0)
+            trails_[i].locked = false;
+    }
+    activity_this_frame_ = true;
+    level_edit_activity_ = true;
+    return 0;
+}
+
+void TrailLevelController::UnlockAllLocks()
+{
+    for(size_t i = 0; i < kCount; ++i)
+        trails_[i].locked = false;
+    activity_this_frame_ = true;
+    level_edit_activity_ = true;
+}
+
 uint8_t TrailLevelController::RecTrailSlot() const
 {
     if(capture_)

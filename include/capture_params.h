@@ -23,8 +23,10 @@ enum ParamId : uint16_t
     kTimeFadeOut = 13,
 
     // Block 11 Settings (partial — more entries arrive with Phase 11).
-    kSettingsCpuMeter = 110,
-    kSettingsRamMeter = 111,
+    kSettingsCpuMeter   = 110,
+    kSettingsRamMeter   = 111,
+    kSettingsScale      = 112, // 0 Major, 1 Minor, 2 Pentatonic (Block 7 Quantized)
+    kSettingsIntonation = 113, // 0 Equal Temperament, 1 Just Intonation
 
     // Stub — owned by CaptureEngine, not yet on a CycleRow.
     kAudioRouting = 100,
@@ -43,6 +45,8 @@ struct CaptureParamValues
     float fade_out_s = 3.f;
     float cpu_meter  = 1.f;   // TODO(release): default Off (0.f) — On for bench/debug
     float ram_meter  = 0.f;   // Settings: RAM/SDRAM meter On/Off (default Off)
+    float scale      = 0.f;   // 0 Major, 1 Minor, 2 Pentatonic — Resonator Quantized
+    float intonation = 0.f;   // 0 Equal Temperament, 1 Just Intonation
     float routing    = 0.f;   // 0 Stereo, 1 Sidechain
 };
 

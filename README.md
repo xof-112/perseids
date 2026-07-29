@@ -13,13 +13,12 @@ Sound — independently designed, not affiliated.
 
 ---
 
-## Status — Phase 6 · `dev-phase6v001`
+## Status — Phase 7 · Spectral Resonator
 
-**Engine Blend is in:** the Engines block now crossfades continuously between Spectra
-(additive, FFT 512 + phasor bank) and Swarm (granular over the Trail SDRAM buffers) —
-equal-power, pre-fader, with a subtle 50% marker and an SP/SW side hint on the display.
-All 10 block pots are wired: Blocks 6–10 (Reverb, Resonator, Pan Drift, Crossfade,
-Filter) already open full dummy menus for bench feedback until their engine phases land.
+**Spectral Resonator is in:** Block 7 runs an 8-bandpass bank on the Swarm output
+(Mix / Decay / Pitch / Quantized). Settings now expose Scale (Major/Minor/Pentatonic) and
+Intonation (Equal/Just) for Quantized mode. Engine Blend (Phase 6) remains: continuous
+Spectra↔Swarm crossfade. Remaining dummy menus: Reverb, Pan Drift, Crossfade, Filter.
 
 ![Perseids Phase 3 v001 bench setup](images/dev-phase6v001.jpg)
 
@@ -32,10 +31,11 @@ Filter) already open full dummy menus for bench feedback until their engine phas
 | Spectra engine (additive: Partials, Waveshape, Umbra/Aurora, Ensemble) | Working |
 | Swarm engine (granular: Size, Spread, Scan, Atmosphere) | Working |
 | Engine blend (continuous Spectra↔Swarm, equal-power, pre-fader) | Working |
-| Blocks 6–10 (Reverb, Resonator, Pan Drift, Crossfade, Filter) | Dummy menus — engines follow in Phases 7–9 |
-| Spectral Resonator | **Next** — Phase 7 |
+| Spectral Resonator (on Swarm: Mix/Decay/Pitch/Quantized + Settings Scale/Intonation) | Working |
+| Blocks 6/8–10 (Reverb, Pan Drift, Crossfade, Filter) | Dummy menus — engines follow in Phases 8–9 |
+| Reverb & Filter Mix | **Next** — Phase 8 |
 
-Tag: **`dev-phase6v001`** · Full roadmap: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+Tag: **`dev-phase6v001`** (bench photo) · Full roadmap: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 
 ---
 

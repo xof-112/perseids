@@ -7,6 +7,8 @@
 #include "dummy_params.h"
 #include "hw_pins.h"
 #include "param_registry.h"
+#include "reso_engine.h"
+#include "reso_params.h"
 #include "spectra_engine.h"
 #include "spectra_params.h"
 #include "swarm_engine.h"
@@ -24,10 +26,12 @@ namespace
 perseids::CaptureParamValues    g_capture_params;
 perseids::SpectraParamValues    g_spectra_params;
 perseids::SwarmParamValues      g_swarm_params;
+perseids::ResoParamValues       g_reso_params;
 perseids::DummyBlockParamValues g_dummy_params;
 perseids::CaptureEngine      g_capture;
 perseids::SpectraEngine      g_spectra;
 perseids::SwarmEngine        g_swarm;
+perseids::ResonatorEngine    g_reso;
 CpuLoadMeter                 g_cpu_meter;
 std::atomic<float>           g_cpu_load{0.f};
 
@@ -64,10 +68,13 @@ const uint16_t kSwarmIds[] = {perseids::kSwarmSize,
                               perseids::kSwarmAtmosphere};
 
 const uint16_t kSettingsIds[]
-    = {perseids::kSettingsCpuMeter, perseids::kSettingsRamMeter};
+    = {perseids::kSettingsCpuMeter,
+       perseids::kSettingsRamMeter,
+       perseids::kSettingsScale,
+       perseids::kSettingsIntonation};
 
-// Dummy cycle lists for Blocks 6–10 (see dummy_params.h) — real parameter
-// names/types per ARCHITECTURE.md 4.1, values go nowhere yet.
+// Dummy cycle lists for Blocks 6, 8–10 (see dummy_params.h). Block 7 Resonator
+// is live (reso_params.h).
 const uint16_t kReverbIds[] = {perseids::kReverbMix,
                                perseids::kReverbDecay,
                                perseids::kReverbDamping,
@@ -98,7 +105,7 @@ const perseids::PotMapping kPotMappings[] = {
     {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA3}, // Pot 4  → Swarm
     {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA4}, // Pot 5  → Spectra
     {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB0}, // Pot 6  → Pan Drift*
-    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB1}, // Pot 7  → Resonator*
+    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB1}, // Pot 7  → Resonator
     {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB2}, // Pot 8  → Reverb*
     {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB3}, // Pot 9  → Crossfade*
     {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB4}, // Pot 10 → Filter*
@@ -335,7 +342,7 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          1.f,
          0.25f,
-         &g_dummy_params.reso_mix,
+         &g_reso_params.mix,
          DT::Unipolar,
          false},
         {perseids::kResoDecay,
@@ -344,7 +351,7 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          1.f,
          0.5f,
-         &g_dummy_params.reso_decay,
+         &g_reso_params.decay,
          DT::Unipolar,
          false},
         {perseids::kResoPitch,
@@ -353,7 +360,7 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          -1.f,
          1.f,
          0.f,
-         &g_dummy_params.reso_pitch,
+         &g_reso_params.pitch,
          DT::Bipolar,
          true},
         {perseids::kResoQuantized,
@@ -362,7 +369,7 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          1.f,
          0.f,
-         &g_dummy_params.reso_quantized,
+         &g_reso_params.quantized,
          DT::Toggle,
          false},
 
@@ -468,6 +475,26 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          &g_capture_params.ram_meter,
          DT::Toggle,
          false},
+        // Scale / Intonation drive Block 7 Quantized (Phase 7). Named enum UI
+        // lands with Phase 11 Multi — CountNum is the interim display.
+        {perseids::kSettingsScale,
+         "Scale",
+         "SCL",
+         0.f,
+         2.f,
+         0.f, // 0 Major, 1 Minor, 2 Pentatonic
+         &g_capture_params.scale,
+         DT::CountNum,
+         false},
+        {perseids::kSettingsIntonation,
+         "Intonation",
+         "INT",
+         0.f,
+         1.f,
+         0.f, // 0 Equal Temperament, 1 Just Intonation
+         &g_capture_params.intonation,
+         DT::Toggle,
+         false},
     };
 
     for(const auto& def : defs)
@@ -509,7 +536,11 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     if(run_spectra)
         g_spectra.Process(g_spectra_out, g_spectra_out, size);
     if(run_swarm)
+    {
         g_swarm.Process(g_swarm_out_l, g_swarm_out_r, size);
+        // Spectral Resonator sits on the Swarm output (ARCHITECTURE 4.1 Block 7).
+        g_reso.Process(g_swarm_out_l, g_swarm_out_r, size);
+    }
 
     // Bench scaffolding until Multi Dry/Wet (Phase 11):
     // dry listen-through + blended engines (trail_mix = analysis only).
@@ -543,6 +574,7 @@ int main(void)
     g_capture.Init(hw.AudioSampleRate());
     g_spectra.Init(hw.AudioSampleRate());
     g_swarm.Init(hw.AudioSampleRate());
+    g_reso.Init(hw.AudioSampleRate());
     g_cpu_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
 
     perseids::ParameterRegistry registry;
@@ -557,11 +589,11 @@ int main(void)
         perseids::CycleRow("Swarm", kSwarmIds, 4),
         perseids::CycleRow("Spectra", kSpectraIds, 4),
         perseids::CycleRow("Pan Drift", kPanIds, 3),    // *
-        perseids::CycleRow("Resonator", kResoIds, 4),   // *
+        perseids::CycleRow("Resonator", kResoIds, 4),
         perseids::CycleRow("Reverb", kReverbIds, 4),    // *
         perseids::CycleRow("Crossfade", kXfadeIds, 2),  // *
         perseids::CycleRow("Filter", kFilterIds, 4),    // *
-        perseids::CycleRow("Settings", kSettingsIds, 2),
+        perseids::CycleRow("Settings", kSettingsIds, 4),
     };
 
     perseids::UiController ui;
@@ -585,6 +617,9 @@ int main(void)
     while(true)
     {
         ui.Process();
+        g_reso.SyncFromUi(g_reso_params,
+                          g_capture_params.scale,
+                          g_capture_params.intonation);
         // FFT after UI so pot/menu response stays snappy; 20 ms is enough tracking.
         // Skip only when Blend sits at (essentially) full Swarm — Spectra is
         // silent there and its synthesis is skipped in the callback anyway.

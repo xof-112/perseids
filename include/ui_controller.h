@@ -66,6 +66,7 @@ class UiController
   private:
     void PollControls();
     void HandleCycleButton(ButtonGesture::Event event);
+    void HandleImprintButton(ButtonGesture::Event event);
     void HandlePotTurn(size_t row_idx, float pot_norm, float delta);
     void TouchActivity();
     void EnterDashboard();
@@ -90,6 +91,7 @@ class UiController
     MuxAdcPoller         mux_;
     DisplayRenderer      display_;
     ButtonGesture        cycle_btn_;
+    ButtonGesture        imprint_btn_;
     TrailLevelController trails_;
 
     UiScreen screen_;
@@ -101,6 +103,9 @@ class UiController
     uint32_t last_display_ms_;
     bool     cycle_held_prev_;
     bool     pot_moved_during_hold_;
+    // Bitmask of Trails locked by Imprint (selective release, 4.7b).
+    uint8_t  imprint_mask_;
+    bool     imprint_engaged_;
     float    scroll_anchor_[kMaxCycleRows];
     uint32_t last_scroll_ms_[kMaxCycleRows];
     float    pot_prev_[kMaxCycleRows];

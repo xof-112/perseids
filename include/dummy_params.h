@@ -5,13 +5,11 @@
 namespace perseids
 {
 
-// Bench scaffolding — dummy parameters for Blocks 6–10 until their engines
-// land (Reverb/Filter Phase 8, Resonator Phase 7, Pan Drift/Crossfade
-// Phase 9). Development Principle 5.1: UI mechanics first, on dummy values.
-// Turning these pots opens a full CycleView so value up/down movement is
-// visible on the display; nothing reads these values in the audio path yet.
-// When an engine phase lands, move its IDs/values into the real param header
-// and delete them here.
+// Bench scaffolding — dummy parameters for Blocks 6, 8–10 until their engines
+// land (Reverb/Filter Phase 8, Pan Drift/Crossfade Phase 9). Block 7 Resonator
+// moved to reso_params.h (Phase 7). Development Principle 5.1: UI mechanics
+// first, on dummy values. When an engine phase lands, move its IDs/values into
+// the real param header and delete them here.
 enum DummyBlockParamId : uint16_t
 {
     // Block 6 — Reverb
@@ -19,12 +17,6 @@ enum DummyBlockParamId : uint16_t
     kReverbDecay     = 61,
     kReverbDamping   = 62,
     kReverbCharacter = 63,
-
-    // Block 7 — Spectral Resonator
-    kResoMix       = 70,
-    kResoDecay     = 71,
-    kResoPitch     = 72,
-    kResoQuantized = 73,
 
     // Block 8 — Pan Drift
     kPanPhase     = 80,
@@ -49,12 +41,6 @@ struct DummyBlockParamValues
     float rev_decay     = 0.5f;
     float rev_damping   = 0.5f;
     float rev_character = 0.f; // bipolar Chorus←0→Friction
-
-    // Block 7 — Spectral Resonator
-    float reso_mix       = 0.25f;
-    float reso_decay     = 0.5f;
-    float reso_pitch     = 0.f; // bipolar
-    float reso_quantized = 0.f; // toggle
 
     // Block 8 — Pan Drift
     float pan_phase     = 0.f;

@@ -146,9 +146,9 @@ every request).
 | Trail Level | 5 | Rotary encoder with push (not a potentiometer — digital quadrature, direct GPIO, not on the ADC mux) | Turn = this Trail's level; short press = Lock; long press = Solo |
 | Mod slots | 4 | Pot | Amplitude (bipolar attenuverter); Destination/Divider via cycle button; source internal or CV in |
 | Multi | 1 | Encoder | Dry/Wet, Macro1, Macro2, Settings — via cycle button like the block pots |
-| Cycle button | 1 | Button (next to display) | See 4.6 and 4.7 |
+| Cycle button | 1 | Button (next to display) | Hold+turn = cycle (4.6); long alone = delete-all confirm (4.7) |
 | Rec button | 1 | Button (parallel to Trig jack) | Manual record trigger |
-| Imprint button | 1 | Button (toggle, see 4.7b) | Locks/unlocks all currently active Trails at once |
+| Imprint button | 1 | Button (D6) | Short = Play/Pause; long = Imprint lock toggle (4.7b) |
 
 **Total: 14 pots (10 block + 4 mod) + 6 encoders (5 Trail Level + 1 Multi) + 3 buttons
 (Cycle, Rec, Imprint).**
@@ -215,6 +215,21 @@ main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥
 - **TODO — grain playback direction:** grains should be playable **forward, backward, or
   random** (per-grain direction choice at spawn time). Not implemented yet — currently all
   grains play forward. Open design questions in Section 8 (UI parameter vs. Scan coupling).
+
+**Block 7 / Spectral Resonator (verified Phase 7 — implementation contract):**
+
+- **Role:** parallel bandpass bank on the **Swarm** stereo output (not Spectra, not dry).
+  Complements the granular cloud with a pitched resonant body.
+- **Topology:** 8× DaisySP `Svf` bandpass on the Swarm mid `(L+R)/2`; wet summed mono back
+  onto both channels with equal-power Mix. Mix≈0 skips the bank (CPU). Soft-`tanh` on the
+  bank sum before the wet mix.
+- **Params:** Mix (unipolar), Decay (unipolar → Q 0.15…0.92), Pitch (bipolar ±1 octave on
+  root C2 ≈ 65.4 Hz), Quantized (toggle).
+- **Quantized OFF:** odd-harmonic series of the pitched root.
+- **Quantized ON:** 8 scale degrees from Settings **Scale** (0 Major / 1 Minor / 2 Pentatonic)
+  with Settings **Intonation** (0 Equal Temperament / 1 Just ratios). Scale/Intonation live
+  in the Settings CycleRow (interim `CountNum` / `Toggle` until Phase 11 named enums).
+- **Pot map:** Mux B C1 = Resonator.
 
 **Block 8 detail (Phase):** Controls the phase offset between the per-Trail-independent Pan
 Drift LFOs (0% = all Trails drift in sync, 100% = maximally offset against each other) —
@@ -456,7 +471,7 @@ recording independent of the threshold (same round-robin logic as the automatic 
 | D0–D3 | Mux select S0–S3 (shared by both mux chains) |
 | D4 | Trail 1 encoder CLK |
 | D5 | Cycle button |
-| D6 | *free* |
+| D6 | Imprint button (Play/Pause + Imprint lock) |
 | D7 | OLED CS (SPI1 NSS) |
 | D8 | OLED SCK (SPI1 SCK) |
 | D9 | OLED DC |
@@ -484,8 +499,9 @@ recording independent of the threshold (same round-robin logic as the automatic 
 
 Confirms the correction in Section 2, point 6: the two mux chains have **separate** ADC
 inputs (A0/A1, not a shared common line), and the OLED runs on SPI1 in 4-wire mode (no MISO
-needed, display is write-only). D6 and D30–D32 are free for future use (e.g. mod slots,
-Multi encoder, jack detection lines — not yet assigned as of Phase 2).
+needed, display is write-only). D30–D32 are free for future use (e.g. mod slots,
+Multi encoder, jack detection lines — not yet assigned as of Phase 2). **D6 = Imprint button**
+(Play/Pause short, Imprint lock long).
 
 **Bench pot map, all 10 block pots wired (`hw_pins.h` / `main.cpp`):**
 
@@ -497,17 +513,16 @@ Multi encoder, jack detection lines — not yet assigned as of Phase 2).
 | A | C3 | Swarm |
 | A | C4 | Spectra |
 | B | C0 | Pan Drift *(dummy)* |
-| B | C1 | Resonator *(dummy)* |
+| B | C1 | Resonator ✔ |
 | B | C2 | Reverb *(dummy)* |
 | B | C3 | Crossfade *(dummy)* |
 | B | C4 | Filter *(dummy)* |
 
-*(dummy)* = Blocks 6–10 have full CycleRows with registered dummy parameters
-(`dummy_params.h`) so every pot gives display feedback (value up/down, pickup, scroll)
-before its engine phase lands — Development Principle 5.1. Nothing reads these values in
-the audio path yet; when an engine phase arrives, move its IDs/values into the real param
-header. The Settings CycleRow exists but has **no pot** (Block 11 = Multi encoder,
-Phase 11); the CPU meter therefore stays default-On for the bench. Mux polling covers
+*(dummy)* = remaining Blocks 6/8–10 have full CycleRows with registered dummy parameters
+(`dummy_params.h`) so every pot gives display feedback before its engine phase lands —
+Development Principle 5.1. Block 7 Resonator is live (`reso_params.h` / `ResonatorEngine`).
+Settings CycleRow has **no pot** (Block 11 = Multi encoder, Phase 11) but now includes
+Scale + Intonation for the Resonator; CPU meter stays default-On for the bench. Mux polling covers
 C0–C4 per chain via `InitMux` with three select lines (S0–S2, libDaisy-driven); only
 S3 is held low manually. Only map mux channels that physically have a pot:
 unmapped-but-polled floating channels spuriously open Cycle views. `EnterDashboard` must be a **no-op when already on the
@@ -596,9 +611,12 @@ section):**
 
 | Gesture | Action |
 |---|---|
-| Short, alone | **Play/Pause** (global, all Trails) |
-| Long, alone | **Reset confirmation:** display shows "Delete all Trails?" — a further short press within 3s confirms and deletes all Trails; timeout or moving a control cancels. During the confirmation, a short press counts as confirmation, NOT as Play/Pause |
+| Short, alone | *(no Play/Pause — that lives on Imprint, 4.7b)* — unused / reserved. Short during an open Reset confirmation still confirms delete-all |
+| Long, alone | **Reset confirmation:** display shows "Delete all Trails?" — a further short press within 3s confirms and deletes all Trails; timeout or moving a control cancels. During the confirmation, a short press counts as confirmation, NOT as anything else |
 | Held + turning a control | Cycle mode (4.6) |
+
+**Why Play/Pause left Cycle:** hold+scroll release was often classified as ShortPress and
+paused playback while editing Block menus. Transport belongs on the dedicated Imprint button.
 
 **Multi encoder push (its own button on the encoder, Block 11):** Following the same pattern
 as Trail Level push (4.2, short=Lock/long=Solo) and the cycle button (short/long assigned
@@ -630,16 +648,19 @@ other:
    (see 4.5a note: Trail-encoder return removed, Multi encoder not built yet). Revisit toward
    the 5–10s target once the explicit return gesture exists.
 
-### 4.7b Imprint (new global function)
+### 4.7b Imprint (global button — D6)
 
-**Hardware:** a third, dedicated button (in addition to Cycle and Rec/Trig), using one of the
-free GPIO pins (D6, D30–D32, see 4.5a).
+**Hardware:** dedicated button on **D6** (momentary, active-low pull-up), in addition to
+Cycle (D5) and Rec/Trig.
 
-**Gesture:** short press = toggle (engage/release, see below). Long press = unconditional
-full release (see below) — this button uses both gestures, unlike a plain single-function
-toggle, to also provide an emergency "release everything" path.
+**Gestures:**
 
-**Function (short press, toggle):** applies Lock (4.2) to all currently active Trails
+| Gesture | Action |
+|---|---|
+| Short | **Play/Pause** (global, all Trails — Fade In/Out times from Block 2) |
+| Long | **Imprint lock toggle** — see below |
+
+**Imprint lock (long press, toggle):** applies Lock (4.2) to all currently active Trails
 simultaneously, freezing the present sound in place — conceptually similar to a "freeze"
 function in other granular instruments (e.g. Mutable Instruments Clouds), but named Imprint
 here to avoid a naming clash with Block 5's Scan parameter, where "0 = freeze" already means
@@ -651,23 +672,19 @@ round-robin before you reach it — the moment you wanted to capture may partly 
 time you've locked the last one. A dedicated button locks all active Trails in the same
 instant, with no gap between the first and the last.
 
-**Selective release (short press, second time):** Imprint tracks which Trails it locked
+**Selective release (long press, second time):** Imprint tracks which Trails it locked
 itself, separately from Trails a Trail Level encoder had already locked manually before
-Imprint was engaged. Releasing Imprint via a second short press only unlocks the Trails
+Imprint was engaged. Releasing Imprint via a second long press only unlocks the Trails
 Imprint itself locked — a Trail you had deliberately locked by hand beforehand stays locked.
 This avoids Imprint silently undoing a manual decision you made earlier.
 
-**Unconditional release (long press):** unlocks **all** Trails, regardless of whether they
-were locked by Imprint or manually — an emergency "release everything" path, independent of
-Imprint's current engaged/released state. No confirmation dialog, unlike the Reset gesture in
-4.7: this action isn't destructive (no audio is lost, Trails simply continue playing normally
-in the round-robin pool), so a confirmation step would only add friction against the
-spontaneous, low-latency feel this function is meant to have.
+**Unconditional unlock-all:** still available by unlocking each Trail via its Level push
+(short = Lock toggle), or via delete-all Reset (4.7). A dedicated "unlock everything" long
+gesture on Imprint is deferred so Short can stay Play/Pause without gesture overload.
 
 **No new development phase needed:** Imprint doesn't require any new underlying mechanism —
-it's a batch application of Lock, which already exists from Phase 2. Implementation is a small
-addition wherever Phase 2's Lock logic lives (plus the tracking bitmask for selective release),
-not a new phase of its own.
+it's a batch application of Lock, which already exists from Phase 2, plus Play/Pause which
+already existed on Cycle.
 
 ### 4.8 Capture Model (Trail Pool)
 
@@ -918,7 +935,7 @@ determined yet.
 | 4 | Spectra engine (additive) ✔ | Partials/Waveshape/Umbra-Aurora/Ensemble-Drift audible (stylized; see 4.1 contract) |
 | 5 | Swarm engine (granular) ✔ | Size/Spread/Scan/Atmosphere audible; A/B vs Spectra |
 | 6 | Engine blend (Block 3) ✔ | Continuous crossfading Spectra↔Swarm |
-| 7 | Spectral Resonator | Mix/Decay/Pitch/Quantized active, intonation from Settings effective |
+| 7 | Spectral Resonator ✔ | Mix/Decay/Pitch/Quantized active, intonation from Settings effective |
 | 8 | Reverb & Filter Mix | ReverbSc with Character Macro, SVF filter with feedback drive, destination routing |
 | 9 | Pan Drift & Crossfade & Wandering Beams | Phase-offset pan LFOs, crossfade slew, display visualization |
 | 10 | Mod system | 4 slots, jack normalling, registry destination, divider/clock |
@@ -1071,8 +1088,10 @@ consolidate the pitch values set directly in Phase 4/5 into this here.
 
 ### Phase 7 — Spectral Resonator
 
+**✔ Completed (verified against implementation).** See Block 7 / Spectral Resonator contract above.
+
 ```
-Prompt for Cursor:
+Prompt for Cursor (historical — already implemented):
 
 Read ARCHITECTURE.md first, especially 4.1 (Block 7 and the Settings submenu).
 
