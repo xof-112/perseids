@@ -38,11 +38,11 @@ inline float BipolarNorm(float v, float min_v, float max_v)
     return Clampf((v - mid) / half, -1.f, 1.f);
 }
 
-// Hann coherent gain ≈ 0.5 → unit sine peak mag ≈ N/4.
-// Extra makeup so quiet Trail taps still speak through the oscillator bank.
+// Hann coherent gain ≈ 0.5 → unit sine peak mag ≈ N/4 → amp ≈ 1.
+// Keep makeup ≤ ~1.0: ×1.4+ brought level-proportional crackle back (~50% Trail).
 constexpr float MagToAmp()
 {
-    return (4.f / static_cast<float>(SpectraEngine::kFftSize)) * 2.5f;
+    return 4.f / static_cast<float>(SpectraEngine::kFftSize);
 }
 } // namespace
 
@@ -97,6 +97,8 @@ void SpectraEngine::Init(float sample_rate)
         target_freq_[i] = 110.f;
         phase_inc_[i]   = 110.f * sample_rate_inv_;
     }
+    slew_amp_  = 0.f;
+    slew_freq_ = 0.f;
 }
 
 void SpectraEngine::BuildWindow()
@@ -429,6 +431,13 @@ void SpectraEngine::ConsumeTargets()
     const float drift        = Clampf(params_.ensemble, 0.f, 1.f);
     const float detune_ratio = 1.f + drift * 0.008f;
 
+    // Continuous exp slew — do NOT restart a ramp each hop (that was the
+    // ~50 Hz crackle). ENS=0 ≈ 100 ms, ENS=1 ≈ 280 ms time constant.
+    const float tau_s = Lerp(0.100f, 0.280f, drift);
+    const float a     = 1.f - std::exp(-sample_rate_inv_ / tau_s);
+    slew_amp_  = a;
+    slew_freq_ = a * 0.7f; // freq a bit softer than amp
+
     for(size_t i = 0; i < kMaxPartials; ++i)
     {
         float freq = pending_targets_[i].freq_hz;
@@ -449,36 +458,29 @@ void SpectraEngine::Process(float* out_l, float* out_r, size_t size)
 {
     ConsumeTargets();
 
-    // ENS=0 → faster tracking; ENS=1 → slower (architecture Ensemble/Drift).
-    // Keep freq a bit softer than amp so residual mismatches don't chirp.
-    const float drift     = Clampf(params_.ensemble, 0.f, 1.f);
-    const float slew_amp  = Lerp(0.35f, 0.04f, drift);
-    const float slew_freq = Lerp(0.22f, 0.03f, drift);
-    waveshape_morph_      = BipolarNorm(params_.waveshape, -1.f, 1.f);
-    fold_gain_            = 1.f + std::fabs(waveshape_morph_) * 2.5f;
+    waveshape_morph_ = BipolarNorm(params_.waveshape, -1.f, 1.f);
+    fold_gain_       = 1.f + std::fabs(waveshape_morph_) * 2.5f;
     folder_.SetGain(fold_gain_);
 
-    const size_t n_act = active_partials_;
-    for(size_t i = 0; i < n_act; ++i)
-    {
-        osc_freq_[i] += slew_freq * (target_freq_[i] - osc_freq_[i]);
-        osc_amp_[i] += slew_amp * (target_amp_[i] - osc_amp_[i]);
-        phase_inc_[i] = osc_freq_[i] * sample_rate_inv_;
-    }
-    for(size_t i = n_act; i < kMaxPartials; ++i)
-    {
-        osc_amp_[i] += slew_amp * (0.f - osc_amp_[i]);
-        target_amp_[i] = 0.f;
-    }
-
-    const float morph    = waveshape_morph_;
-    const bool  do_saw   = morph < -0.02f;
-    const bool  do_fold  = morph > 0.02f;
-    const float saw_amt  = do_saw ? -morph : 0.f;
-    const float fold_amt = do_fold ? morph : 0.f;
+    const size_t n_act    = active_partials_;
+    const float  morph    = waveshape_morph_;
+    const bool   do_saw   = morph < -0.02f;
+    const bool   do_fold  = morph > 0.02f;
+    const float  saw_amt  = do_saw ? -morph : 0.f;
+    const float  fold_amt = do_fold ? morph : 0.f;
+    const float  sa       = slew_amp_ > 0.f ? slew_amp_ : 0.001f;
+    const float  sf       = slew_freq_ > 0.f ? slew_freq_ : 0.001f;
 
     for(size_t n = 0; n < size; ++n)
     {
+        for(size_t i = 0; i < kMaxPartials; ++i)
+        {
+            const float amp1 = (i < n_act) ? target_amp_[i] : 0.f;
+            osc_amp_[i] += sa * (amp1 - osc_amp_[i]);
+            osc_freq_[i] += sf * (target_freq_[i] - osc_freq_[i]);
+            phase_inc_[i] = osc_freq_[i] * sample_rate_inv_;
+        }
+
         float mix = 0.f;
         for(size_t i = 0; i < n_act; ++i)
         {
@@ -503,7 +505,7 @@ void SpectraEngine::Process(float* out_l, float* out_r, size_t size)
             mix += s * osc_amp_[i];
         }
 
-        mix      = Clampf(mix, -1.2f, 1.2f);
+        mix      = std::tanh(mix);
         out_l[n] = mix;
         out_r[n] = mix;
     }

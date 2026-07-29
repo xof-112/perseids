@@ -23,8 +23,9 @@ pot ends** (discrete counts, Hold INF, Buffer/Fade times, later Partials, etc.):
 
 ## Covered today
 
-`HoldTime`, `CountNum`, `CountBar`, `Seconds`.
+`HoldTime`, `CountNum`, `CountBar`, `Seconds`, and `Unipolar` **with** `center_mark`
+(crossfade-style — currently Blend: extremes gate engine skip / FFT).
 
 ## Not covered (normal 2 % near-catch is enough)
 
-`Unipolar`, `Bipolar`, `Toggle`.
+Plain `Unipolar` (no `center_mark`), `Bipolar`, `Toggle`.

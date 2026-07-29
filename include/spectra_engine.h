@@ -90,6 +90,10 @@ class SpectraEngine
     float               target_amp_[kMaxPartials];
     float               target_freq_[kMaxPartials];
     float               phase_inc_[kMaxPartials];
+    // Continuous exp slew toward targets (no per-hop ramp restart — those
+    // made a ~50 Hz AM staircase that read as level-proportional crackle).
+    float               slew_amp_;
+    float               slew_freq_;
     size_t              active_partials_;
     float               waveshape_morph_;
     float               fold_gain_;

@@ -204,8 +204,10 @@ main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥
   level × fade × play_gain) after `Process`; Swarm reads the same callback. Recording /
   empty / solo-muted trails are skipped.
 - **Grains:** up to **16** overlapping grains, linear-interpolated buffer reads, Hann window
-  at Atmosphere center. Size maps ~8–180 ms. Spread = stereo pan width. Scan = scrub rate
-  through each trail (0 = freeze). Pitch Swarm = `2^(±1 octave)` on grain playback rate.
+  at Atmosphere center. Size maps ~8–180 ms. Spawn interval = `grain_length × 0.15`
+  (~6–7 grains steady-state); per-grain amp = `Trail gain × 0.50` (overlap tame). Engine bus
+  soft-limited before the final mix. Spread = stereo pan width. Scan = scrub rate through each
+  trail (0 = freeze). Pitch Swarm = `2^(±1 octave)` on grain playback rate.
 - **Atmosphere:** Blur (negative) flattens grain envelopes; Radiation (positive) adds
   sample-hold lo-fi + BBD-style output slew.
 - **Pot map:** Mux A C3 = Swarm, Mux A C4 = Spectra (full bench map: see 4.5a; Settings
@@ -319,11 +321,12 @@ so Sidechain mode (Phase 11) is a mode switch later, not a rewire.
     Spectra/Swarm/Reverb — a live instrument can be "commented on" this way by a completely
     independent audio source, without the two signals interfering with each other's analysis
 
-**Listen-through (temporary bench scaffolding through Phase 11 Dry/Wet):** Stereo mode still
-dry-monitors the capture signal onto Out at ~85%. From Phase 4 onward, Spectra wet is **added**
-on top of that dry path (`out = dry×0.85 + spectra`). This remains a scaffolding mix for
-A/B listening on the bench, not the final design — it gets replaced/overridden by the real
-Dry/Wet control (Multi encoder, Block 11). Don't treat the 85% figure as a final mix value.
+**Listen-through (temporary bench scaffolding through Phase 11 Dry/Wet):** Stereo mode
+dry-monitors the capture signal onto Out at a reduced gain (~0.35). Engine wet is soft-limited
+(`tanh`) then mixed on top — `trail_mix` stays **analysis input only** (never mixed to the
+output). Internal Spectra/Swarm makeup must stay conservative: raising MagToAmp / grain amp
+for loudness reintroduced crackle above ~50% Trail Level on both engines. Final balance lands
+with Multi Dry/Wet (Block 11).
 
 ### 4.1a Time Unit (Clock ↔ Seconds) for Buffer and Hold
 
@@ -551,12 +554,12 @@ section):**
 
 - **Pot-end-catch:** mux pots rarely reach exactly 0% or 100% at physical end of travel. For
   parameter types where a clean extreme value matters (`HoldTime`, `CountNum`, `CountBar`,
-  `Seconds`, and any future type with the same kind of endpoint), shared helpers in `CycleRow`
-  apply (not a Hold-only hack):
+  `Seconds`, and crossfade-style `Unipolar` with `center_mark` — currently Blend, whose
+  extremes gate engine skip / FFT), shared helpers in `CycleRow` apply (not a Hold-only hack):
   - **Value snap** when writing: pot ≥0.94 → 100%, ≤0.06 → 0% (`kEndCatchNorm`).
   - **Pickup meet-band** for a stored end value: pot ≥0.90 (top) / ≤0.10 (bottom)
     (`kEndCatchPot`) — slightly wider than the snap band because the ADC often tops out
-    before 0.94 (otherwise Count=5 / Hold INF cannot be picked up).
+    before 0.94 (otherwise Count=5 / Hold INF / Blend=100% cannot be picked up).
   - Discrete counts round to the nearest whole number after denormalizing.
 - **Dashboard→CycleView opening & focus policy (verified, Phase 5 UI stabilization):**
   opening requires **cumulative pot travel ≥ ~4%** (`kOpenThreshold = 0.040`) measured from a
@@ -681,6 +684,13 @@ not a new phase of its own.
   `Fade In` is a **distinct** state from `Recording` (see the Life-Bar phase table in 4.9) —
   don't conflate them, or Continuous Recording reads on the display as if it were double-
   recording the same take.
+- **Loop-seam crossfade (fixed in Phase 6):** recording writes ~40 ms past the loop end;
+  `FinishRecording` equal-power-blends that overflow into the head so the hard wrap
+  x[len−1]→x[0] is continuous *in the buffer*. Playback uses the **full** length — no
+  shortened play-length / runtime CF (those fought the baked seam and left crackle on
+  *both* Spectra and Swarm at ≥~50% Trail Level). All readers share this material
+  (trail_mix → Spectra, trail_buffer → Swarm). Spectra `MagToAmp` stays coherent-only;
+  Swarm grain amp stays overlap-tamed; raw `trail_mix` is analysis-only (never mixed out).
 - **Cont. Rec** (Continuous Recording): keeps re-triggering new recordings for as long as the
   input signal stays above the threshold, instead of waiting for it to drop below
 - **On/Off**: global bypass/enable for the capture system

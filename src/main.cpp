@@ -512,32 +512,17 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         g_swarm.Process(g_swarm_out_l, g_swarm_out_r, size);
 
     // Bench scaffolding until Multi Dry/Wet (Phase 11):
-    //   dry input listen-through + direct Trail tap + blended engines.
-    // Without the Trail tap, playback is silent whenever engines are quiet /
-    // Spectra silence-gated and no live input is present.
-    constexpr float kDryGain   = 0.70f;
-    constexpr float kTrailGain = 0.55f;
-    constexpr float kWetGain   = 1.15f;
+    // dry listen-through + blended engines (trail_mix = analysis only).
+    constexpr float kDryGain = 0.40f;
+    constexpr float kWetGain = 1.10f;
 
     for(size_t i = 0; i < size; ++i)
     {
         const float sp  = run_spectra ? g_spectra_out[i] * wet_spectra : 0.f;
         const float swl = run_swarm ? g_swarm_out_l[i] * wet_swarm : 0.f;
         const float swr = run_swarm ? g_swarm_out_r[i] * wet_swarm : 0.f;
-        float       l   = out[0][i] * kDryGain + g_trail_mix[i] * kTrailGain
-                  + (sp + swl) * kWetGain;
-        float r = out[1][i] * kDryGain + g_trail_mix[i] * kTrailGain
-                  + (sp + swr) * kWetGain;
-        if(l > 1.2f)
-            l = 1.2f;
-        else if(l < -1.2f)
-            l = -1.2f;
-        if(r > 1.2f)
-            r = 1.2f;
-        else if(r < -1.2f)
-            r = -1.2f;
-        out[0][i] = l;
-        out[1][i] = r;
+        out[0][i] = std::tanh(out[0][i] * kDryGain + (sp + swl) * kWetGain);
+        out[1][i] = std::tanh(out[1][i] * kDryGain + (sp + swr) * kWetGain);
     }
 
     g_cpu_meter.OnBlockEnd();

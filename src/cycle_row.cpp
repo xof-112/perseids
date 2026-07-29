@@ -14,8 +14,8 @@ constexpr float kEndNearEps   = 0.06f;
 constexpr float kDefaultNear  = 0.02f;
 
 // Params whose min/max sit at pot ends and must remain catchable (Count, Hold INF,
-// Buffer/Fade times, etc.). Apply the same end-catch for every new such param.
-bool UsesPotEndCatch(ParamDisplayType type)
+// Buffer/Fade times, crossfade-style Unipolar with center_mark e.g. Blend).
+bool UsesPotEndCatch(ParamDisplayType type, bool center_mark)
 {
     switch(type)
     {
@@ -24,6 +24,10 @@ bool UsesPotEndCatch(ParamDisplayType type)
     case ParamDisplayType::CountBar:
     case ParamDisplayType::Seconds:
         return true;
+    case ParamDisplayType::Unipolar:
+        // Blend (and later crossfade-style params): extremes gate engine skip /
+        // FFT — mux pots that top out ~0.96 must still snap to 0%/100%.
+        return center_mark;
     default:
         return false;
     }
@@ -112,7 +116,7 @@ void CycleRow::ChangeValue(const ParameterRegistry& reg, float pot_norm)
     physical_pot_norm_ = pot_norm;
     pickup_pot_norm_   = pot_norm;
 
-    const bool end_catch = UsesPotEndCatch(def->display_type);
+    const bool end_catch = UsesPotEndCatch(def->display_type, def->center_mark);
 
     if(pickup_active_)
     {
@@ -190,7 +194,7 @@ void CycleRow::ArmPickupIfNeeded(const ParameterRegistry& reg)
             return;
 
         const float target    = ParameterRegistry::Normalize(*def, *def->value_ptr);
-        const bool  end_catch = UsesPotEndCatch(def->display_type);
+        const bool  end_catch = UsesPotEndCatch(def->display_type, def->center_mark);
         const float near_eps  = end_catch ? kEndNearEps : kDefaultNear;
 
         if(std::fabs(physical_pot_norm_ - target) < near_eps)
@@ -216,7 +220,7 @@ void CycleRow::BeginPickup(const ParameterDef& def)
     last_pot_norm_      = physical_pot_norm_;
     last_pot_valid_     = true;
 
-    const bool  end_catch = UsesPotEndCatch(def.display_type);
+    const bool  end_catch = UsesPotEndCatch(def.display_type, def.center_mark);
     const float near_eps  = end_catch ? kEndNearEps : kDefaultNear;
 
     if(std::fabs(physical_pot_norm_ - pickup_target_norm_) < near_eps

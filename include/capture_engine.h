@@ -74,6 +74,11 @@ class CaptureEngine
     float HoldRemainingNorm(size_t trail) const;
     void  GetTrailLifeUi(TrailLifeUi out[kTrailCount]) const;
 
+    // Seamless loop read — used by Capture playback and Swarm grain reads.
+    static size_t LoopXfadeSamples(size_t length);
+    static size_t LoopPlayLength(size_t length);
+    static float  ReadLooped(size_t trail, size_t pos, size_t length);
+
   private:
     enum class TrailState : uint8_t
     {

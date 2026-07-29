@@ -28,6 +28,11 @@ inline float BipolarNorm(float v, float min_v, float max_v)
 }
 
 constexpr float kPi = 3.14159265358979323846f;
+// spawn_interval = grain_length × kSpawnDuty → ~1/kSpawnDuty overlapping
+// grains at steady state. Amp uses √duty (energy / uncorrelated sum), not
+// linear ×duty — linear made the cloud so thin that single Hann envelopes
+// poked through as episodic ticks even with continuous Trail audio.
+constexpr float kSpawnDuty = 0.15f;
 } // namespace
 
 void SwarmEngine::Init(float sample_rate)
@@ -95,18 +100,20 @@ float SwarmEngine::ReadInterp(size_t trail, float pos, size_t length) const
     if(length < 2)
         return 0.f;
 
+    const size_t play = CaptureEngine::LoopPlayLength(length);
+    const float  play_f = static_cast<float>(play);
     while(pos < 0.f)
-        pos += static_cast<float>(length);
-    while(pos >= static_cast<float>(length))
-        pos -= static_cast<float>(length);
+        pos += play_f;
+    while(pos >= play_f)
+        pos -= play_f;
 
-    const size_t i0   = static_cast<size_t>(pos);
-    size_t       i1   = i0 + 1;
-    if(i1 >= length)
+    const size_t i0 = static_cast<size_t>(pos);
+    size_t       i1 = i0 + 1;
+    if(i1 >= play)
         i1 = 0;
     const float frac = pos - static_cast<float>(i0);
-    const float a    = trail_buffer[trail][i0];
-    const float b    = trail_buffer[trail][i1];
+    const float a    = CaptureEngine::ReadLooped(trail, i0, length);
+    const float b    = CaptureEngine::ReadLooped(trail, i1, length);
     return a + (b - a) * frac;
 }
 
@@ -132,11 +139,13 @@ void SwarmEngine::SpawnGrain(size_t trail, size_t length, float gain)
     const float pitch   = PitchRatio();
     const float spread  = Clampf(params_.spread, 0.f, 1.f);
     const float jitter  = (NextRand() - 0.5f) * 0.04f * static_cast<float>(length);
+    const size_t play   = CaptureEngine::LoopPlayLength(length);
+    const float  play_f = static_cast<float>(play);
     float       start   = scan_pos_[trail] + jitter;
     while(start < 0.f)
-        start += static_cast<float>(length);
-    while(start >= static_cast<float>(length))
-        start -= static_cast<float>(length);
+        start += play_f;
+    while(start >= play_f)
+        start -= play_f;
 
     // Stereo: ±spread from center; slight per-grain random.
     const float pan = (NextRand() * 2.f - 1.f) * spread;
@@ -154,7 +163,9 @@ void SwarmEngine::SpawnGrain(size_t trail, size_t length, float gain)
     g.age_inc = 1.f / (dur_n > 1.f ? dur_n : 1.f);
     g.pan_l   = pl * norm;
     g.pan_r   = pr * norm;
-    g.amp     = gain * 1.35f;
+    // Full Trail gain per grain; Process() scales the sum by 1/√N_active so
+    // one grain ≈ Trail level and overlaps don't stack into crackle.
+    g.amp     = gain;
 }
 
 void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
@@ -174,8 +185,7 @@ void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
     const int   hold_period = 1 + static_cast<int>(rad * 12.f + 0.5f);
 
     const float dur_s = GrainDurationSec();
-    // Denser cloud so soft Trails stay audible (was 0.28 → sparse).
-    const float spawn_interval = (dur_s * sample_rate_) * 0.18f;
+    const float spawn_interval = (dur_s * sample_rate_) * kSpawnDuty;
 
     size_t rr = 0;
     for(size_t n = 0; n < size; ++n)
@@ -186,13 +196,15 @@ void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
             const size_t len = views[t].length;
             if(len < 2)
                 continue;
+            const size_t play = CaptureEngine::LoopPlayLength(len);
+            const float  play_f = static_cast<float>(play);
             if(scan_rate > 1e-6f)
             {
-                scan_pos_[t] += scan_rate * static_cast<float>(len) * sample_rate_inv_;
-                while(scan_pos_[t] >= static_cast<float>(len))
-                    scan_pos_[t] -= static_cast<float>(len);
+                scan_pos_[t] += scan_rate * play_f * sample_rate_inv_;
+                while(scan_pos_[t] >= play_f)
+                    scan_pos_[t] -= play_f;
             }
-            else if(scan_pos_[t] >= static_cast<float>(len))
+            else if(scan_pos_[t] >= play_f)
                 scan_pos_[t] = 0.f;
         }
 
@@ -215,6 +227,7 @@ void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
 
         float mix_l = 0.f;
         float mix_r = 0.f;
+        int   n_on  = 0;
         for(size_t i = 0; i < kMaxGrains; ++i)
         {
             Grain& g = grains_[i];
@@ -242,16 +255,26 @@ void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
             const float a   = g.amp * env;
             mix_l += sample * a * g.pan_l;
             mix_r += sample * a * g.pan_r;
+            ++n_on;
 
             g.pos += g.incr;
-            while(g.pos >= static_cast<float>(len))
-                g.pos -= static_cast<float>(len);
+            const size_t play = CaptureEngine::LoopPlayLength(len);
+            const float  play_f = static_cast<float>(play);
+            while(g.pos >= play_f)
+                g.pos -= play_f;
             while(g.pos < 0.f)
-                g.pos += static_cast<float>(len);
+                g.pos += play_f;
 
             g.age += g.age_inc;
             if(g.age >= 1.f)
                 g.active = false;
+        }
+
+        if(n_on > 1)
+        {
+            const float inv = 1.f / std::sqrt(static_cast<float>(n_on));
+            mix_l *= inv;
+            mix_r *= inv;
         }
 
         // Radiation BBD slew on the summed cloud.
@@ -282,8 +305,8 @@ void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
             mix_r = hold_r_;
         }
 
-        out_l[n] = Clampf(mix_l, -1.2f, 1.2f);
-        out_r[n] = Clampf(mix_r, -1.2f, 1.2f);
+        out_l[n] = std::tanh(mix_l);
+        out_r[n] = std::tanh(mix_r);
     }
 }
 

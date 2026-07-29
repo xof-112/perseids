@@ -89,6 +89,36 @@ size_t CaptureEngine::BufferLengthSamples() const
     return n;
 }
 
+// Loop-seam (~40 ms): recording writes past the loop end; FinishRecording
+// equal-power-blends that overflow into the head so x[length−1]→x[0] is
+// continuous *in the buffer*. Playback then hard-wraps the full length —
+// no shortened play length / runtime CF (those fought the baked seam and
+// left level-proportional crackle on both Spectra and Swarm).
+size_t CaptureEngine::LoopXfadeSamples(size_t length)
+{
+    size_t xf = static_cast<size_t>(0.040f * static_cast<float>(kSampleRate) + 0.5f);
+    if(xf > length / 4)
+        xf = length / 4;
+    if(length + xf > kMaxBufferSamples)
+        xf = kMaxBufferSamples - length;
+    return xf;
+}
+
+size_t CaptureEngine::LoopPlayLength(size_t length)
+{
+    // Full recorded loop — seam is baked at FinishRecording.
+    return length;
+}
+
+float CaptureEngine::ReadLooped(size_t trail, size_t pos, size_t length)
+{
+    if(length < 2 || trail >= kTrailCount)
+        return 0.f;
+    if(pos >= length)
+        pos %= length;
+    return trail_buffer[trail][pos];
+}
+
 int CaptureEngine::ActiveCount() const
 {
     return static_cast<int>(Clampf(params_.count, 1.f, 5.f) + 0.5f);
@@ -184,7 +214,27 @@ void CaptureEngine::FinishRecording(size_t index)
     }
     else
     {
-        v.length            = v.write_pos;
+        if(v.write_pos > v.length)
+        {
+            // Bake equal-power seam into the head: at k=0 the sample is the
+            // natural continuation of x[length−1] (overflow); over ~40 ms it
+            // fades to the original head. Hard wrap length−1→0 is then clean
+            // for every reader (trail_mix → Spectra, buffer → Swarm).
+            const size_t xf  = v.write_pos - v.length;
+            float*       buf = trail_buffer[index];
+            const float  inv = 1.f / static_cast<float>(xf);
+            for(size_t k = 0; k < xf; ++k)
+            {
+                const float t      = static_cast<float>(k) * inv;
+                const float w_head = std::sin(1.5707964f * t);
+                const float w_ovf  = std::cos(1.5707964f * t);
+                buf[k] = buf[k] * w_head + buf[v.length + k] * w_ovf;
+            }
+        }
+        else
+        {
+            v.length = v.write_pos; // defensive: partial take, no seam data
+        }
         v.read_pos          = 0;
         v.state             = TrailState::Playing;
         v.just_finished_rec = true;
@@ -385,7 +435,8 @@ void CaptureEngine::Process(const float* in_l,
             {
                 trail_buffer[active_record_index_][v.write_pos] = filtered;
                 ++v.write_pos;
-                if(v.write_pos >= v.length)
+                // Keep writing past the loop end for the seam crossfade.
+                if(v.write_pos >= v.length + LoopXfadeSamples(v.length))
                     FinishRecording(active_record_index_);
             }
         }
@@ -434,11 +485,12 @@ void CaptureEngine::Process(const float* in_l,
                 }
             }
 
-            const float s = trail_buffer[i][v.read_pos];
+            const size_t play = LoopPlayLength(v.length);
+            const float  s    = ReadLooped(i, v.read_pos, v.length);
             mix += s * mixer_[i].level * v.fade_gain;
 
             ++v.read_pos;
-            if(v.read_pos >= v.length)
+            if(v.read_pos >= play)
                 v.read_pos = 0;
 
             // Hold countdown (only while Playing, not during fade-out)
