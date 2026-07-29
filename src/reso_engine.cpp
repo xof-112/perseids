@@ -148,8 +148,9 @@ void ResonatorEngine::Process(float* io_l, float* io_r, size_t size)
         }
         sum *= inv_n;
 
-        // Soft limit the ringing bank before the wet mix.
-        sum = std::tanh(sum * 1.4f);
+        // Soft limit the ringing bank before the wet mix (cheap clip).
+        const float a = std::fabs(sum * 1.4f);
+        sum = (sum * 1.4f) * (27.f + a * a) / (27.f + 9.f * a * a);
 
         io_l[n] = dry_l * dry_g + sum * wet_g;
         io_r[n] = dry_r * dry_g + sum * wet_g;

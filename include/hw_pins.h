@@ -22,7 +22,7 @@ constexpr daisy::Pin kMuxAdcB = daisy::seed::A1;
 
 // Bench wiring, all 10 block pots (5 per mux chain, C0–C4):
 //   Mux A C0–C4  →  Trails, Time, Engines, Swarm, Spectra
-//   Mux B C0–C4  →  Pan Drift*, Resonator*, Reverb*, Crossfade*, Filter*
+//   Mux B C0–C4  →  Pan Drift*, Resonator, Reverb, Crossfade*, Filter
 // * = dummy rows until their engine phases land (see dummy_params.h).
 constexpr uint8_t kMuxChainA = 0;
 constexpr uint8_t kMuxChainB = 1;

@@ -275,7 +275,10 @@ bank, without external delay lines.
   required transform/basicmath sources).
 - **Sizes (CPU/Flash budget):** FFT **512**, hop **256**, Partials UI/engine **4…32** (default
   16). Architecture examples that mention 64 partials are aspirational — raise only when audio
-  CPU and flash headroom allow. Audio block size **128** @ 48 kHz.
+  CPU and flash headroom allow. Audio block size **256** @ 48 kHz (was 128; larger blocks
+  cut ISR overhead so the UI loop still runs under heavy DSP). ReverbSc runs at **half rate**
+  inside `ReverbEngine`. Filter bypasses when open; `SetFreq` is block-rate unless Feedback
+  drives cutoff FM (then every 4 samples).
 - **Resynthesis:** custom phasor bank + cheap FastSin (not 32× DaisySP `Oscillator`). Waveshape
   bipolar: center = sine, left → saw mix, right → wavefold. Peak pick + **frequency-continuity
   matching** across hops (nearest previous partial within ~2.5 bins / 8% relative). Absolute
@@ -288,6 +291,20 @@ window. Negative values (Blur) smooth the grain envelopes heavily for edgeless a
 Positive values (Radiation) reduce the sample rate (lo-fi) and smooth changes via a BBD-style
 slew limiter (tape warble).
 
+**Block 6 / Reverb (verified Phase 8 — implementation contract):**
+
+- **Role:** global pre-fader send/return around the dry+engines bus (Section 2 point 5).
+  DaisySP-LGPL `ReverbSc` (delay tank in SDRAM via `DSY_SDRAM_BSS` on the `ReverbSc` object).
+  Tank advances at **half sample rate** (CPU); Character Chorus still runs at full rate on
+  the held wet.
+- **Params:** Mix (unipolar, equal-power wet gain on the return), Decay → `SetFeedback`
+  (0.55…0.97), Damping → `SetLpFreq` (16 kHz…800 Hz, more = darker), Character (bipolar,
+  4% UI deadzone).
+- **Character:** Chorus (negative) = DaisySP `Chorus` on the wet; Friction (positive) =
+  `tanh` drive into the tank plus a soft external feedback around `ReverbSc` (no internal
+  tank hook). Exclusive, one knob.
+- **Pot map:** Mux B C2 = Reverb.
+
 **Block 6 detail (Character Macro, bipolar, 4% deadzone):** 0% = untreated reverb tail.
 Negative values (Chorus) apply slow modulation to the reverb tail for a wide, lushly
 shimmering reverb character — unlike Ensemble/Drift in Spectra, this also affects the Swarm
@@ -296,8 +313,21 @@ content and the dry signal, since it sits on the shared reverb send. Positive va
 feedback loop — at high values, a dense overdrive wall. Chorus and Friction are deliberately
 exclusive (one knob, two directions), not combinable at the same time.
 
+**Block 10 / Filter Mix (verified Phase 8 — implementation contract):**
+
+- **Role:** stereo DaisySP `Svf` lowpass insert on a selectable pre-fader stage.
+- **Params:** Cutoff (exp 80 Hz…~16 kHz), Resonance (`SetRes`), Feedback (audio-rate
+  feedback into cutoff + mild `SetDrive`), Destination (`CountNum` 1…5, labels
+  **Off / Inp / Sp / Sw / Rv** via `ParameterDef::enum_labels`).
+- **Destination:** **1 Off** (SVF skipped, CPU) → 2 Input → 3 Spectra → 4 Swarm → 5 Reverb
+  wet. **Boot default = Off.** Applied in place before the final mix; Reverb dest runs after
+  the tank.
+- **Mode:** LP is the Block 10 default (no Mode param on the CycleRow). BP/HP remain on the
+  `Svf` for a later Mode entry if needed.
+- **Pot map:** Mux B C4 = Filter.
+
 **Block 10 detail (Destination):** Selects which signal stage the filter acts on — cyclable
-through **Input → Spectra → Swarm → Reverb**.
+through **Off → Input → Spectra → Swarm → Reverb**.
 
 **Block 11 Settings submenu** (own cycle entry point via "Settings" in the Multi cycle list):
 1. CPU/SDRAM meter (On/Off, display on screen). **Bench interim:** CPU meter boots **On**
@@ -514,13 +544,13 @@ Multi encoder, jack detection lines — not yet assigned as of Phase 2). **D6 = 
 | A | C4 | Spectra |
 | B | C0 | Pan Drift *(dummy)* |
 | B | C1 | Resonator ✔ |
-| B | C2 | Reverb *(dummy)* |
+| B | C2 | Reverb ✔ |
 | B | C3 | Crossfade *(dummy)* |
-| B | C4 | Filter *(dummy)* |
+| B | C4 | Filter ✔ |
 
-*(dummy)* = remaining Blocks 6/8–10 have full CycleRows with registered dummy parameters
+*(dummy)* = remaining Blocks 8–9 have full CycleRows with registered dummy parameters
 (`dummy_params.h`) so every pot gives display feedback before its engine phase lands —
-Development Principle 5.1. Block 7 Resonator is live (`reso_params.h` / `ResonatorEngine`).
+Development Principle 5.1. Blocks 6/7/10 (Reverb / Resonator / Filter) are live.
 Settings CycleRow has **no pot** (Block 11 = Multi encoder, Phase 11) but now includes
 Scale + Intonation for the Resonator; CPU meter stays default-On for the bench. Mux polling covers
 C0–C4 per chain via `InitMux` with three select lines (S0–S2, libDaisy-driven); only
@@ -569,12 +599,14 @@ section):**
 
 - **Pot-end-catch:** mux pots rarely reach exactly 0% or 100% at physical end of travel. For
   parameter types where a clean extreme value matters (`HoldTime`, `CountNum`, `CountBar`,
-  `Seconds`, and crossfade-style `Unipolar` with `center_mark` — currently Blend, whose
-  extremes gate engine skip / FFT), shared helpers in `CycleRow` apply (not a Hold-only hack):
+  `Seconds`, **all** `Unipolar` — Mix/Decay/Damping/Cutoff/Size/Blend/… — and **all**
+  `Bipolar` — Pitch/Character/Atmosphere/…), shared helpers in `CycleRow` apply (not a
+  per-param hack). `Toggle` is excluded. (`center_mark` on Blend is display-only: 50% dots /
+  SP|SW hints — end-catch no longer requires it.)
   - **Value snap** when writing: pot ≥0.94 → 100%, ≤0.06 → 0% (`kEndCatchNorm`).
   - **Pickup meet-band** for a stored end value: pot ≥0.90 (top) / ≤0.10 (bottom)
     (`kEndCatchPot`) — slightly wider than the snap band because the ADC often tops out
-    before 0.94 (otherwise Count=5 / Hold INF / Blend=100% cannot be picked up).
+    before 0.94 (otherwise Count=5 / Hold INF / Mix=100% / Blend=100% cannot be picked up).
   - Discrete counts round to the nearest whole number after denormalizing.
 - **Dashboard→CycleView opening & focus policy (verified, Phase 5 UI stabilization):**
   opening requires **cumulative pot travel ≥ ~4%** (`kOpenThreshold = 0.040`) measured from a
@@ -936,7 +968,7 @@ determined yet.
 | 5 | Swarm engine (granular) ✔ | Size/Spread/Scan/Atmosphere audible; A/B vs Spectra |
 | 6 | Engine blend (Block 3) ✔ | Continuous crossfading Spectra↔Swarm |
 | 7 | Spectral Resonator ✔ | Mix/Decay/Pitch/Quantized active, intonation from Settings effective |
-| 8 | Reverb & Filter Mix | ReverbSc with Character Macro, SVF filter with feedback drive, destination routing |
+| 8 | Reverb & Filter Mix ✔ | ReverbSc + Character; SVF LP Filter Mix with Destination |
 | 9 | Pan Drift & Crossfade & Wandering Beams | Phase-offset pan LFOs, crossfade slew, display visualization |
 | 10 | Mod system | 4 slots, jack normalling, registry destination, divider/clock |
 | 11 | Multi & Settings & Calibration | Dry/Wet/Macros, Settings submenu complete, CV calibration |
@@ -1104,6 +1136,10 @@ to the resonator tuning.
 
 ### Phase 8 — Reverb & Filter Mix
 
+**✔ Completed (verified against implementation).** See Block 6 / Reverb and Block 10 / Filter
+Mix contracts above. ReverbSc lives in DaisySP-LGPL (include + compile shim); engine BSS in
+SDRAM.
+
 ```
 Prompt for Cursor:
 
@@ -1204,6 +1240,15 @@ Implement:
 - **~~Auto-Mod source Trail~~ Resolved:** youngest non-locked active Trail (fallback see 4.10)
 - **~~Crossfade wave vs. Lock/Solo~~ Resolved:** Solo overrides the wave, Lock doesn't protect against it (4.1, Block 9 detail)
 - **~~Both combination formula~~ Resolved:** arithmetic mean of Age and Pitch (4.10), deliberately subtle rather than heavy-handed
+- **TODO — Spectral Resonator presence:** currently deliberately subtle (`1/8` mode average +
+  soft-`tanh` + Swarm-only). Deferred: raise makeup / reduce averaging (and optionally
+  rethink routing) so Mix/Decay read as a clearer pitched body — without reintroducing
+  level-proportional crackle. Leave as-is until revisited.
+- **TODO — Play / Rec illuminated switch LEDs:** panel switches may have built-in LEDs
+  (Play = green solid / blink for playing vs paused; Rec = red while armed/recording).
+  Drive from Daisy GPIO if pin budget allows — likely candidates still free: **D30–D32**
+  (D6 is Imprint). Confirm LED polarity/current (series resistor, active-high/low) on the
+  carrier before assigning pins in `hw_pins.h`. Not required for V1 audio; UI polish.
 - **TODO — Swarm grain playback direction (forward / backward / random):** grains should
   support different playback directions — forward, backward, and random (per grain). Open:
   how it's exposed in the UI (a new entry in the Block 5 cycle list vs. folding it into an

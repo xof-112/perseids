@@ -198,18 +198,46 @@ void DisplayRenderer::DrawCountNum(const ColumnGeom&   col,
                                    bool                active)
 {
     char val[8];
-    snprintf(val, sizeof(val), "%d", static_cast<int>(*def.value_ptr + 0.5f));
+    FormatCountLabel(def, val, sizeof(val));
+
+    const int font_w = active ? 7 : 6;
+    const int text_w = static_cast<int>(strlen(val)) * font_w;
+    const int x      = col.cx - text_w / 2;
 
     if(active)
     {
-        display_.SetCursor(col.cx - 6, (kParamTop + kParamBottom) / 2 - 4);
+        display_.SetCursor(x, (kParamTop + kParamBottom) / 2 - 4);
         display_.WriteString(val, Font_7x10, true);
     }
     else
     {
-        display_.SetCursor(col.cx - 3, kSegRowY - 9);
+        display_.SetCursor(x, kSegRowY - 9);
         display_.WriteString(val, Font_6x8, true);
     }
+}
+
+void DisplayRenderer::FormatCountLabel(const ParameterDef& def,
+                                       char*               out,
+                                       size_t              out_len) const
+{
+    const int v   = static_cast<int>(*def.value_ptr + 0.5f);
+    const int min = static_cast<int>(def.min_val + 0.5f);
+    const int max = static_cast<int>(def.max_val + 0.5f);
+
+    if(def.enum_labels != nullptr && max >= min)
+    {
+        int idx = v - min;
+        if(idx < 0)
+            idx = 0;
+        if(idx > max - min)
+            idx = max - min;
+        if(def.enum_labels[idx] != nullptr)
+        {
+            snprintf(out, out_len, "%s", def.enum_labels[idx]);
+            return;
+        }
+    }
+    snprintf(out, out_len, "%d", v);
 }
 
 void DisplayRenderer::FormatValue(const ParameterDef& def,
@@ -241,7 +269,7 @@ void DisplayRenderer::FormatValue(const ParameterDef& def,
         break;
     case ParamDisplayType::CountBar:
     case ParamDisplayType::CountNum:
-        snprintf(out, out_len, "%d", static_cast<int>(*def.value_ptr + 0.5f));
+        FormatCountLabel(def, out, out_len);
         break;
     case ParamDisplayType::Seconds:
     {

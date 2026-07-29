@@ -38,6 +38,10 @@ struct ParameterDef
     // exactly 50% ("sp"/"sw" for Blend). Omitted in aggregate init → nullptr.
     const char*      seg_hint_low;
     const char*      seg_hint_high;
+    // Optional named labels for CountNum / CountBar (e.g. Filter Destination
+    // Inp/Sp/Sw/Rv). Indexed as round(value) − round(min). Length must cover
+    // the inclusive integer span [min, max]. Omitted → nullptr (numeric).
+    const char* const* enum_labels;
 };
 
 class ParameterRegistry

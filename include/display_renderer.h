@@ -98,6 +98,9 @@ class DisplayRenderer
                           const TrailLifeUi& life);
 
     void FormatValue(const ParameterDef& def, char* out, size_t out_len) const;
+    void FormatCountLabel(const ParameterDef& def,
+                          char*               out,
+                          size_t              out_len) const;
     void FormatPosition(size_t index, size_t count, char* out, size_t out_len) const;
 
     daisy::OledDisplay<daisy::SSD130x4WireSpi128x64Driver> display_;

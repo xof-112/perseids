@@ -11,11 +11,12 @@ at the travel ends must use the shared end-catch in `CycleRow` (see
 ## Rule
 
 When adding or changing a parameter that has a meaningful **min or max at the
-pot ends** (discrete counts, Hold INF, Buffer/Fade times, later Partials, etc.):
+pot ends** (discrete counts, Hold INF, Buffer/Fade times, Mix/Decay, Pitch ±,
+Partials, etc.):
 
 1. Use a `ParamDisplayType` already covered by `UsesPotEndCatch`, **or** add the
    new type there.
-2. Do **not** invent a one-off Hold-only hack — keep the shared helpers:
+2. Do **not** invent a one-off Hold-only / Mix-only hack — keep the shared helpers:
    - value snap: pot ≥ 0.94 / ≤ 0.06 → 100% / 0% (`SnapEndNorm` / `kEndCatchNorm`)
    - pickup meet-band for a *stored* end: pot ≥ 0.90 / ≤ 0.10 (`kEndCatchPot`)
 3. Discrete integer params (`CountNum` / `CountBar`): round to nearest int after
@@ -23,9 +24,12 @@ pot ends** (discrete counts, Hold INF, Buffer/Fade times, later Partials, etc.):
 
 ## Covered today
 
-`HoldTime`, `CountNum`, `CountBar`, `Seconds`, and `Unipolar` **with** `center_mark`
-(crossfade-style — currently Blend: extremes gate engine skip / FFT).
+`HoldTime`, `CountNum`, `CountBar`, `Seconds`, **all** `Unipolar` (Mix, Decay,
+Damping, Cutoff, Size, Blend, …), **all** `Bipolar` (Pitch, Character, Atmosphere, …).
 
-## Not covered (normal 2 % near-catch is enough)
+`Unipolar` + `center_mark` still draws the subtle 50% dots (Blend only) — that flag
+is display-only now; end-catch no longer depends on it.
 
-Plain `Unipolar` (no `center_mark`), `Bipolar`, `Toggle`.
+## Not covered
+
+`Toggle` (binary; normal pickup is enough).

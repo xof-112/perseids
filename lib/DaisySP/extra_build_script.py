@@ -11,5 +11,7 @@ env.Append(
     CPPPATH=[
         "$PROJECT_DIR/lib/DaisySP/Source",
         "$PROJECT_DIR/lib/DaisySP/Source/Utility",
+        "$PROJECT_DIR/lib/DaisySP/DaisySP-LGPL/Source",
+        "$PROJECT_DIR/lib/DaisySP/DaisySP-LGPL/Source/Effects",
     ],
 )

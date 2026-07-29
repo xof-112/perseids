@@ -556,12 +556,14 @@ section):**
 
 - **Pot-end-catch:** mux pots rarely reach exactly 0% or 100% at physical end of travel. For
   parameter types where a clean extreme value matters (`HoldTime`, `CountNum`, `CountBar`,
-  `Seconds`, and crossfade-style `Unipolar` with `center_mark` — currently Blend, whose
-  extremes gate engine skip / FFT), shared helpers in `CycleRow` apply (not a Hold-only hack):
+  `Seconds`, **all** `Unipolar` — Mix/Decay/Damping/Cutoff/Size/Blend/… — and **all**
+  `Bipolar` — Pitch/Character/Atmosphere/…), shared helpers in `CycleRow` apply (not a
+  per-param hack). `Toggle` is excluded. (`center_mark` on Blend is display-only: 50% dots /
+  SP|SW hints — end-catch no longer requires it.)
   - **Value snap** when writing: pot ≥0.94 → 100%, ≤0.06 → 0% (`kEndCatchNorm`).
   - **Pickup meet-band** for a stored end value: pot ≥0.90 (top) / ≤0.10 (bottom)
     (`kEndCatchPot`) — slightly wider than the snap band because the ADC often tops out
-    before 0.94 (otherwise Count=5 / Hold INF / Blend=100% cannot be picked up).
+    before 0.94 (otherwise Count=5 / Hold INF / Mix=100% / Blend=100% cannot be picked up).
   - Discrete counts round to the nearest whole number after denormalizing.
 - **Dashboard→CycleView opening & focus policy (verified, Phase 5 UI stabilization):**
   opening requires **cumulative pot travel ≥ ~4%** (`kOpenThreshold = 0.040`) measured from a

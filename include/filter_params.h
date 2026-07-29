@@ -1,0 +1,35 @@
+#pragma once
+
+#include <cstdint>
+
+namespace perseids
+{
+
+// Block 10 — Filter Mix (Phase 8). IDs avoid kAudioRouting (100) / Settings (110+).
+enum FilterParamId : uint16_t
+{
+    kFilterCutoff      = 120,
+    kFilterResonance   = 121,
+    kFilterFeedback    = 122,
+    kFilterDestination = 123,
+};
+
+// Destination CountNum 1..5 — Off first, then which pre-fader stage the SVF taps.
+enum FilterDestination : int
+{
+    kFilterDestOff     = 1,
+    kFilterDestInput   = 2,
+    kFilterDestSpectra = 3,
+    kFilterDestSwarm   = 4,
+    kFilterDestReverb  = 5,
+};
+
+struct FilterParamValues
+{
+    float cutoff      = 0.7f; // 0..1 → exponential Hz
+    float resonance   = 0.2f; // 0..1 → Svf SetRes
+    float feedback    = 0.f;  // 0..1 audio-rate cutoff drive
+    float destination = 1.f;  // 1..5 Off / Inp / Sp / Sw / Rv — boot Off
+};
+
+} // namespace perseids

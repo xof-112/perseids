@@ -5,19 +5,11 @@
 namespace perseids
 {
 
-// Bench scaffolding — dummy parameters for Blocks 6, 8–10 until their engines
-// land (Reverb/Filter Phase 8, Pan Drift/Crossfade Phase 9). Block 7 Resonator
-// moved to reso_params.h (Phase 7). Development Principle 5.1: UI mechanics
-// first, on dummy values. When an engine phase lands, move its IDs/values into
-// the real param header and delete them here.
+// Bench scaffolding — dummy parameters for Blocks 8–9 until Phase 9
+// (Pan Drift / Crossfade). Blocks 6+10 moved to reverb_params.h /
+// filter_params.h (Phase 8). Block 7 Resonator: reso_params.h.
 enum DummyBlockParamId : uint16_t
 {
-    // Block 6 — Reverb
-    kReverbMix       = 60,
-    kReverbDecay     = 61,
-    kReverbDamping   = 62,
-    kReverbCharacter = 63,
-
     // Block 8 — Pan Drift
     kPanPhase     = 80,
     kPanAmplitude = 81,
@@ -26,22 +18,10 @@ enum DummyBlockParamId : uint16_t
     // Block 9 — Crossfade
     kXfadeAmplitude = 90,
     kXfadeVelocity  = 91,
-
-    // Block 10 — Filter Mix (100 is taken by kAudioRouting, 110+ by Settings)
-    kFilterCutoff      = 120,
-    kFilterResonance   = 121,
-    kFilterFeedback    = 122,
-    kFilterDestination = 123,
 };
 
 struct DummyBlockParamValues
 {
-    // Block 6 — Reverb
-    float rev_mix       = 0.25f;
-    float rev_decay     = 0.5f;
-    float rev_damping   = 0.5f;
-    float rev_character = 0.f; // bipolar Chorus←0→Friction
-
     // Block 8 — Pan Drift
     float pan_phase     = 0.f;
     float pan_amplitude = 0.3f;
@@ -50,12 +30,6 @@ struct DummyBlockParamValues
     // Block 9 — Crossfade
     float xfade_amplitude = 0.f;
     float xfade_velocity  = 0.f; // bipolar
-
-    // Block 10 — Filter Mix
-    float flt_cutoff      = 0.7f;
-    float flt_resonance   = 0.2f;
-    float flt_feedback    = 0.f;
-    float flt_destination = 1.f; // 1..4 = Input/Spectra/Swarm/Reverb (enum UI later)
 };
 
 } // namespace perseids

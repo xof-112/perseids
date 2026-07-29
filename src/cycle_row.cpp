@@ -13,9 +13,9 @@ constexpr float kEndCatchPot  = 0.90f; // pot band to *meet* a stored end (mux t
 constexpr float kEndNearEps   = 0.06f;
 constexpr float kDefaultNear  = 0.02f;
 
-// Params whose min/max sit at pot ends and must remain catchable (Count, Hold INF,
-// Buffer/Fade times, crossfade-style Unipolar with center_mark e.g. Blend).
-bool UsesPotEndCatch(ParamDisplayType type, bool center_mark)
+// Params whose min/max sit at pot ends and must remain catchable. Mux pots
+// typically top out ~0.94–0.96 — without snap, Mix/Decay/Cutoff never hit 100%.
+bool UsesPotEndCatch(ParamDisplayType type, bool /*center_mark*/)
 {
     switch(type)
     {
@@ -23,11 +23,10 @@ bool UsesPotEndCatch(ParamDisplayType type, bool center_mark)
     case ParamDisplayType::CountNum:
     case ParamDisplayType::CountBar:
     case ParamDisplayType::Seconds:
+    case ParamDisplayType::Unipolar: // Mix, Decay, Size, Cutoff, Blend, …
+    case ParamDisplayType::Bipolar:  // Pitch, Character, Atmosphere, …
         return true;
-    case ParamDisplayType::Unipolar:
-        // Blend (and later crossfade-style params): extremes gate engine skip /
-        // FFT — mux pots that top out ~0.96 must still snap to 0%/100%.
-        return center_mark;
+    case ParamDisplayType::Toggle:
     default:
         return false;
     }

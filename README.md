@@ -13,12 +13,11 @@ Sound — independently designed, not affiliated.
 
 ---
 
-## Status — Phase 7 · Spectral Resonator
+## Status — Phase 8 · Reverb & Filter Mix
 
-**Spectral Resonator is in:** Block 7 runs an 8-bandpass bank on the Swarm output
-(Mix / Decay / Pitch / Quantized). Settings now expose Scale (Major/Minor/Pentatonic) and
-Intonation (Equal/Just) for Quantized mode. Engine Blend (Phase 6) remains: continuous
-Spectra↔Swarm crossfade. Remaining dummy menus: Reverb, Pan Drift, Crossfade, Filter.
+**Reverb + Filter Mix are in:** Block 6 runs DaisySP-LGPL `ReverbSc` (Mix / Decay / Damping /
+Character Chorus↔Friction). Block 10 is an SVF lowpass with Cutoff / Resonance / Feedback /
+Destination (Input→Spectra→Swarm→Reverb). Remaining dummy menus: Pan Drift, Crossfade.
 
 ![Perseids Phase 3 v001 bench setup](images/dev-phase6v001.jpg)
 
@@ -32,8 +31,10 @@ Spectra↔Swarm crossfade. Remaining dummy menus: Reverb, Pan Drift, Crossfade, 
 | Swarm engine (granular: Size, Spread, Scan, Atmosphere) | Working |
 | Engine blend (continuous Spectra↔Swarm, equal-power, pre-fader) | Working |
 | Spectral Resonator (on Swarm: Mix/Decay/Pitch/Quantized + Settings Scale/Intonation) | Working |
-| Blocks 6/8–10 (Reverb, Pan Drift, Crossfade, Filter) | Dummy menus — engines follow in Phases 8–9 |
-| Reverb & Filter Mix | **Next** — Phase 8 |
+| Reverb (ReverbSc + Character) | Working |
+| Filter Mix (SVF LP + Destination) | Working |
+| Blocks 8–9 (Pan Drift, Crossfade) | Dummy menus — Phase 9 |
+| Pan Drift & Crossfade | **Next** — Phase 9 |
 
 Tag: **`dev-phase6v001`** (bench photo) · Full roadmap: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 
@@ -54,7 +55,9 @@ git clone https://github.com/xof-112/perseids.git
 cd perseids
 git checkout dev-phase6v001   # this milestone
 git clone --recurse-submodules https://github.com/electro-smith/libDaisy.git lib/libDaisy
-git clone https://github.com/electro-smith/DaisySP.git lib/DaisySP
+git clone --recurse-submodules https://github.com/electro-smith/DaisySP.git lib/DaisySP
+# ReverbSc lives in DaisySP-LGPL (LGPL-2.1) — ensure the submodule is present:
+#   cd lib/DaisySP && git submodule update --init DaisySP-LGPL
 pio run
 pio run --target upload
 ```
@@ -63,4 +66,5 @@ pio run --target upload
 
 ## License
 
-**GPL-3.0** — see [`LICENSE`](./LICENSE). libDaisy / DaisySP are MIT.
+**GPL-3.0** — see [`LICENSE`](./LICENSE). libDaisy / DaisySP are MIT; **DaisySP-LGPL**
+(`ReverbSc`) is LGPL-2.1.
