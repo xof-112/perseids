@@ -112,8 +112,10 @@ every request).
 5a. **Multi Dry/Wet is the final output blender.** Clean input (listen-through) on one side;
    the **entire wet chain** on the other — Spectra/Swarm, Resonator, Reverb, Filter inserts,
    **and every future sound-shaper / spatializer** (Pan Drift, Crossfade focus wave, …). New
-   audio effects must insert **before** Multi Dry/Wet, never on the clean dry tap. Local Mix
-   pots stay inside their modules; Multi only balances input vs. the finished wet bus.
+   audio effects must insert **before** Multi Dry/Wet, never on the clean dry tap. **No effect
+   may feed listen-through into the wet bus** (Reverb send, Filter Dest, …) — Multi@100% wet
+   must be cloud-only. Local Mix pots stay inside their modules; Multi only balances input vs.
+   the finished wet bus.
 6. **Non-blocking ADC mux polling in the main loop**, never in the audio callback. Smooth
    incoming values with an exponential moving average (EMA) to suppress pot jitter.
    **Note:** The Daisy Seed only has 12 native ADC pins (confirmed via Electrosmith
@@ -298,7 +300,9 @@ slew limiter (tape warble).
 
 **Block 6 / Reverb (verified Phase 8 — implementation contract):**
 
-- **Role:** global pre-fader send/return around the dry+engines bus (Section 2 point 5).
+- **Role:** global pre-fader send/return on the **wet-chain engine bus** (Spectra/Swarm +
+  Resonator / Filter Sp|Sw), **before Multi Dry/Wet**. Clean listen-through is **not** sent
+  into the tank — Multi Dry/Wet is the only place dry input meets the wet bus (Section 2 / 5a).
   DaisySP-LGPL `ReverbSc` (delay tank in SDRAM via `DSY_SDRAM_BSS` on the `ReverbSc` object).
   Tank advances at **half sample rate** (CPU); Character Chorus still runs at full rate on
   the held wet.
@@ -312,28 +316,28 @@ slew limiter (tape warble).
 
 **Block 6 detail (Character Macro, bipolar, 4% deadzone):** 0% = untreated reverb tail.
 Negative values (Chorus) apply slow modulation to the reverb tail for a wide, lushly
-shimmering reverb character — unlike Ensemble/Drift in Spectra, this also affects the Swarm
-content and the dry signal, since it sits on the shared reverb send. Positive values
-(Friction) apply non-linear saturation (tanh soft clipping) directly into the reverb tank's
-feedback loop — at high values, a dense overdrive wall. Chorus and Friction are deliberately
-exclusive (one knob, two directions), not combinable at the same time.
+shimmering reverb character — shared wet return, so it colors Spectra and Swarm content in
+the tank (not the Multi dry tap). Positive values (Friction) apply non-linear saturation
+(tanh soft clipping) directly into the reverb tank's feedback loop — at high values, a dense
+overdrive wall. Chorus and Friction are deliberately exclusive (one knob, two directions),
+not combinable at the same time.
 
 **Block 10 / Filter Mix (verified Phase 8 — implementation contract):**
 
-- **Role:** stereo DaisySP `Svf` lowpass insert on a selectable stage **inside the wet chain**
-  (before Multi Dry/Wet). Dest=Input filters listen-through into the wet bus (Multi dry stays
-  clean); Dest Sp/Sw/Rv insert on those buffers in place.
+- **Role:** stereo DaisySP `Svf` lowpass insert on a selectable **wet-chain** stage (before
+  Multi Dry/Wet). Never processes or injects listen-through into the wet bus.
 - **Params:** Cutoff (exp 80 Hz…~16 kHz), Resonance (`SetRes`), Feedback (audio-rate
   feedback into cutoff + mild `SetDrive`), Destination (`CountNum` 1…5, labels
   **Off / Inp / Sp / Sw / Rv** via `ParameterDef::enum_labels`).
-- **Destination:** **1 Off** (SVF skipped, CPU) → 2 Input → 3 Spectra → 4 Swarm → 5 Reverb
-  wet. **Boot default = Off.** Reverb dest runs after the tank; all dests finish before Multi.
+- **Destination:** **1 Off** (SVF skipped, CPU) → **2 Inp** = engine-sum bus (Spectra+Swarm
+  after Blend, pre-reverb) → 3 Spectra → 4 Swarm → 5 Reverb wet. **Boot default = Off.**
+  Reverb dest runs after the tank; all dests finish before Multi.
 - **Mode:** LP is the Block 10 default (no Mode param on the CycleRow). BP/HP remain on the
   `Svf` for a later Mode entry if needed.
 - **Pot map:** Mux B C4 = Filter.
 
-**Block 10 detail (Destination):** Selects which signal stage the filter acts on — cyclable
-through **Off → Input → Spectra → Swarm → Reverb**.
+**Block 10 detail (Destination):** Selects which wet-chain stage the filter acts on — cyclable
+through **Off → Inp (engine bus) → Spectra → Swarm → Reverb**.
 
 **Block 11 Settings submenu** (own cycle entry point via "Settings" in the Multi cycle list):
 1. CPU/SDRAM meter (On/Off, display on screen). **Bench interim:** CPU meter boots **On**
@@ -347,6 +351,11 @@ through **Off → Input → Spectra → Swarm → Reverb**.
 4. Intonation (Equal Temperament ↔ Just Intonation, for Block 7 Quantized)
 5. Auto-Mod/Normalling (see 4.10)
 6. **Audio Routing** (Stereo ↔ Sidechain) — see detail description below
+7. **FX → Input (TODO — Phase 11):** how much listen-through is also fed into the wet FX
+   chain (Reverb send / shared post-engine bus). Default **0** = current behavior (effects on
+   processed cloud only; Multi@100% = no input bleed). Amount is an **11-step** control
+   **0…1** (0.0 / 0.1 / … / 1.0, or discrete CountNum 0–10 displayed as percent). Accessed via Multi
+   → Settings. See Section 8.
 
 **Block 11 detail (Audio Routing):**
 
@@ -375,11 +384,12 @@ so Sidechain mode (Phase 11) is a mode switch later, not a rewire.
 **Multi Dry/Wet (Block 11 encoder — live):** Global equal-power blender between **clean
 input** (capture listen-through, never processed) and the **fully processed wet bus** —
 everything that shapes the sound after capture. Today that includes Spectra/Swarm (with
-Spectral Resonator on Swarm), Filter inserts (Dest Sp/Sw/Rv; Dest Input into the wet bus),
-and Reverb return. **Mandatory for later phases:** Pan Drift (Block 8), Crossfade focus wave
-(Block 9), and any further FX must also live **inside this wet bus, before Multi** (Section 2
-point 5a). Local Mix pots (Reverb Mix, Resonator Mix, …) still shape their modules *inside*
-wet — Multi only balances input vs. that whole chain. Encoder on D13/D30; push on Mux B C5.
+Spectral Resonator on Swarm), Filter inserts (Dest Inp = engine bus, Sp/Sw/Rv), and Reverb
+return (engines-only send). **Mandatory for later phases:** Pan Drift (Block 8), Crossfade
+focus wave (Block 9), and any further FX must also live **inside this wet bus, before Multi**
+(Section 2 point 5a) — never feeding listen-through into wet. Local Mix pots (Reverb Mix,
+Resonator Mix, …) still shape their modules *inside* wet — Multi only balances input vs. that
+whole chain. Encoder on D13/D30; push on Mux B C5.
 **Multi menu (interim):** open with Multi turn (default Dry/Wet). Step entries with
 **Cycle short** (reliable) or Multi push short (Mux B C5, polarity auto-calibrated), or
 **Cycle held + Multi turn**. Edit with Multi turn alone. Long Multi push → Home. Further
@@ -770,6 +780,11 @@ already existed on Cycle.
   *both* Spectra and Swarm at ≥~50% Trail Level). All readers share this material
   (trail_mix → Spectra, trail_buffer → Swarm). Spectra `MagToAmp` stays coherent-only;
   Swarm grain amp stays overlap-tamed; raw `trail_mix` is analysis-only (never mixed out).
+- **Soft replace before overwrite (anti-click):** when Cont.Rec / round-robin must steal a
+  still-playing Trail, the engine fades that voice out (~12 ms) before `Recording` begins.
+  Hard-muting an audible Trail at the moment the previous take finished was the click heard
+  only while Play was on (inaudible in Pause because `play_gain`=0). Swarm grains follow the
+  live Trail gain so they mute with the same fade.
 - **Cont. Rec** (Continuous Recording): keeps re-triggering new recordings for as long as the
   input signal stays above the threshold, instead of waiting for it to drop below
 - **On/Off**: global bypass/enable for the capture system
@@ -1249,7 +1264,9 @@ Implement:
   Audio Routing toggle (Stereo/Sidechain, see the 4.1 detail description): in
   Sidechain mode, the buffer signal source prepared in Phase 3 gets switched
   exclusively to In R, In L is mixed directly (dry, bypassing the Trail
-  buffers) with the Spectra/Swarm/Reverb output onto Out L/R
+  buffers) with the Spectra/Swarm/Reverb output onto Out L/R,
+  **FX → Input** amount (11-step 0…1, default 0 — how much listen-through is
+  also sent into the wet FX chain; see 4.1 Settings item 7 / Section 8)
 - Calibration routine (min/max learning mode) for the threshold and all CV
   inputs
 - Review: check all display text for readability at 128×64px
@@ -1273,6 +1290,13 @@ Implement:
 - **~~Auto-Mod source Trail~~ Resolved:** youngest non-locked active Trail (fallback see 4.10)
 - **~~Crossfade wave vs. Lock/Solo~~ Resolved:** Solo overrides the wave, Lock doesn't protect against it (4.1, Block 9 detail)
 - **~~Both combination formula~~ Resolved:** arithmetic mean of Age and Pitch (4.10), deliberately subtle rather than heavy-handed
+- **TODO — FX → Input amount (Settings via Multi):** optional send of clean listen-through
+  into the wet FX chain (alongside engines), so effects can also color the input. Lives in
+  the **Settings submenu** reached from the Multi encoder cycle. **11 steps, 0…1** (0.0 /
+  0.1 / … / 1.0). **Boot default = 0** (effects on processed signal only — Multi@100% wet
+  stays cloud-only). At >0, scale listen-through into Reverb send / shared FX bus by that
+  amount without breaking Multi Dry/Wet as the final blender. Wire in Phase 11 with the full
+  Settings submenu.
 - **TODO — Spectral Resonator presence:** currently deliberately subtle (`1/8` mode average +
   soft-`tanh` + Swarm-only). Deferred: raise makeup / reduce averaging (and optionally
   rethink routing) so Mix/Decay read as a clearer pitched body — without reintroducing

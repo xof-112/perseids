@@ -646,24 +646,19 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         g_reso.Process(g_swarm_out_l, g_swarm_out_r, size);
     }
 
-    // Phase 8 — Filter Mix Destination (inserts inside the wet chain, before
-    // Multi Dry/Wet). Off skips the SVF. Reverb dest runs after the tank.
-    // Dest=Input filters the listen-through buffer that feeds the wet bus /
-    // reverb send — not the Multi dry tap (that stays g_dry_*).
+    // Phase 8 — Filter Mix: inserts only on wet-chain stages (never on the
+    // Multi dry tap / listen-through). Dest "Inp" = engine-sum bus (pre-reverb).
     const int  flt_dest = g_filter.Destination();
     const bool flt_on   = flt_dest != perseids::kFilterDestOff;
-    if(flt_on && flt_dest == perseids::kFilterDestInput)
-        g_filter.Process(out[0], out[1], size);
     if(flt_on && flt_dest == perseids::kFilterDestSpectra && run_spectra)
         g_filter.ProcessMono(g_spectra_out, size);
     if(flt_on && flt_dest == perseids::kFilterDestSwarm && run_swarm)
         g_filter.Process(g_swarm_out_l, g_swarm_out_r, size);
 
     // Multi Dry/Wet — final equal-power blender (ARCHITECTURE 2 / 5a):
-    //   dry = clean listen-through (g_dry_*)
-    //   wet = full processed bus: engines (+ Resonator) + Filter inserts +
-    //         Reverb return, and later Pan Drift / Crossfade / any new FX
-    //         (always insert ABOVE this mix — never on g_dry_*).
+    //   dry = clean listen-through (g_dry_*) — ONLY path for raw input to Out
+    //   wet = engines (+ Resonator) + Filter + Reverb (+ future FX)
+    // No effect may inject listen-through into wet (Multi@100% = cloud only).
     float dry_wet = g_dry_wet.load(std::memory_order_relaxed);
     if(dry_wet < 0.f)
         dry_wet = 0.f;
@@ -682,7 +677,6 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     const float rev_wet_g
         = rev_mix > 0.001f ? std::sin(rev_mix * 1.5707964f) : 0.f;
     const bool run_reverb = rev_wet_g > 0.001f;
-    const bool flt_input  = flt_on && flt_dest == perseids::kFilterDestInput;
 
     for(size_t i = 0; i < size; ++i)
     {
@@ -691,17 +685,19 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         const float swr = run_swarm ? g_swarm_out_r[i] * wet_swarm : 0.f;
         g_eng_l[i] = sp + swl;
         g_eng_r[i] = sp + swr;
-        if(run_reverb)
-        {
-            // Pre-fader send (before Multi Dry/Wet): listen-through (possibly
-            // Input-filtered) + engines.
-            g_reverb_send_l[i] = out[0][i] * 0.40f + g_eng_l[i];
-            g_reverb_send_r[i] = out[1][i] * 0.40f + g_eng_r[i];
-        }
     }
+
+    // Dest Input → filter the engine sum (wet FX bus), not listen-through.
+    if(flt_on && flt_dest == perseids::kFilterDestInput)
+        g_filter.Process(g_eng_l, g_eng_r, size);
 
     if(run_reverb)
     {
+        for(size_t i = 0; i < size; ++i)
+        {
+            g_reverb_send_l[i] = g_eng_l[i];
+            g_reverb_send_r[i] = g_eng_r[i];
+        }
         g_reverb.Process(g_reverb_send_l,
                          g_reverb_send_r,
                          g_reverb_wet_l,
@@ -715,18 +711,10 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     {
         const float rl = run_reverb ? g_reverb_wet_l[i] * rev_wet_g : 0.f;
         const float rr = run_reverb ? g_reverb_wet_r[i] * rev_wet_g : 0.f;
-        // Wet bus = full processed chain (engines + filter + reverb today;
-        // Pan Drift / Crossfade / future FX join here before Multi).
-        // Dest=Input contributes filtered listen-through into wet only.
-        float wet_l = g_eng_l[i] + rl;
-        float wet_r = g_eng_r[i] + rr;
-        if(flt_input)
-        {
-            wet_l += out[0][i];
-            wet_r += out[1][i];
-        }
-        out[0][i] = SoftLimit(g_dry_l[i] * dry_g + wet_l * wet_g);
-        out[1][i] = SoftLimit(g_dry_r[i] * dry_g + wet_r * wet_g);
+        out[0][i]
+            = SoftLimit(g_dry_l[i] * dry_g + (g_eng_l[i] + rl) * wet_g);
+        out[1][i]
+            = SoftLimit(g_dry_r[i] * dry_g + (g_eng_r[i] + rr) * wet_g);
     }
 
     g_cpu_meter.OnBlockEnd();

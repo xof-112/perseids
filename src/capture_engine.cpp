@@ -31,6 +31,7 @@ void CaptureEngine::Init(float sample_rate)
     sample_rate_inv_ = 1.f / sample_rate_;
     next_generation_ = 1;
     active_record_index_ = kTrailCount;
+    arming_record_index_ = kTrailCount;
     gate_open_       = false;
     was_above_       = false;
     envelope_follower_ = 0.f;
@@ -136,7 +137,8 @@ size_t CaptureEngine::PickRoundRobinTarget() const
         const size_t idx = static_cast<size_t>(i);
         if(mixer_[idx].locked)
             continue;
-        if(voices_[idx].state == TrailState::Recording)
+        if(voices_[idx].state == TrailState::Recording
+           || voices_[idx].state == TrailState::ArmingRecord)
             continue;
 
         // Prefer Empty, then oldest generation among Playing/FadingOut/Empty.
@@ -152,17 +154,26 @@ size_t CaptureEngine::PickRoundRobinTarget() const
     return best;
 }
 
-void CaptureEngine::StartRecording(size_t index)
+bool CaptureEngine::RecordSlotBusy() const
 {
-    // Only one SDRAM write head — demote any stray Recording voices.
+    return active_record_index_ < kTrailCount
+           || arming_record_index_ < kTrailCount;
+}
+
+void CaptureEngine::BeginRecordWrites(size_t index)
+{
+    // Only one SDRAM write head — demote any stray Recording / Arming voices.
     for(size_t i = 0; i < kTrailCount; ++i)
     {
         if(i == index)
             continue;
-        if(voices_[i].state == TrailState::Recording)
+        if(voices_[i].state == TrailState::Recording
+           || voices_[i].state == TrailState::ArmingRecord)
         {
             voices_[i].state  = TrailState::Empty;
             voices_[i].length = 0;
+            voices_[i].fade_gain = 0.f;
+            voices_[i].fade_inc  = 0.f;
         }
     }
 
@@ -179,9 +190,50 @@ void CaptureEngine::StartRecording(size_t index)
     v.infinite_hold      = false;
     v.just_finished_rec  = false;
     active_record_index_ = index;
+    arming_record_index_ = kTrailCount;
     rec_slot_display_.store(static_cast<uint8_t>(index + 1),
                             std::memory_order_relaxed);
     rec_active_.store(true, std::memory_order_relaxed);
+}
+
+void CaptureEngine::StartRecording(size_t index)
+{
+    TrailVoice& v = voices_[index];
+
+    // Replacing an audible playing trail: fade out first, then overwrite.
+    // (Cont.Rec often arms the next take the sample after FinishRecording —
+    // a hard mute here is the "end of recording" click while Play is on.)
+    const bool audible
+        = (v.state == TrailState::Playing || v.state == TrailState::FadingOut
+           || v.state == TrailState::ArmingRecord)
+          && v.fade_gain > 0.001f && v.length >= 2;
+
+    if(audible)
+    {
+        // Cancel any other arming slot.
+        if(arming_record_index_ < kTrailCount && arming_record_index_ != index)
+        {
+            TrailVoice& o = voices_[arming_record_index_];
+            if(o.state == TrailState::ArmingRecord)
+            {
+                o.state     = TrailState::Empty;
+                o.length    = 0;
+                o.fade_gain = 0.f;
+                o.fade_inc  = 0.f;
+            }
+        }
+
+        const float fade_n = kReplaceFadeSec * sample_rate_;
+        v.state    = TrailState::ArmingRecord;
+        v.fade_inc = fade_n > 1.f ? (-v.fade_gain / fade_n) : -1.f;
+        arming_record_index_ = index;
+        rec_slot_display_.store(static_cast<uint8_t>(index + 1),
+                                std::memory_order_relaxed);
+        rec_active_.store(true, std::memory_order_relaxed);
+        return;
+    }
+
+    BeginRecordWrites(index);
 }
 
 void CaptureEngine::BeginHold(size_t index)
@@ -252,6 +304,8 @@ void CaptureEngine::FinishRecording(size_t index)
         active_record_index_ = kTrailCount;
         rec_active_.store(false, std::memory_order_relaxed);
     }
+    if(arming_record_index_ == index)
+        arming_record_index_ = kTrailCount;
 }
 
 void CaptureEngine::StartFadeOut(size_t index)
@@ -355,6 +409,7 @@ void CaptureEngine::Process(const float* in_l,
             life_hold_sec_[i].store(0, std::memory_order_relaxed);
         }
         active_record_index_ = kTrailCount;
+        arming_record_index_ = kTrailCount;
         rec_active_.store(false, std::memory_order_relaxed);
         gate_open_ = false;
         was_above_ = false;
@@ -398,8 +453,8 @@ void CaptureEngine::Process(const float* in_l,
 
         if(capture_on)
         {
-            // Never arm a new take while one is already writing.
-            if(active_record_index_ >= kTrailCount)
+            // Never arm a new take while one is writing or soft-replacing.
+            if(!RecordSlotBusy())
             {
                 if(manual && n == 0)
                     trigger = true;
@@ -465,7 +520,7 @@ void CaptureEngine::Process(const float* in_l,
             if(any_solo && !mixer_[i].solo)
                 continue;
 
-            // Per-voice fade gain
+            // Per-voice fade gain (incl. ArmingRecord soft-replace)
             if(v.fade_inc != 0.f)
             {
                 v.fade_gain += v.fade_inc;
@@ -478,8 +533,13 @@ void CaptureEngine::Process(const float* in_l,
                 {
                     v.fade_gain = 0.f;
                     v.fade_inc  = 0.f;
-                    v.state     = TrailState::Empty;
-                    v.length    = 0;
+                    if(v.state == TrailState::ArmingRecord)
+                    {
+                        BeginRecordWrites(i);
+                        continue;
+                    }
+                    v.state  = TrailState::Empty;
+                    v.length = 0;
                     hold_remaining_norm_[i].store(0.f, std::memory_order_relaxed);
                     continue;
                 }
@@ -493,7 +553,7 @@ void CaptureEngine::Process(const float* in_l,
             if(v.read_pos >= play)
                 v.read_pos = 0;
 
-            // Hold countdown (only while Playing, not during fade-out)
+            // Hold countdown (only while Playing, not during fade-out / arming)
             if(v.state == TrailState::Playing && !v.infinite_hold
                && !mixer_[i].locked)
             {
@@ -565,15 +625,22 @@ void CaptureEngine::Process(const float* in_l,
         float             fill  = 0.f;
         int16_t           hsec  = 0;
 
-        if(v.state == TrailState::Recording)
+        if(v.state == TrailState::Recording
+           || v.state == TrailState::ArmingRecord)
         {
+            // Arming still shows as Recording (striped) — write head imminent.
             phase = TrailLifePhase::Recording;
-            fill  = v.length > 0
-                        ? Clampf(static_cast<float>(v.write_pos)
-                                     / static_cast<float>(v.length),
-                                 0.f,
-                                 1.f)
-                        : 0.f;
+            if(v.state == TrailState::Recording)
+            {
+                fill = v.length > 0
+                           ? Clampf(static_cast<float>(v.write_pos)
+                                        / static_cast<float>(v.length),
+                                    0.f,
+                                    1.f)
+                           : 0.f;
+            }
+            else
+                fill = Clampf(v.fade_gain, 0.f, 1.f);
         }
         else if(v.state == TrailState::FadingOut)
         {
@@ -617,6 +684,13 @@ void CaptureEngine::Process(const float* in_l,
     {
         rec_slot_display_.store(
             static_cast<uint8_t>(active_record_index_ + 1),
+            std::memory_order_relaxed);
+    }
+    else if(arming_record_index_ < kTrailCount
+            && static_cast<int>(arming_record_index_) < count)
+    {
+        rec_slot_display_.store(
+            static_cast<uint8_t>(arming_record_index_ + 1),
             std::memory_order_relaxed);
     }
     else

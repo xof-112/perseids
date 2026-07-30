@@ -14,11 +14,12 @@ enum FilterParamId : uint16_t
     kFilterDestination = 123,
 };
 
-// Destination CountNum 1..5 — Off first, then which pre-fader stage the SVF taps.
+// Destination CountNum 1..5 — Off first, then which wet-chain stage the SVF taps.
+// "Input" = engine-sum bus (pre-reverb), NOT listen-through / Multi dry.
 enum FilterDestination : int
 {
     kFilterDestOff     = 1,
-    kFilterDestInput   = 2,
+    kFilterDestInput   = 2, // engine bus (Spectra+Swarm sum)
     kFilterDestSpectra = 3,
     kFilterDestSwarm   = 4,
     kFilterDestReverb  = 5,

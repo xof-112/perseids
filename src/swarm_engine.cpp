@@ -163,9 +163,9 @@ void SwarmEngine::SpawnGrain(size_t trail, size_t length, float gain)
     g.age_inc = 1.f / (dur_n > 1.f ? dur_n : 1.f);
     g.pan_l   = pl * norm;
     g.pan_r   = pr * norm;
-    // Full Trail gain per grain; Process() scales the sum by 1/√N_active so
-    // one grain ≈ Trail level and overlaps don't stack into crackle.
-    g.amp     = gain;
+    // Relative grain weight; live Trail gain (level×fade×play) applied in Process
+    // so soft-replace fades mute grains without a hard cut.
+    g.amp     = 1.f;
 }
 
 void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
@@ -235,7 +235,8 @@ void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
                 continue;
 
             const size_t len = views[g.trail].length;
-            if(len < 2)
+            const float  tg  = views[g.trail].gain;
+            if(len < 2 || tg < 1e-4f)
             {
                 g.active = false;
                 continue;
@@ -252,7 +253,7 @@ void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
             }
 
             const float env = WindowEnv(g.age, blur);
-            const float a   = g.amp * env;
+            const float a   = g.amp * env * tg;
             mix_l += sample * a * g.pan_l;
             mix_r += sample * a * g.pan_r;
             ++n_on;

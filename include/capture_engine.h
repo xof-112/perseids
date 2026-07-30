@@ -86,6 +86,7 @@ class CaptureEngine
         Recording,
         Playing,
         FadingOut,
+        ArmingRecord, // fading out a playing trail before overwriting (anti-click)
     };
 
     struct TrailVoice
@@ -107,11 +108,17 @@ class CaptureEngine
     int    ActiveCount() const;
     size_t PickRoundRobinTarget() const;
     void   StartRecording(size_t index);
+    void   BeginRecordWrites(size_t index);
     void   FinishRecording(size_t index);
     void   BeginHold(size_t index);
     void   StartFadeOut(size_t index);
     void   ApplyGlobalPlayFade(bool want_play, size_t size);
     float  FilterInput(float x);
+    bool   RecordSlotBusy() const;
+
+    // ~12 ms fade before replacing a playing trail — kills the end-of-take click
+    // when Cont.Rec / round-robin mutes an audible voice (inaudible when paused).
+    static constexpr float kReplaceFadeSec = 0.012f;
 
     float sample_rate_;
     float sample_rate_inv_;
@@ -123,6 +130,7 @@ class CaptureEngine
     TrailVoice voices_[kTrailCount];
     size_t     next_generation_;
     size_t     active_record_index_; // kTrailCount = none
+    size_t     arming_record_index_; // kTrailCount = none
     bool       gate_open_;           // above threshold
     bool       was_above_;
     float      envelope_follower_;
