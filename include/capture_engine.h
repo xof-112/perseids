@@ -2,6 +2,7 @@
 
 #include "capture_params.h"
 #include "record_source.h"
+#include "spatial_params.h"
 
 #include "dev/sdram.h"
 #include "Filters/onepole.h"
@@ -14,6 +15,8 @@ namespace perseids
 {
 
 // Phase 3 capture engine — SDRAM ring buffers, round-robin, Cont.Rec, Hold/Fade.
+// Phase 9 — Pan Drift LFOs + Crossfade focus wave on the Trail VCA stage
+// (after pre-fader taps; SwarmViews / trail_mix see the wave; Multi dry does not).
 // Audio callback only; UI communicates via atomics / lock-free flags (Section 2.1).
 class CaptureEngine
 {
@@ -35,13 +38,22 @@ class CaptureEngine
     struct SwarmTrailView
     {
         uint32_t length; // 0 = not playable
-        float    gain;   // mixer level × fade_gain (pre global play_gain)
+        float    gain;   // level × fade × xfade × play_gain
+        float    pan_l;  // constant-power Pan Drift
+        float    pan_r;
+    };
+
+    // Spectra (mono) → stereo weight from post-VCA Trail pans (same callback).
+    struct CloudPan
+    {
+        float l = 0.70710678f;
+        float r = 0.70710678f;
     };
 
     void Init(float sample_rate);
 
     // Audio thread — non-blocking.
-    // Writes dry monitor to out_l/out_r and the pre-fader trail mix (× play_gain)
+    // Writes dry monitor to out_l/out_r and the Trail VCA sum (× play_gain)
     // into trail_mix (may be null if unused). Spectra takes trail_mix; Swarm reads
     // trail_buffer via SwarmViews() filled in the same Process call.
     void Process(const float* in_l,
@@ -53,13 +65,15 @@ class CaptureEngine
 
     // Same-callback reader for Swarm (after Capture::Process).
     static const SwarmTrailView* SwarmViews() { return swarm_views_; }
+    static CloudPan              LastCloudPan() { return cloud_pan_; }
 
     float PlayGain() const { return play_gain_; }
 
     // UI thread — copy registry params + mixer state before/after audio use.
     void SyncFromUi(const CaptureParamValues& params,
                     const TrailMixerState     mixer[kTrailCount],
-                    bool                      playing);
+                    bool                      playing,
+                    const SpatialParamValues& spatial);
 
     void RequestManualTrigger();
     void ClearAll(); // Delete-all confirmed
@@ -74,6 +88,16 @@ class CaptureEngine
     float HoldRemainingNorm(size_t trail) const;
     void  GetTrailLifeUi(TrailLifeUi out[kTrailCount]) const;
 
+    // Dashboard Crossfade focus marker (UI thread).
+    float CrossfadeFocus() const
+    {
+        return xfade_focus_ui_.load(std::memory_order_relaxed);
+    }
+    float CrossfadeAmplitudeUi() const
+    {
+        return xfade_amp_ui_.load(std::memory_order_relaxed);
+    }
+
     // Seamless loop read — used by Capture playback and Swarm grain reads.
     static size_t LoopXfadeSamples(size_t length);
     static size_t LoopPlayLength(size_t length);
@@ -86,7 +110,7 @@ class CaptureEngine
         Recording,
         Playing,
         FadingOut,
-        ArmingRecord, // fading out a playing trail before overwriting (anti-click)
+        ArmingRecord, // BBD-slew fade before overwriting (anti-click)
     };
 
     struct TrailVoice
@@ -99,7 +123,7 @@ class CaptureEngine
         float      hold_samples_left = 0.f;
         float      hold_samples_total = 0.f;
         float      fade_gain      = 0.f;
-        float      fade_inc       = 0.f;
+        float      fade_inc       = 0.f; // linear fades (Fade In/Out); Arming uses slew
         bool       infinite_hold  = false;
         bool       just_finished_rec = false;
     };
@@ -115,15 +139,20 @@ class CaptureEngine
     void   ApplyGlobalPlayFade(bool want_play, size_t size);
     float  FilterInput(float x);
     bool   RecordSlotBusy() const;
+    float  CrossfadeGain(size_t trail, int count, bool soloed) const;
+    void   AdvanceSpatial(size_t samples);
+    void   ComputeTrailPan(size_t trail, float& pan_l, float& pan_r) const;
+    float  PanLfo(float phase) const;
 
-    // ~12 ms fade before replacing a playing trail — kills the end-of-take click
-    // when Cont.Rec / round-robin mutes an audible voice (inaudible when paused).
-    static constexpr float kReplaceFadeSec = 0.012f;
+    // BBD-style one-pole slew τ before round-robin overwrite (~60 ms).
+    static constexpr float kReplaceSlewSec = 0.060f;
+    static constexpr float kReplaceDoneEps = 0.002f;
 
     float sample_rate_;
     float sample_rate_inv_;
 
     CaptureParamValues params_;
+    SpatialParamValues spatial_;
     TrailMixerState    mixer_[kTrailCount];
     RecordSource       record_source_;
 
@@ -139,6 +168,12 @@ class CaptureEngine
     float play_gain_;
     bool  want_playing_;
 
+    // Phase 9 spatial state (audio thread only).
+    float    pan_phase_master_;
+    float    pan_jitter_[kTrailCount];
+    uint32_t pan_rng_;
+    float    xfade_focus_; // 0…count (wraps)
+
     std::atomic<uint32_t> manual_trig_count_;
     uint32_t              manual_trig_seen_;
     std::atomic<uint32_t> clear_count_;
@@ -151,11 +186,14 @@ class CaptureEngine
     std::atomic<uint8_t> life_phase_[kTrailCount];
     std::atomic<float>   life_fill_[kTrailCount];
     std::atomic<int16_t> life_hold_sec_[kTrailCount];
+    std::atomic<float>   xfade_focus_ui_; // 0…Count (wraps)
+    std::atomic<float>   xfade_amp_ui_;
 
     daisysp::OnePole hp_;
     daisysp::OnePole lp_;
 
     static SwarmTrailView swarm_views_[kTrailCount];
+    static CloudPan       cloud_pan_;
 };
 
 // External SDRAM storage — Section 2 point 2.

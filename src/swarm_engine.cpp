@@ -154,11 +154,25 @@ void SwarmEngine::SpawnGrain(size_t trail, size_t length, float gain)
     // Constant-power-ish
     const float norm = 1.f / std::sqrt(pl * pl + pr * pr + 1e-6f);
 
+    // Playback direction (Block 5 DIR): Fwd / Rev / Rnd (coin flip per grain).
+    float dir_sign = 1.f;
+    {
+        int mode = static_cast<int>(params_.direction + 0.5f);
+        if(mode < 0)
+            mode = 0;
+        if(mode > 2)
+            mode = 2;
+        if(mode == 1)
+            dir_sign = -1.f;
+        else if(mode == 2)
+            dir_sign = (NextRand() < 0.5f) ? -1.f : 1.f;
+    }
+
     Grain& g  = grains_[slot];
     g.active  = true;
     g.trail   = trail;
     g.pos     = start;
-    g.incr    = pitch;
+    g.incr    = pitch * dir_sign;
     g.age     = 0.f;
     g.age_inc = 1.f / (dur_n > 1.f ? dur_n : 1.f);
     g.pan_l   = pl * norm;
@@ -254,8 +268,14 @@ void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
 
             const float env = WindowEnv(g.age, blur);
             const float a   = g.amp * env * tg;
-            mix_l += sample * a * g.pan_l;
-            mix_r += sample * a * g.pan_r;
+            // Grain pan × Trail Pan Drift (constant-power coeffs from Capture).
+            float pl = g.pan_l * views[g.trail].pan_l;
+            float pr = g.pan_r * views[g.trail].pan_r;
+            const float pn = 1.f / std::sqrt(pl * pl + pr * pr + 1e-6f);
+            pl *= pn;
+            pr *= pn;
+            mix_l += sample * a * pl;
+            mix_r += sample * a * pr;
             ++n_on;
 
             g.pos += g.incr;

@@ -17,6 +17,7 @@ enum SwarmParamId : uint16_t
     kSwarmSpread      = 51,
     kSwarmScan        = 52,
     kSwarmAtmosphere  = 53,
+    kSwarmDirection   = 54, // 0 Fwd · 1 Rev · 2 Rnd (per-grain at spawn)
 };
 
 struct SwarmParamValues
@@ -27,6 +28,7 @@ struct SwarmParamValues
     float spread       = 0.35f; // stereo width of grains 0..1
     float scan         = 0.2f;  // scrub speed; 0 = freeze
     float atmosphere   = 0.f;   // bipolar: Blur←0→Radiation
+    float direction    = 0.f;   // 0 Fwd · 1 Rev · 2 Rnd
 };
 
 } // namespace perseids

@@ -16,6 +16,7 @@ enum ParamId : uint16_t
     kTrailsThreshold = 2,
     kTrailsContRec   = 3,
     kTrailsOnOff     = 4,
+    kTrailsOverwrite = 5, // ON = round-robin steal; OFF = wait for Empty / Hold-Lock
 
     kTimeBuffer  = 10,
     kTimeHold    = 11,
@@ -38,6 +39,7 @@ struct CaptureParamValues
     float count      = 3.f;   // 1..5 — boot default 3
     float threshold  = 0.12f; // 0..1 — lower default for line-level benches
     float cont_rec   = 0.f;   // toggle
+    float overwrite  = 1.f;   // toggle, default ON (steal mid-hold)
     float on_off     = 1.f;   // toggle, default ON
     float buffer_s   = 2.f;   // seconds, max recording length (ceiling 30 s)
     float hold_s     = 15.f;  // seconds; >30 = infinite

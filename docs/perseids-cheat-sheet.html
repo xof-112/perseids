@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en" data-lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PERSEIDS — Cheat Sheet</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0b;
+      --bg-2: #121214;
+      --ink: #e8e8ea;          /* light gray text */
+      --ink-soft: #9a9aa0;
+      --paper: #e8e8ea;
+      --line: #2a2a2e;
+      --accent: #003153;       /* Preußischblau */
+      --accent-bright: #4a7ea8; /* readable Prussian on black */
+      --oled: #050506;
+      --oled-px: #d0d0d4;
+      --oled-frame: #1c1c20;
+      --ray: rgba(0, 49, 83, 0.45);
+      --max: 860px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; color-scheme: dark; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "IBM Plex Sans", sans-serif;
+      font-size: 15px;
+      line-height: 1.55;
+      background:
+        radial-gradient(ellipse 70% 45% at 8% -8%, var(--ray), transparent 55%),
+        radial-gradient(ellipse 50% 35% at 100% 0%, rgba(0, 49, 83, 0.25), transparent 50%),
+        linear-gradient(180deg, #0e0e10 0%, var(--bg) 40%, var(--bg-2) 100%);
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.4;
+      background-image:
+        repeating-linear-gradient(
+          -18deg,
+          transparent 0,
+          transparent 38px,
+          rgba(232, 232, 234, 0.02) 38px,
+          rgba(232, 232, 234, 0.02) 39px
+        );
+      z-index: 0;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+
+    header.hero {
+      padding: 1.5rem 0 2rem;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 1.75rem;
+    }
+
+    .brand-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    h1.brand {
+      font-family: "IBM Plex Sans", sans-serif;
+      font-weight: 700;
+      font-size: clamp(2.2rem, 5.5vw, 3rem);
+      letter-spacing: 0.06em;
+      line-height: 1.05;
+      margin: 0;
+      color: var(--ink);
+    }
+
+    h1.brand span {
+      display: block;
+      font-size: 0.32em;
+      font-weight: 500;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--accent-bright);
+      margin-bottom: 0.4rem;
+    }
+
+    .lang-toggle {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      padding: 2px;
+    }
+
+    .lang-toggle button {
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      border: 0;
+      background: transparent;
+      color: var(--ink-soft);
+      padding: 0.4rem 0.7rem;
+      cursor: pointer;
+    }
+
+    .lang-toggle button[aria-pressed="true"] {
+      background: var(--accent);
+      color: var(--paper);
+    }
+
+    .lede {
+      max-width: 36rem;
+      font-size: 1.05rem;
+      color: var(--ink-soft);
+      margin: 0.5rem 0 0;
+    }
+
+    nav.toc {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: rgba(10, 10, 11, 0.92);
+      backdrop-filter: blur(6px);
+      border-bottom: 1px solid var(--line);
+      margin: 0 -1.25rem 2rem;
+      padding: 0.65rem 1.25rem;
+    }
+
+    nav.toc ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.9rem;
+    }
+
+    nav.toc a {
+      color: var(--ink-soft);
+      text-decoration: none;
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
+
+    nav.toc a:hover { color: var(--accent-bright); }
+
+    section { margin-bottom: 2.5rem; }
+
+    h2 {
+      font-family: "IBM Plex Sans", sans-serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 0.85rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid var(--accent-bright);
+      display: inline-block;
+      min-width: 40%;
+      color: var(--ink);
+      letter-spacing: 0.02em;
+    }
+
+    h3 {
+      font-family: "IBM Plex Sans", sans-serif;
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin: 0;
+      color: var(--ink);
+      letter-spacing: 0.01em;
+    }
+
+    p { margin: 0.4rem 0 0.7rem; color: var(--ink-soft); }
+    p strong { color: var(--ink); }
+
+    .bilingual .de { display: none; }
+    html[data-lang="de"] .bilingual .en { display: none; }
+    html[data-lang="de"] .bilingual .de { display: block; }
+    html[data-lang="de"] .bilingual span.de { display: inline; }
+    html[data-lang="de"] .bilingual span.en { display: none; }
+    .bilingual span.de { display: none; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin: 0.5rem 0 0.4rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.42rem 0.45rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ink-soft);
+      font-weight: 600;
+    }
+
+    td.param { font-weight: 600; color: var(--ink); white-space: nowrap; }
+    td.oled-abbr { width: 3.6rem; }
+
+    .abbr {
+      display: inline-block;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      background: var(--accent);
+      color: #e8e8ea;
+      padding: 0.12rem 0.35rem;
+      min-width: 2.1rem;
+      text-align: center;
+    }
+
+    .block {
+      margin-top: 1.75rem;
+      padding-top: 0.25rem;
+    }
+
+    .block-top {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1rem 1.25rem;
+      align-items: start;
+      margin-bottom: 0.35rem;
+    }
+
+    @media (max-width: 640px) {
+      .block-top { grid-template-columns: 1fr; }
+      .oled-fig { justify-self: start; }
+    }
+
+    .block-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.45rem 0.9rem;
+    }
+
+    .block-num {
+      font-family: "IBM Plex Sans", sans-serif;
+      font-size: 0.8rem;
+      color: var(--accent-bright);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .pot {
+      color: var(--accent-bright);
+      font-weight: 500;
+      font-size: 0.82rem;
+    }
+
+    .sound {
+      font-size: 0.92rem;
+      color: var(--ink-soft);
+      margin: 0.25rem 0 0;
+      max-width: 28rem;
+    }
+
+    .note {
+      font-size: 0.88rem;
+      border-left: 3px solid var(--accent-bright);
+      padding: 0.35rem 0 0.35rem 0.85rem;
+      margin: 0.85rem 0;
+      color: var(--ink-soft);
+    }
+
+    ul.compact {
+      margin: 0.4rem 0 0.8rem;
+      padding-left: 1.1rem;
+      color: var(--ink-soft);
+    }
+
+    ul.compact li { margin: 0.28rem 0; }
+
+    /* —— OLED mock (128×64 feel) —— */
+    .oled-fig {
+      margin: 0;
+      width: 168px;
+    }
+
+    .oled-fig figcaption {
+      font-size: 0.68rem;
+      color: var(--ink-soft);
+      margin-top: 0.3rem;
+      letter-spacing: 0.02em;
+    }
+
+    .oled {
+      width: 168px;
+      height: 84px;
+      background: var(--oled-frame);
+      padding: 5px;
+      border: 1px solid var(--line);
+      box-shadow: inset 0 0 0 1px #000, 0 0 0 1px rgba(0, 49, 83, 0.35);
+    }
+
+    .oled-screen {
+      width: 158px;
+      height: 74px;
+      background: var(--oled);
+      color: var(--oled-px);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 7px;
+      line-height: 1;
+      position: relative;
+      overflow: hidden;
+      image-rendering: pixelated;
+    }
+
+    .oled-hdr {
+      position: absolute;
+      left: 2px;
+      right: 2px;
+      top: 1px;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 8px;
+      letter-spacing: 0.02em;
+    }
+
+    .oled-hdr .val {
+      font-size: 8px;
+      font-weight: 500;
+    }
+
+    .oled-ceil {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 11px;
+      height: 1px;
+      background: var(--oled-px);
+      opacity: 0.85;
+    }
+
+    .oled-cols {
+      position: absolute;
+      left: 2px;
+      right: 2px;
+      top: 13px;
+      bottom: 15px;
+      display: flex;
+    }
+
+    .oled-col {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .oled-col.active::before,
+    .oled-col.active::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--oled-px);
+      opacity: 0.9;
+    }
+
+    .oled-col.active::before { left: 0; }
+    .oled-col.active::after { right: 0; }
+
+    .oled-bar {
+      width: 10px;
+      background: var(--oled-px);
+      min-height: 1px;
+    }
+
+    .oled-col.active .oled-bar { width: 14px; }
+
+    .oled-bar.mid { /* bipolar from center — use transform origin */
+      align-self: center;
+    }
+
+    .oled-dash {
+      position: absolute;
+      left: 15%;
+      right: 15%;
+      top: 50%;
+      height: 1px;
+      background: repeating-linear-gradient(
+        90deg,
+        var(--oled-px) 0 1px,
+        transparent 1px 3px
+      );
+      opacity: 0.7;
+    }
+
+    .oled-toggle {
+      align-self: center;
+      font-size: 8px;
+      letter-spacing: 0.04em;
+    }
+
+    .oled-count {
+      align-self: center;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .oled-seg {
+      position: absolute;
+      left: 1px;
+      right: 1px;
+      bottom: 1px;
+      height: 12px;
+      display: flex;
+      gap: 1px;
+    }
+
+    .oled-seg span {
+      flex: 1;
+      border: 1px solid var(--oled-px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 7px;
+      letter-spacing: 0.02em;
+      gap: 1px;
+    }
+
+    .oled-seg span.on {
+      background: var(--oled-px);
+      color: var(--oled);
+    }
+
+    .oled-seg .hint {
+      font-size: 5px;
+      opacity: 0.85;
+    }
+
+    .oled-seg span.on .hint { opacity: 0.7; }
+
+    /* Dashboard mini */
+    .oled-dash-rows {
+      position: absolute;
+      left: 14px;
+      right: 2px;
+      top: 12px;
+      bottom: 2px;
+      font-size: 7px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .oled-dash-row {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .oled-vu {
+      position: absolute;
+      left: 1px;
+      top: 14px;
+      bottom: 3px;
+      width: 10px;
+      border: 1px solid var(--oled-px);
+    }
+
+    .oled-vu i {
+      position: absolute;
+      left: 1px;
+      right: 1px;
+      bottom: 1px;
+      height: 45%;
+      background: var(--oled-px);
+    }
+
+    .oled-life {
+      flex: 1;
+      height: 6px;
+      border: 1px solid var(--oled-px);
+      position: relative;
+    }
+
+    .oled-life i {
+      position: absolute;
+      inset: 1px;
+      background: var(--oled-px);
+    }
+
+    .oled-beam {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      position: relative;
+      margin-right: 1px;
+    }
+
+    .oled-beam::before,
+    .oled-beam::after {
+      content: "";
+      position: absolute;
+      background: var(--oled-px);
+      width: 1px;
+      height: 3px;
+      left: 3px;
+      top: 0;
+    }
+
+    .oled-beam::after {
+      transform: rotate(90deg);
+      top: 2px;
+    }
+
+    footer {
+      margin-top: 2.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line);
+      font-size: 0.8rem;
+      color: var(--ink-soft);
+    }
+
+    @page {
+      size: A4;
+      margin: 18mm 16mm 18mm 16mm;
+    }
+
+    @media print {
+      body { background: #fff; color: #111; }
+      body::before, nav.toc, .lang-toggle { display: none; }
+      .wrap {
+        max-width: none;
+        padding: 0;
+        margin: 0;
+      }
+      .block { break-inside: avoid; }
+      h1.brand, h2, h3, td.param, p strong { color: #111; }
+      p, .sound, .note, th, figcaption { color: #444; }
+      .abbr { background: #003153; color: #fff; }
+      .block-num, .pot, h1.brand span { color: #003153; }
+      .oled { border-color: #333; }
+      header.hero { margin-bottom: 1.25rem; padding-bottom: 1rem; }
+      section { margin-bottom: 1.75rem; }
+    }
+
+    @media (max-width: 600px) {
+      td.param { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div class="brand-row">
+        <h1 class="brand">
+          <span>Operator sheet</span>
+          PERSEIDS
+        </h1>
+        <div class="lang-toggle" role="group" aria-label="Language">
+          <button type="button" id="btn-en" aria-pressed="true">EN</button>
+          <button type="button" id="btn-de" aria-pressed="false">DE</button>
+        </div>
+      </div>
+      <div class="bilingual">
+        <p class="lede en">How to operate it, what the OLED shows, and what each control does to the sound.</p>
+        <p class="lede de">Bedienung, was das OLED zeigt, und was soundtechnisch zu erwarten ist.</p>
+      </div>
+    </header>
+
+    <nav class="toc bilingual" aria-label="Contents">
+      <ul class="en">
+        <li><a href="#idea">Idea</a></li>
+        <li><a href="#operation">Operation</a></li>
+        <li><a href="#home">Home</a></li>
+        <li><a href="#pots">Block pots</a></li>
+        <li><a href="#trails">Trail encoders</a></li>
+        <li><a href="#multi">Multi</a></li>
+      </ul>
+      <ul class="de">
+        <li><a href="#idea">Idee</a></li>
+        <li><a href="#operation">Bedienung</a></li>
+        <li><a href="#home">Home</a></li>
+        <li><a href="#pots">Block-Pots</a></li>
+        <li><a href="#trails">Trail-Encoder</a></li>
+        <li><a href="#multi">Multi</a></li>
+      </ul>
+    </nav>
+
+    <section id="idea" class="bilingual">
+      <h2><span class="en">Idea</span><span class="de">Idee</span></h2>
+      <p class="en">PERSEIDS captures audio into up to five <strong>Trails</strong>. From those it builds a stereo <strong>sound cloud</strong>: Spectra (stylized additive) blended with Swarm (grains), plus Resonator, Filter, Reverb, and spatial motion.</p>
+      <p class="de">PERSEIDS nimmt Audio in bis zu fünf <strong>Trails</strong> auf. Daraus entsteht eine Stereo-<strong>Klangwolke</strong>: Spectra (stilisiert additiv) gemischt mit Swarm (Grains), plus Resonator, Filter, Reverb und räumliche Bewegung.</p>
+      <p class="note en"><strong>Multi Dry/Wet</strong> balances clean input against the finished cloud. Full wet = cloud only.</p>
+      <p class="note de"><strong>Multi Dry/Wet</strong> mischt Clean-Input gegen die fertige Wolke. Voll wet = nur Cloud.</p>
+    </section>
+
+    <section id="operation" class="bilingual">
+      <h2><span class="en">Operation</span><span class="de">Bedienung</span></h2>
+      <ul class="compact">
+        <li><span class="en"><strong>Block pot</strong> — opens that menu; turn edits the active parameter (pickup). From another open Block, a clearer turn on a different pot jumps to that Block (anti-jitter threshold).</span><span class="de"><strong>Block-Pot</strong> — öffnet das Menü; Drehen ändert den aktiven Parameter (Pickup). Aus einem anderen offenen Block: klareres Drehen an einem anderen Pot springt dorthin (mit Anti-Jitter-Schwelle).</span></li>
+        <li><span class="en"><strong>Cycle short</strong> — unused alone (except confirming delete-all). Not for next parameter / not for Multi.</span><span class="de"><strong>Cycle kurz</strong> — allein unbenutzt (außer Delete-all bestätigen). Nicht für nächsten Parameter / nicht für Multi.</span></li>
+        <li><span class="en"><strong>Cycle hold + pot / Multi turn</strong> — scroll the list without changing values. Blocks with more than four params keep 4-wide columns; the row slides (header shows <strong>n/m</strong>).</span><span class="de"><strong>Cycle halten + Pot / Multi drehen</strong> — Liste scrollen ohne Werte zu ändern. Bei mehr als vier Params bleiben 4 Spalten breit; die Zeile scrollt (Header zeigt <strong>n/m</strong>).</span></li>
+        <li><span class="en"><strong>Cycle long</strong> — delete-all Trails (confirm).</span><span class="de"><strong>Cycle lang</strong> — alle Trails löschen (Bestätigung).</span></li>
+        <li><span class="en"><strong>Trail encoder short</strong> — on Home: Lock. In a Block/Multi menu: back to the Trail overview (Home); press short again on Home to Lock.</span><span class="de"><strong>Trail-Encoder kurz</strong> — auf Home: Lock. Im Block-/Multi-Menü: zurück zur Trail-Übersicht (Home); nochmal kurz auf Home = Lock.</span></li>
+        <li><span class="en"><strong>Trail encoder long</strong> — Solo (from any screen).</span><span class="de"><strong>Trail-Encoder lang</strong> — Solo (von jedem Screen).</span></li>
+        <li><span class="en"><strong>Imprint short</strong> — Play / Pause.</span><span class="de"><strong>Imprint kurz</strong> — Play / Pause.</span></li>
+        <li><span class="en"><strong>Multi long push</strong> — Home.</span><span class="de"><strong>Multi lang</strong> — Home.</span></li>
+        <li><span class="en"><strong>Rec</strong> — manual capture (same round-robin / Overwrite rules as Threshold).</span><span class="de"><strong>Rec</strong> — manuelle Aufnahme (gleiche Round-Robin-/Overwrite-Regeln wie Threshold).</span></li>
+        <li><span class="en"><strong>Idle (~4&nbsp;s)</strong> — automatic return to Home (for reading calmly; not needed for jumping menus).</span><span class="de"><strong>Idle (~4&nbsp;s)</strong> — automatisch zurück zu Home (zum ruhigen Ablesen; nicht nötig zum Menü-Springen).</span></li>
+      </ul>
+      <p class="en">On the OLED: <strong>block name</strong> top-left, position <strong>n/m</strong> (and optional CPU%) top-right, <strong>value</strong> centered above the bars, <strong>abbreviations</strong> in the bottom segmented row (active cell inverted; at most four columns visible).</p>
+      <p class="de">Auf dem OLED: <strong>Blockname</strong> oben links, Position <strong>n/m</strong> (und optional CPU%) oben rechts, <strong>Wert</strong> zentriert über den Balken, <strong>Abkürzungen</strong> unten in der Segmentzeile (aktive Zelle invertiert; höchstens vier Spalten sichtbar).</p>
+    </section>
+
+    <section id="home" class="bilingual">
+      <h2><span class="en">Home dashboard</span><span class="de">Home-Dashboard</span></h2>
+      <div class="block-top">
+        <div>
+          <p class="en">Trail levels, Lock/Solo, life bar (Hold countdown / INF). When Crossfade Amplitude is up, thin <strong>focus ticks</strong> travel top→bottom left &amp; right of T#. Header center: <strong>R1…R5</strong> / <strong>REC1…REC5</strong> (same small type as the CPU meter). Left: input VU with threshold marker.</p>
+          <p class="de">Trail-Level, Lock/Solo, Life-Bar (Hold-Countdown / INF). Bei Crossfade-Amplitude wandern schmale <strong>Fokus-Striche</strong> oben→unten links &amp; rechts von T#. Header-Mitte: <strong>R1…R5</strong> / <strong>REC1…REC5</strong> (gleiche kleine Schrift wie die CPU-Anzeige). Links: Input-VU mit Threshold-Marke.</p>
+        </div>
+        <figure class="oled-fig" aria-hidden="true">
+          <div class="oled"><div class="oled-screen">
+            <div class="oled-hdr"><span>PERSEIDS</span><span style="font-size:6px;opacity:.75">REC2</span><span class="val">PLAY</span></div>
+            <div class="oled-vu"><i></i></div>
+            <div class="oled-dash-rows">
+              <div class="oled-dash-row">T1 50% L <span class="oled-life"><i></i></span></div>
+              <div class="oled-dash-row">T2 40% &nbsp; <span class="oled-life"><i style="width:70%"></i></span></div>
+              <div class="oled-dash-row">T3 55% S <span class="oled-life"><i style="width:40%"></i></span></div>
+            </div>
+          </div></div>
+          <figcaption><span class="en">Home (sketch)</span><span class="de">Home (Skizze)</span></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="pots" class="bilingual">
+      <h2><span class="en">Block pots</span><span class="de">Block-Pots</span></h2>
+
+      <!-- 1 Trails -->
+      <article class="block">
+        <div class="block-top">
+          <div>
+            <div class="block-head">
+              <span class="block-num">1</span>
+              <h3>Trails</h3>
+              <span class="pot">Pot 1</span>
+            </div>
+            <p class="sound en">How many voices live in the cloud, and when recording starts.</p>
+            <p class="sound de">Wie viele Stimmen in der Wolke leben, und wann aufgenommen wird.</p>
+          </div>
+          <figure class="oled-fig" aria-hidden="true">
+            <div class="oled"><div class="oled-screen">
+              <div class="oled-hdr"><span>Trails</span><span><span class="val">3</span> <span style="font-size:6px;opacity:.65">1/5</span></span></div>
+              <div class="oled-ceil"></div>
+              <div class="oled-cols">
+                <div class="oled-col active"><span class="oled-count">3</span></div>
+                <div class="oled-col"><div class="oled-bar" style="height:18%"></div></div>
+                <div class="oled-col"><span class="oled-toggle">OFF</span></div>
+                <div class="oled-col"><span class="oled-toggle">ON</span></div>
+              </div>
+              <div class="oled-seg">
+                <span class="on">CNT</span><span>THR</span><span>CRE</span><span>OVR</span>
+              </div>
+            </div></div>
+            <figcaption>CNT · THR · CRE · OVR · ON — <span class="en">4 visible; scroll for ON (header n/m)</span><span class="de">4 sichtbar; ON per Scroll (Header n/m)</span></figcaption>
+          </figure>
+        </div>
+        <table>
+          <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="param">Count</td>
+              <td class="oled-abbr"><span class="abbr">CNT</span></td>
+              <td><span class="en">1–5 Trails. Fewer = thinner; more = denser stack.</span><span class="de">1–5 Trails. Weniger = dünner; mehr = dichterer Stack.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Threshold</td>
+              <td class="oled-abbr"><span class="abbr">THR</span></td>
+              <td><span class="en">How loud input must be to auto-record. Lower = more sensitive.</span><span class="de">Wie laut der Input für Auto-Aufnahme sein muss. Niedriger = empfindlicher.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Cont. Rec</td>
+              <td class="oled-abbr"><span class="abbr">CRE</span></td>
+              <td><span class="en">OFF = rising edge only (cross below→above). ON = keep arming while above threshold.</span><span class="de">OFF = nur Rising Edge (unter→über THR). ON = weiter armieren solange über Threshold.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Overwrite</td>
+              <td class="oled-abbr"><span class="abbr">OVR</span></td>
+              <td><span class="en">ON (default) = Empty first, else replace oldest unlocked Trail even mid-Hold. OFF = wait for Empty (finite Hold/Fade protected; INF still replaceable). Applies to Threshold, CRE, and Rec.</span><span class="de">ON (Default) = zuerst Empty, sonst ältesten ungelockten Trail ersetzen — auch mitten in Hold. OFF = auf Empty warten (finite Hold/Fade geschützt; INF weiter ersetzbar). Gilt für Threshold, CRE und Rec.</span></td>
+            </tr>
+            <tr>
+              <td class="param">On/Off</td>
+              <td class="oled-abbr"><span class="abbr">ON</span></td>
+              <td><span class="en">Capture system on or off.</span><span class="de">Aufnahmesystem an oder aus.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <!-- 2 Time -->
+      <article class="block">
+        <div class="block-top">
+          <div>
+            <div class="block-head">
+              <span class="block-num">2</span>
+              <h3>Time</h3>
+              <span class="pot">Pot 2</span>
+            </div>
+            <p class="sound en">How long each take is, how long it stays, how it breathes.</p>
+            <p class="sound de">Wie lang jede Aufnahme ist, wie lange sie bleibt, wie sie atmet.</p>
+          </div>
+          <figure class="oled-fig" aria-hidden="true">
+            <div class="oled"><div class="oled-screen">
+              <div class="oled-hdr"><span>Time</span><span class="val">2.00s</span></div>
+              <div class="oled-ceil"></div>
+              <div class="oled-cols">
+                <div class="oled-col active"><div class="oled-bar" style="height:12%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:50%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:55%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:55%"></div></div>
+              </div>
+              <div class="oled-seg">
+                <span class="on">BUF</span><span>HLD</span><span>FIN</span><span>FOUT</span>
+              </div>
+            </div></div>
+            <figcaption>BUF · HLD · FIN · FOUT</figcaption>
+          </figure>
+        </div>
+        <table>
+          <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="param">Buffer</td>
+              <td class="oled-abbr"><span class="abbr">BUF</span></td>
+              <td><span class="en">Max take length (up to 30&nbsp;s). Short = tight loops; long = spacious phrases.</span><span class="de">Max. Aufnahmelänge (bis 30&nbsp;s). Kurz = enge Loops; lang = weite Phrasen.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Hold</td>
+              <td class="oled-abbr"><span class="abbr">HLD</span></td>
+              <td><span class="en">How long a Trail stays. Far right → INF.</span><span class="de">Wie lange ein Trail bleibt. Weit rechts → INF.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Fade In</td>
+              <td class="oled-abbr"><span class="abbr">FIN</span></td>
+              <td><span class="en">Soft attack of each Trail (also Play fade-in).</span><span class="de">Weicher Einsatz jedes Trails (auch Play-Fade-In).</span></td>
+            </tr>
+            <tr>
+              <td class="param">Fade Out</td>
+              <td class="oled-abbr"><span class="abbr">FOUT</span></td>
+              <td><span class="en">Soft release before empty (also Pause fade-out).</span><span class="de">Weicher Ausklang vor Empty (auch Pause-Fade-Out).</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <!-- 3 Engines -->
+      <article class="block">
+        <div class="block-top">
+          <div>
+            <div class="block-head">
+              <span class="block-num">3</span>
+              <h3>Engines</h3>
+              <span class="pot">Pot 3</span>
+            </div>
+            <p class="sound en">Balance the two engines and their pitch. On BLD the small hint <strong>SP</strong>/<strong>SW</strong> shows which side you’re on.</p>
+            <p class="sound de">Balance der beiden Engines und deren Pitch. Bei BLD zeigt der kleine Hinweis <strong>SP</strong>/<strong>SW</strong> die Seite.</p>
+          </div>
+          <figure class="oled-fig" aria-hidden="true">
+            <div class="oled"><div class="oled-screen">
+              <div class="oled-hdr"><span>Engines</span><span class="val">0%</span></div>
+              <div class="oled-ceil"></div>
+              <div class="oled-cols">
+                <div class="oled-col active"><div class="oled-bar" style="height:8%"></div></div>
+                <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
+                <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
+              </div>
+              <div class="oled-seg">
+                <span class="on">BLD<span class="hint">SP</span></span><span>PSP</span><span>PSW</span>
+              </div>
+            </div></div>
+            <figcaption>BLD (+SP/SW) · PSP · PSW</figcaption>
+          </figure>
+        </div>
+        <table>
+          <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="param">Blend</td>
+              <td class="oled-abbr"><span class="abbr">BLD</span></td>
+              <td><span class="en">Toward Spectra (SP) or Swarm (SW). Middle = both.</span><span class="de">Richtung Spectra (SP) oder Swarm (SW). Mitte = beides.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Pitch Spectra</td>
+              <td class="oled-abbr"><span class="abbr">PSP</span></td>
+              <td><span class="en">±1 octave on the additive body. Center = original.</span><span class="de">±1 Oktave auf den additiven Körper. Mitte = Original.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Pitch Swarm</td>
+              <td class="oled-abbr"><span class="abbr">PSW</span></td>
+              <td><span class="en">±1 octave on the grains.</span><span class="de">±1 Oktave auf die Grains.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <!-- 4 Spectra -->
+      <article class="block">
+        <div class="block-top">
+          <div>
+            <div class="block-head">
+              <span class="block-num">4</span>
+              <h3>Spectra</h3>
+              <span class="pot">Pot 5</span>
+            </div>
+            <p class="sound en">Stylized harmonic body — character resynthesis, not a transparent freeze.</p>
+            <p class="sound de">Stilisierter Harmonik-Körper — Charakter-Resynthese, kein transparentes Freeze.</p>
+          </div>
+          <figure class="oled-fig" aria-hidden="true">
+            <div class="oled"><div class="oled-screen">
+              <div class="oled-hdr"><span>Spectra</span><span class="val">16</span></div>
+              <div class="oled-ceil"></div>
+              <div class="oled-cols">
+                <div class="oled-col active"><div class="oled-bar" style="height:45%"></div></div>
+                <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
+                <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:25%"></div></div>
+              </div>
+              <div class="oled-seg">
+                <span class="on">PAR</span><span>WSH</span><span>UMB</span><span>ENS</span>
+              </div>
+            </div></div>
+            <figcaption>PAR · WSH · UMB · ENS</figcaption>
+          </figure>
+        </div>
+        <table>
+          <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="param">Partials</td>
+              <td class="oled-abbr"><span class="abbr">PAR</span></td>
+              <td><span class="en">Fewer = simpler. More = denser harmonic stack.</span><span class="de">Weniger = einfacher. Mehr = dichtere Harmonik.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Waveshape</td>
+              <td class="oled-abbr"><span class="abbr">WSH</span></td>
+              <td><span class="en">Center = sine · left = saw-ish · right = fold / harsh.</span><span class="de">Mitte = Sinus · links = sägeartig · rechts = Fold / scharf.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Umbra / Aurora</td>
+              <td class="oled-abbr"><span class="abbr">UMB</span></td>
+              <td><span class="en">Left = airy (Umbra). Right = vocal/formant (Aurora). Center = neutral.</span><span class="de">Links = luftig (Umbra). Rechts = vokal/Formant (Aurora). Mitte = neutral.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Ensemble / Drift</td>
+              <td class="oled-abbr"><span class="abbr">ENS</span></td>
+              <td><span class="en">Organic chorus / detune shimmer.</span><span class="de">Organischer Chorus / Detune-Schimmern.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <!-- 5 Swarm -->
+      <article class="block">
+        <div class="block-top">
+          <div>
+            <div class="block-head">
+              <span class="block-num">5</span>
+              <h3>Swarm</h3>
+              <span class="pot">Pot 4</span>
+            </div>
+            <p class="sound en">Granular texture — the cloudy, moving half of the blend.</p>
+            <p class="sound de">Granulare Textur — die wolkige, bewegte Hälfte des Blends.</p>
+          </div>
+          <figure class="oled-fig" aria-hidden="true">
+            <div class="oled"><div class="oled-screen">
+              <div class="oled-hdr"><span>Swarm</span><span><span class="val">Fwd</span> <span style="font-size:6px;opacity:.65">4/5</span></span></div>
+              <div class="oled-ceil"></div>
+              <div class="oled-cols">
+                <div class="oled-col"><div class="oled-bar" style="height:42%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:35%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:20%"></div></div>
+                <div class="oled-col active"><span class="oled-toggle">Fwd</span></div>
+              </div>
+              <div class="oled-seg">
+                <span>SIZ</span><span>SPR</span><span>SCN</span><span class="on">DIR</span>
+              </div>
+            </div></div>
+            <figcaption>SIZ · SPR · SCN · DIR · ATM — <span class="en">4 visible; scroll</span><span class="de">4 sichtbar; scrollt</span></figcaption>
+          </figure>
+        </div>
+        <table>
+          <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="param">Size</td>
+              <td class="oled-abbr"><span class="abbr">SIZ</span></td>
+              <td><span class="en">Short grains = bustling. Long = smeared pad.</span><span class="de">Kurze Grains = geschäftig. Lang = verschmiertes Pad.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Spread</td>
+              <td class="oled-abbr"><span class="abbr">SPR</span></td>
+              <td><span class="en">Stereo width of the grains.</span><span class="de">Stereobreite der Grains.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Scan</td>
+              <td class="oled-abbr"><span class="abbr">SCN</span></td>
+              <td><span class="en">0 = freeze in the buffer. Up = scrub through the take.</span><span class="de">0 = Freeze im Buffer. Aufdrehen = durch die Aufnahme scrubben.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Direction</td>
+              <td class="oled-abbr"><span class="abbr">DIR</span></td>
+              <td><span class="en">Fwd · Rev · Rnd — grain playback direction (Rnd = coin flip per grain). Scan scrub is separate.</span><span class="de">Fwd · Rev · Rnd — Grain-Spielrichtung (Rnd = Münzwurf pro Grain). Scan-Scrub ist unabhängig.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Atmosphere</td>
+              <td class="oled-abbr"><span class="abbr">ATM</span></td>
+              <td><span class="en">Left = Blur (soft). Right = Radiation (lo-fi / warble).</span><span class="de">Links = Blur (weich). Rechts = Radiation (Lo-Fi / Warble).</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <!-- 6 Reverb -->
+      <article class="block">
+        <div class="block-top">
+          <div>
+            <div class="block-head">
+              <span class="block-num">6</span>
+              <h3>Reverb</h3>
+              <span class="pot">Pot 8</span>
+            </div>
+            <p class="sound en">Space around the cloud — not around the dry input.</p>
+            <p class="sound de">Raum um die Wolke — nicht um den Dry-Input.</p>
+          </div>
+          <figure class="oled-fig" aria-hidden="true">
+            <div class="oled"><div class="oled-screen">
+              <div class="oled-hdr"><span>Reverb</span><span class="val">25%</span></div>
+              <div class="oled-ceil"></div>
+              <div class="oled-cols">
+                <div class="oled-col active"><div class="oled-bar" style="height:25%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:50%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:50%"></div></div>
+                <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
+              </div>
+              <div class="oled-seg">
+                <span class="on">MIX</span><span>DEC</span><span>DMP</span><span>CHR</span>
+              </div>
+            </div></div>
+            <figcaption>MIX · DEC · DMP · CHR</figcaption>
+          </figure>
+        </div>
+        <table>
+          <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="param">Mix</td>
+              <td class="oled-abbr"><span class="abbr">MIX</span></td>
+              <td><span class="en">How much hall on the cloud.</span><span class="de">Wie viel Hall auf der Wolke.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Decay</td>
+              <td class="oled-abbr"><span class="abbr">DEC</span></td>
+              <td><span class="en">Tail length.</span><span class="de">Nachhalllänge.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Damping</td>
+              <td class="oled-abbr"><span class="abbr">DMP</span></td>
+              <td><span class="en">Higher = darker, softer tail.</span><span class="de">Höher = dunklerer, weicherer Tail.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Character</td>
+              <td class="oled-abbr"><span class="abbr">CHR</span></td>
+              <td><span class="en">Left = Chorus (lush). Right = Friction (saturated wall). Center = plain.</span><span class="de">Links = Chorus (üppig). Rechts = Friction (gesättigte Wand). Mitte = normal.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <!-- 7 Resonator -->
+      <article class="block">
+        <div class="block-top">
+          <div>
+            <div class="block-head">
+              <span class="block-num">7</span>
+              <h3>Resonator</h3>
+              <span class="pot">Pot 7</span>
+            </div>
+            <p class="sound en">Pitched ring on the Swarm side.</p>
+            <p class="sound de">Gepitchtes Klingeln auf der Swarm-Seite.</p>
+          </div>
+          <figure class="oled-fig" aria-hidden="true">
+            <div class="oled"><div class="oled-screen">
+              <div class="oled-hdr"><span>Resonator</span><span class="val">OFF</span></div>
+              <div class="oled-ceil"></div>
+              <div class="oled-cols">
+                <div class="oled-col"><div class="oled-bar" style="height:20%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:40%"></div></div>
+                <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
+                <div class="oled-col active"><span class="oled-toggle">OFF</span></div>
+              </div>
+              <div class="oled-seg">
+                <span>MIX</span><span>DEC</span><span>PIT</span><span class="on">QNT</span>
+              </div>
+            </div></div>
+            <figcaption>MIX · DEC · PIT · QNT</figcaption>
+          </figure>
+        </div>
+        <table>
+          <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="param">Mix</td>
+              <td class="oled-abbr"><span class="abbr">MIX</span></td>
+              <td><span class="en">How much resonant ring vs. dry Swarm.</span><span class="de">Wie viel Resonanz vs. dry Swarm.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Decay</td>
+              <td class="oled-abbr"><span class="abbr">DEC</span></td>
+              <td><span class="en">Ring time — short pluck vs. sustained hum.</span><span class="de">Ausklingzeit — kurzer Pluck vs. anhaltendes Summen.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Pitch</td>
+              <td class="oled-abbr"><span class="abbr">PIT</span></td>
+              <td><span class="en">Root of the bank (±1 octave).</span><span class="de">Grundton der Bank (±1 Oktave).</span></td>
+            </tr>
+            <tr>
+              <td class="param">Quantized</td>
+              <td class="oled-abbr"><span class="abbr">QNT</span></td>
+              <td><span class="en">OFF = odd harmonics. ON = scale from Settings (SCL / INT).</span><span class="de">OFF = ungerade Obertöne. ON = Skala aus Settings (SCL / INT).</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <!-- 8 Pan Drift -->
+      <article class="block">
+        <div class="block-top">
+          <div>
+            <div class="block-head">
+              <span class="block-num">8</span>
+              <h3>Pan Drift</h3>
+              <span class="pot">Pot 6</span>
+            </div>
+            <p class="sound en">Trails wander left/right on their own.</p>
+            <p class="sound de">Trails wandern von selbst links/rechts.</p>
+          </div>
+          <figure class="oled-fig" aria-hidden="true">
+            <div class="oled"><div class="oled-screen">
+              <div class="oled-hdr"><span>Pan Drift</span><span class="val">30%</span></div>
+              <div class="oled-ceil"></div>
+              <div class="oled-cols">
+                <div class="oled-col"><div class="oled-bar" style="height:10%"></div></div>
+                <div class="oled-col active"><div class="oled-bar" style="height:30%"></div></div>
+                <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
+              </div>
+              <div class="oled-seg">
+                <span>PHS</span><span class="on">AMP</span><span>VEL</span>
+              </div>
+            </div></div>
+            <figcaption>PHS · AMP · VEL</figcaption>
+          </figure>
+        </div>
+        <table>
+          <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="param">Phase</td>
+              <td class="oled-abbr"><span class="abbr">PHS</span></td>
+              <td><span class="en">0% = sync. 100% = each Trail drifts on a different rhythm.</span><span class="de">0 % = sync. 100 % = jeder Trail in eigenem Rhythmus.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Amplitude</td>
+              <td class="oled-abbr"><span class="abbr">AMP</span></td>
+              <td><span class="en">How far L↔R. Zero = centered.</span><span class="de">Wie weit L↔R. Null = zentriert.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Velocity</td>
+              <td class="oled-abbr"><span class="abbr">VEL</span></td>
+              <td><span class="en">Speed &amp; direction. Center = still.</span><span class="de">Tempo &amp; Richtung. Mitte = still.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <!-- 9 Crossfade -->
+      <article class="block">
+        <div class="block-top">
+          <div>
+            <div class="block-head">
+              <span class="block-num">9</span>
+              <h3>Crossfade</h3>
+              <span class="pot">Pot 9</span>
+            </div>
+            <p class="sound en">A loudness focus walks through the Trails.</p>
+            <p class="sound de">Ein Lautstärke-Fokus wandert durch die Trails.</p>
+          </div>
+          <figure class="oled-fig" aria-hidden="true">
+            <div class="oled"><div class="oled-screen">
+              <div class="oled-hdr"><span>Crossfade</span><span class="val">0%</span></div>
+              <div class="oled-ceil"></div>
+              <div class="oled-cols">
+                <div class="oled-col active"><div class="oled-bar" style="height:8%"></div></div>
+                <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
+              </div>
+              <div class="oled-seg">
+                <span class="on">AMP</span><span>VEL</span>
+              </div>
+            </div></div>
+            <figcaption>AMP · VEL</figcaption>
+          </figure>
+        </div>
+        <table>
+          <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="param">Amplitude</td>
+              <td class="oled-abbr"><span class="abbr">AMP</span></td>
+              <td><span class="en">0% = equal. Higher = stronger spotlight on one Trail.</span><span class="de">0 % = gleich. Höher = stärkerer Spotlight auf einen Trail.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Velocity</td>
+              <td class="oled-abbr"><span class="abbr">VEL</span></td>
+              <td><span class="en">Travel speed; side of center = direction. Center = freeze.</span><span class="de">Wandertempo; Seite der Mitte = Richtung. Mitte = Freeze.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <!-- 10 Filter -->
+      <article class="block">
+        <div class="block-top">
+          <div>
+            <div class="block-head">
+              <span class="block-num">10</span>
+              <h3>Filter</h3>
+              <span class="pot">Pot 10</span>
+            </div>
+            <p class="sound en">Tone shaping on a chosen wet stage (never on dry listen-through).</p>
+            <p class="sound de">Klangformung auf einer Wet-Stufe (nie auf Dry Listen-through).</p>
+          </div>
+          <figure class="oled-fig" aria-hidden="true">
+            <div class="oled"><div class="oled-screen">
+              <div class="oled-hdr"><span>Filter</span><span class="val">Off</span></div>
+              <div class="oled-ceil"></div>
+              <div class="oled-cols">
+                <div class="oled-col"><div class="oled-bar" style="height:70%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:20%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:10%"></div></div>
+                <div class="oled-col active"><span class="oled-count">Off</span></div>
+              </div>
+              <div class="oled-seg">
+                <span>CUT</span><span>RES</span><span>FBK</span><span class="on">DST</span>
+              </div>
+            </div></div>
+            <figcaption>CUT · RES · FBK · DST</figcaption>
+          </figure>
+        </div>
+        <table>
+          <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="param">Cutoff</td>
+              <td class="oled-abbr"><span class="abbr">CUT</span></td>
+              <td><span class="en">Brightness of the filtered stage.</span><span class="de">Helligkeit der gefilterten Stufe.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Resonance</td>
+              <td class="oled-abbr"><span class="abbr">RES</span></td>
+              <td><span class="en">Peak at the cutoff — whistle / bloom.</span><span class="de">Peak an der Cutoff — Pfeifen / Aufblühen.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Feedback</td>
+              <td class="oled-abbr"><span class="abbr">FBK</span></td>
+              <td><span class="en">Drive / growl into the filter.</span><span class="de">Drive / Growl ins Filter.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Destination</td>
+              <td class="oled-abbr"><span class="abbr">DST</span></td>
+              <td><span class="en">Off · Inp · Sp · Sw · Rv — where the filter sits.</span><span class="de">Off · Inp · Sp · Sw · Rv — wo das Filter sitzt.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+    </section>
+
+    <section id="trails" class="bilingual">
+      <h2><span class="en">Trail encoders</span><span class="de">Trail-Encoder</span></h2>
+      <ul class="compact">
+        <li><span class="en"><strong>Turn</strong> — loudness of that Trail.</span><span class="de"><strong>Drehen</strong> — Lautstärke dieses Trails.</span></li>
+        <li><span class="en"><strong>Short on Home — Lock (L)</strong> — no overwrite, no hold fade-out.</span><span class="de"><strong>Kurz auf Home — Lock (L)</strong> — kein Überschreiben, kein Hold-Fade-Out.</span></li>
+        <li><span class="en"><strong>Short in a menu — Home</strong> — any of the five pushes returns to the Trail overview; short again on Home to Lock.</span><span class="de"><strong>Kurz im Menü — Home</strong> — jeder der fünf Pushes zurück zur Trail-Übersicht; nochmal kurz auf Home = Lock.</span></li>
+        <li><span class="en"><strong>Long — Solo (S)</strong> — that Trail alone (any screen); ignores Crossfade wave.</span><span class="de"><strong>Lang — Solo (S)</strong> — nur dieser Trail (jeder Screen); ignoriert Crossfade.</span></li>
+      </ul>
+    </section>
+
+    <section id="multi" class="bilingual">
+      <h2>Multi</h2>
+      <div class="block-top">
+        <div>
+          <p class="en">Big encoder. Turn to open / edit. <strong>Multi push short</strong> steps the list (or Cycle hold + Multi turn). Long Multi push → Home.</p>
+          <p class="de">Großer Encoder. Drehen = öffnen / editieren. <strong>Multi-Push kurz</strong> steppt die Liste (oder Cycle halten + Multi drehen). Langer Multi-Push → Home.</p>
+        </div>
+        <figure class="oled-fig" aria-hidden="true">
+          <div class="oled"><div class="oled-screen">
+            <div class="oled-hdr"><span>Multi</span><span class="val">55%</span></div>
+            <div class="oled-ceil"></div>
+            <div class="oled-cols">
+              <div class="oled-col active"><div class="oled-bar" style="height:55%"></div></div>
+              <div class="oled-col"><div class="oled-bar" style="height:50%"></div></div>
+              <div class="oled-col"><div class="oled-bar" style="height:50%"></div></div>
+              <div class="oled-col"><span class="oled-toggle">Sec</span></div>
+              <div class="oled-col"><span class="oled-toggle">---</span></div>
+            </div>
+            <div class="oled-seg">
+              <span class="on">DW</span><span>M1</span><span>M2</span><span>TU</span><span>SET</span>
+            </div>
+          </div></div>
+          <figcaption>DW · M1 · M2 · TU · SET</figcaption>
+        </figure>
+      </div>
+      <table>
+        <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="param">Dry / Wet</td>
+            <td class="oled-abbr"><span class="abbr">DW</span></td>
+            <td><span class="en">Dry = clean input. Wet = full cloud.</span><span class="de">Dry = Clean-Input. Wet = volle Wolke.</span></td>
+          </tr>
+          <tr>
+            <td class="param">Macro1 / Macro2</td>
+            <td class="oled-abbr"><span class="abbr">M1</span> <span class="abbr">M2</span></td>
+            <td><span class="en">Reserved — not wired yet.</span><span class="de">Reserviert — noch nicht verdrahtet.</span></td>
+          </tr>
+          <tr>
+            <td class="param">Time Unit</td>
+            <td class="oled-abbr"><span class="abbr">TU</span></td>
+            <td><span class="en">Reserved — Seconds vs Clock (later).</span><span class="de">Reserviert — Sekunden vs. Clock (später).</span></td>
+          </tr>
+          <tr>
+            <td class="param">Settings</td>
+            <td class="oled-abbr"><span class="abbr">SET</span></td>
+            <td><span class="en">Entry to Settings (also as pot-less row): <span class="abbr">CPU</span> <span class="abbr">RAM</span> <span class="abbr">SCL</span> <span class="abbr">INT</span> — meters + Resonator scale/intonation.</span><span class="de">Eingang zu Settings (auch pot-lose Zeile): <span class="abbr">CPU</span> <span class="abbr">RAM</span> <span class="abbr">SCL</span> <span class="abbr">INT</span> — Meter + Resonator-Skala/Intonation.</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <footer class="bilingual">
+      <p class="en">OLED sketches are schematic (128×64 layout). Abbreviations match the segmented row on the module.</p>
+      <p class="de">OLED-Skizzen sind schematisch (128×64-Layout). Abkürzungen entsprechen der Segmentzeile am Modul.</p>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const btnEn = document.getElementById("btn-en");
+      const btnDe = document.getElementById("btn-de");
+
+      function setLang(lang) {
+        root.setAttribute("data-lang", lang);
+        root.setAttribute("lang", lang);
+        btnEn.setAttribute("aria-pressed", lang === "en" ? "true" : "false");
+        btnDe.setAttribute("aria-pressed", lang === "de" ? "true" : "false");
+        try { localStorage.setItem("perseids-cheat-lang", lang); } catch (e) {}
+      }
+
+      btnEn.addEventListener("click", function () { setLang("en"); });
+      btnDe.addEventListener("click", function () { setLang("de"); });
+
+      let initial = "en";
+      try {
+        const q = new URLSearchParams(window.location.search).get("lang");
+        if (q === "de" || q === "en") initial = q;
+        else {
+          const stored = localStorage.getItem("perseids-cheat-lang");
+          if (stored === "de" || stored === "en") initial = stored;
+          else if (navigator.language && navigator.language.toLowerCase().startsWith("de"))
+            initial = "de";
+        }
+      } catch (e) {}
+      setLang(initial);
+    })();
+  </script>
+</body>
+</html>

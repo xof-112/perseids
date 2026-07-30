@@ -64,6 +64,8 @@ void TrailLevelController::Init(daisy::DaisySeed& seed, CaptureEngine* capture)
     last_rec_trig_ms_    = 0;
     activity_this_frame_ = false;
     level_edit_activity_ = false;
+    short_push_homes_    = false;
+    home_requested_      = false;
 
     for(size_t i = 0; i < kCount; ++i)
     {
@@ -184,12 +186,20 @@ void TrailLevelController::HandlePush(size_t index, ButtonGesture::Event event)
     switch(event)
     {
     case ButtonGesture::Event::ShortPress:
+        // From Block/Multi menus: short = Home (Dashboard). Lock only on Home.
+        if(short_push_homes_)
+        {
+            home_requested_      = true;
+            activity_this_frame_ = true;
+            break;
+        }
         trails_[index].locked = !trails_[index].locked;
         activity_this_frame_  = true;
         level_edit_activity_  = true;
         break;
 
     case ButtonGesture::Event::LongPress:
+        // Solo works from any screen ( unambiguous long press ).
         trails_[index].solo = !trails_[index].solo;
         if(trails_[index].solo)
         {

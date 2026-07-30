@@ -21,6 +21,7 @@ void UiController::Init(daisy::DaisySeed&   seed,
                         SwarmParamValues&   swarm_params,
                         CycleRow&           multi_row,
                         MultiParamValues&   multi_params,
+                        SpatialParamValues& spatial_params,
                         std::atomic<float>* dry_wet,
                         std::atomic<float>* cpu_load)
 {
@@ -38,6 +39,7 @@ void UiController::Init(daisy::DaisySeed&   seed,
     swarm_params_    = &swarm_params;
     multi_row_       = &multi_row;
     multi_params_    = &multi_params;
+    spatial_params_  = &spatial_params;
     dry_wet_         = dry_wet;
     cpu_load_        = cpu_load;
 
@@ -67,6 +69,8 @@ void UiController::Init(daisy::DaisySeed&   seed,
         pot_prev_[i]       = 0.f;
         pot_baseline_[i]   = 0.f;
         pot_prev_ok_[i]    = false;
+        open_dir_accum_[i] = 0.f;
+        open_dir_sign_[i]  = 0;
     }
 
     mux_.Init(seed);
@@ -105,6 +109,8 @@ void UiController::CapturePotBaselines()
         pot_prev_[i]          = n;
         pot_baseline_[i]      = n;
         pot_prev_ok_[i]       = true;
+        open_dir_accum_[i]    = 0.f;
+        open_dir_sign_[i]     = 0;
     }
 }
 
@@ -277,7 +283,7 @@ void UiController::SyncEngines()
 {
     TrailMixerState mixer[TrailLevelController::kCount];
     trails_.FillMixerState(mixer);
-    capture_->SyncFromUi(*capture_params_, mixer, playing_);
+    capture_->SyncFromUi(*capture_params_, mixer, playing_, *spatial_params_);
     spectra_->SyncFromUi(*spectra_params_);
     swarm_->SyncFromUi(*swarm_params_);
 }
@@ -316,11 +322,8 @@ void UiController::HandleCycleButton(ButtonGesture::Event event)
     switch(event)
     {
     case ButtonGesture::Event::ShortPress:
-        // While Multi is open: Cycle short steps the Multi list (reliable
-        // fallback when Mux B C5 push is unwired / noisy). Ignore leftover
-        // ShortPress after hold+turn (pot_moved_during_hold_).
-        if(screen_ == UiScreen::MultiView && !pot_moved_during_hold_)
-            HandleMultiShortPress();
+        // Unused alone (ARCHITECTURE 4.7) — next param = Cycle hold + pot/encoder.
+        // Multi list steps via Multi push short only.
         break;
 
     case ButtonGesture::Event::LongPress:
@@ -380,9 +383,11 @@ void UiController::HandlePotTurn(size_t row_idx, float pot_norm, float delta)
     if(row_idx >= row_count_)
         return;
 
-    const bool opening_cycle = (screen_ == UiScreen::Dashboard);
+    // New Block (from Dashboard/Multi) or switch away from another Block.
+    const bool entering_block
+        = (screen_ != UiScreen::CycleView) || (active_row_ != row_idx);
 
-    if(opening_cycle || std::fabs(delta) >= kEditThreshold)
+    if(entering_block || std::fabs(delta) >= kEditThreshold)
         TouchActivity();
 
     active_row_ = row_idx;
@@ -415,7 +420,7 @@ void UiController::HandlePotTurn(size_t row_idx, float pot_norm, float delta)
     }
     else
     {
-        if(opening_cycle)
+        if(entering_block)
             row.ArmPickupIfNeeded(*registry_);
         row.SetCycleScrollActive(false);
         row.ChangeValue(*registry_, pot_norm);
@@ -498,6 +503,18 @@ void UiController::PollControls()
         pot_prev_[i] = norm;
         travels[i]   = std::fabs(norm - pot_baseline_[i]);
 
+        // Same-direction confirm: ignore micro-steps; reset accum on reverse.
+        if(std::fabs(steps[i]) >= kOpenStepNoise)
+        {
+            const int8_t sign = (steps[i] > 0.f) ? 1 : -1;
+            if(sign != open_dir_sign_[i])
+            {
+                open_dir_sign_[i]  = sign;
+                open_dir_accum_[i] = 0.f;
+            }
+            open_dir_accum_[i] += std::fabs(steps[i]);
+        }
+
         if(std::fabs(steps[i]) > kResetCancelThreshold)
             pot_cancel_reset = true;
 
@@ -508,19 +525,24 @@ void UiController::PollControls()
 
     if(screen_ == UiScreen::Dashboard || screen_ == UiScreen::MultiView)
     {
-        // Exactly one winner — largest travel from baseline. From MultiView a
-        // deliberate pot turn leaves Multi and opens that Block (same threshold).
+        // Exactly one winner — largest travel from baseline, but only if that
+        // pot also shows a short burst of same-direction motion (filters slow
+        // mux drift). From MultiView a deliberate pot turn leaves Multi.
         size_t best   = n_pots;
         float  best_t = 0.f;
         for(size_t i = 0; i < n_pots; ++i)
         {
+            if(travels[i] < kOpenThreshold)
+                continue;
+            if(open_dir_accum_[i] < kOpenConfirmTravel)
+                continue;
             if(travels[i] > best_t)
             {
                 best_t = travels[i];
                 best   = i;
             }
         }
-        if(best < n_pots && best_t >= kOpenThreshold)
+        if(best < n_pots)
         {
             HandlePotTurn(best, norms[best], steps[best]);
             CapturePotBaselines();
@@ -528,17 +550,48 @@ void UiController::PollControls()
     }
     else if(screen_ == UiScreen::CycleView && active_row_ < n_pots)
     {
-        // While a pot Block is open, ONLY its pot edits. Do NOT run this for
-        // MultiView — that used to force Trails (active_row_==0) every frame.
-        HandlePotTurn(active_row_, norms[active_row_], steps[active_row_]);
+        // Cross-Block switch: another pot with stricter travel + direction
+        // confirm steals focus (performance jump without idle timeout).
+        size_t best   = n_pots;
+        float  best_t = 0.f;
+        for(size_t i = 0; i < n_pots; ++i)
+        {
+            if(i == active_row_)
+                continue;
+            if(travels[i] < kSwitchThreshold)
+                continue;
+            if(open_dir_accum_[i] < kSwitchConfirmTravel)
+                continue;
+            if(travels[i] > best_t)
+            {
+                best_t = travels[i];
+                best   = i;
+            }
+        }
+        if(best < n_pots)
+        {
+            HandlePotTurn(best, norms[best], steps[best]);
+            CapturePotBaselines();
+        }
+        else
+        {
+            // Active Block only — ignores other pots below switch threshold.
+            HandlePotTurn(active_row_, norms[active_row_], steps[active_row_]);
+        }
     }
 
     HandleCycleButton(cycle_btn_.Poll());
     HandleImprintButton(imprint_btn_.Poll());
 
+    // Trail short = Home while a Block/Multi menu is open; Lock only on Dashboard.
+    // Long = Solo from any screen.
+    trails_.SetShortPushHomes(screen_ == UiScreen::CycleView
+                              || screen_ == UiScreen::MultiView);
     trails_.PollEncoders();
     trails_.Process();
     trails_.ApplyEncoderSteps();
+    if(trails_.ConsumeHomeRequest())
+        EnterDashboard();
 
     SyncEngines();
 
@@ -581,6 +634,7 @@ void UiController::UpdateScreen()
             active = 1;
         if(active > kTrailCount)
             active = kTrailCount;
+
         display_.DrawDashboard(playing_,
                                reset_confirm_,
                                secs_left,
@@ -593,7 +647,9 @@ void UiController::UpdateScreen()
                                active,
                                show_cpu,
                                show_ram,
-                               cpu_load);
+                               cpu_load,
+                               capture_->CrossfadeFocus(),
+                               capture_->CrossfadeAmplitudeUi());
     }
     else if(screen_ == UiScreen::MultiView && multi_row_ != nullptr)
     {

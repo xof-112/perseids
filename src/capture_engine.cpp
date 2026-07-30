@@ -10,9 +10,13 @@ float DSY_SDRAM_BSS trail_buffer[CaptureEngine::kTrailCount]
 
 CaptureEngine::SwarmTrailView
     CaptureEngine::swarm_views_[CaptureEngine::kTrailCount];
+CaptureEngine::CloudPan CaptureEngine::cloud_pan_;
 
 namespace
 {
+constexpr float kPi  = 3.14159265f;
+constexpr float kHalfPi = 1.57079633f;
+
 inline float Clampf(float x, float lo, float hi)
 {
     if(x < lo)
@@ -23,6 +27,21 @@ inline float Clampf(float x, float lo, float hi)
 }
 
 inline bool ToggleOn(float v) { return v >= 0.5f; }
+
+inline float FastSin(float x)
+{
+    // x in radians; wrap to -pi…pi then polynomial approx.
+    const float twopi = 6.2831853f;
+    x = x - twopi * static_cast<float>(static_cast<int>(x / twopi));
+    if(x > kPi)
+        x -= twopi;
+    if(x < -kPi)
+        x += twopi;
+    const float x2 = x * x;
+    return x * (1.f - x2 * (1.f / 6.f - x2 * (1.f / 120.f)));
+}
+
+inline float FastCos(float x) { return FastSin(x + kHalfPi); }
 } // namespace
 
 void CaptureEngine::Init(float sample_rate)
@@ -45,13 +64,23 @@ void CaptureEngine::Init(float sample_rate)
     rec_slot_display_.store(1, std::memory_order_relaxed);
     rec_active_.store(false, std::memory_order_relaxed);
 
-    params_ = CaptureParamValues{};
+    params_  = CaptureParamValues{};
+    spatial_ = SpatialParamValues{};
+    pan_phase_master_ = 0.f;
+    pan_rng_          = 0xA5F1523u;
+    xfade_focus_      = 0.f;
+    xfade_focus_ui_.store(0.f, std::memory_order_relaxed);
+    xfade_amp_ui_.store(0.f, std::memory_order_relaxed);
+    cloud_pan_        = CloudPan{};
     for(size_t i = 0; i < kTrailCount; ++i)
     {
         mixer_[i] = TrailMixerState{};
         voices_[i] = TrailVoice{};
+        pan_jitter_[i] = 0.f;
         swarm_views_[i].length = 0;
         swarm_views_[i].gain   = 0.f;
+        swarm_views_[i].pan_l  = 0.70710678f;
+        swarm_views_[i].pan_r  = 0.70710678f;
         hold_remaining_norm_[i].store(0.f, std::memory_order_relaxed);
         life_phase_[i].store(static_cast<uint8_t>(TrailLifePhase::Empty),
                               std::memory_order_relaxed);
@@ -127,7 +156,8 @@ int CaptureEngine::ActiveCount() const
 
 size_t CaptureEngine::PickRoundRobinTarget() const
 {
-    const int count = ActiveCount();
+    const int  count       = ActiveCount();
+    const bool allow_steal = ToggleOn(params_.overwrite); // OFF = Hold-Lock
 
     size_t best       = kTrailCount;
     size_t best_gen   = SIZE_MAX;
@@ -141,7 +171,18 @@ size_t CaptureEngine::PickRoundRobinTarget() const
            || voices_[idx].state == TrailState::ArmingRecord)
             continue;
 
-        // Prefer Empty, then oldest generation among Playing/FadingOut/Empty.
+        // Overwrite OFF: finish finite Hold + Fade-Out before replace (INF still
+        // stealable). Empty preferred either way.
+        if(!allow_steal)
+        {
+            if(voices_[idx].state == TrailState::FadingOut)
+                continue;
+            if(voices_[idx].state == TrailState::Playing
+               && !voices_[idx].infinite_hold)
+                continue;
+        }
+
+        // Prefer Empty, then oldest generation among eligible slots.
         const size_t gen = voices_[idx].state == TrailState::Empty
                                ? 0
                                : voices_[idx].generation;
@@ -223,9 +264,9 @@ void CaptureEngine::StartRecording(size_t index)
             }
         }
 
-        const float fade_n = kReplaceFadeSec * sample_rate_;
+        // BBD-style one-pole slew toward silence (Phase 9); fade_inc unused.
         v.state    = TrailState::ArmingRecord;
-        v.fade_inc = fade_n > 1.f ? (-v.fade_gain / fade_n) : -1.f;
+        v.fade_inc = 0.f;
         arming_record_index_ = index;
         rec_slot_display_.store(static_cast<uint8_t>(index + 1),
                                 std::memory_order_relaxed);
@@ -353,15 +394,130 @@ void CaptureEngine::GetTrailLifeUi(TrailLifeUi out[kTrailCount]) const
 
 void CaptureEngine::SyncFromUi(const CaptureParamValues& params,
                               const TrailMixerState     mixer[kTrailCount],
-                              bool                      playing)
+                              bool                      playing,
+                              const SpatialParamValues& spatial)
 {
-    params_ = params;
+    params_  = params;
+    spatial_ = spatial;
     for(size_t i = 0; i < kTrailCount; ++i)
         mixer_[i] = mixer[i];
     want_playing_ = playing;
 
     record_source_.SetMode(params.routing >= 0.5f ? AudioRoutingMode::Sidechain
                                                   : AudioRoutingMode::Stereo);
+}
+
+float CaptureEngine::PanLfo(float phase) const
+{
+    // phase in cycles 0…1 → triangle/sine blend in −1…1.
+    float ph = phase - static_cast<float>(static_cast<int>(phase));
+    if(ph < 0.f)
+        ph += 1.f;
+    float tri;
+    if(ph < 0.25f)
+        tri = ph * 4.f;
+    else if(ph < 0.75f)
+        tri = 2.f - ph * 4.f;
+    else
+        tri = ph * 4.f - 4.f;
+    const float sine = FastSin(ph * 6.2831853f);
+    return tri * 0.55f + sine * 0.45f;
+}
+
+void CaptureEngine::ComputeTrailPan(size_t trail, float& pan_l, float& pan_r) const
+{
+    const float amp = Clampf(spatial_.pan_amplitude, 0.f, 1.f);
+    const int   n   = ActiveCount();
+    const float n_f = n > 0 ? static_cast<float>(n) : 1.f;
+    // Phase=0 → sync; Phase=1 → even spacing over one LFO cycle.
+    const float offset
+        = static_cast<float>(trail) * Clampf(spatial_.pan_phase, 0.f, 1.f)
+          / n_f;
+    const float ph  = pan_phase_master_ + offset;
+    const float lfo = PanLfo(ph) + pan_jitter_[trail] * 0.12f;
+    const float pan = Clampf(lfo * amp, -1.f, 1.f);
+    // Constant-power: pan −1…+1 → angle 0…π/2.
+    const float angle = (pan + 1.f) * 0.25f * kPi;
+    pan_l = FastCos(angle);
+    pan_r = FastSin(angle);
+}
+
+float CaptureEngine::CrossfadeGain(size_t trail, int count, bool soloed) const
+{
+    // Solo overrides the wave (ARCHITECTURE Block 9 detail).
+    if(soloed)
+        return 1.f;
+    const float amp = Clampf(spatial_.xfade_amplitude, 0.f, 1.f);
+    if(amp < 0.001f || count <= 1)
+        return 1.f;
+    if(static_cast<int>(trail) >= count)
+        return 1.f;
+
+    const float n = static_cast<float>(count);
+    float       d = static_cast<float>(trail) - xfade_focus_;
+    if(d < 0.f)
+        d = -d;
+    if(d > n * 0.5f)
+        d = n - d;
+
+    float lobe = 0.f;
+    if(d < 1.f)
+    {
+        const float c = FastCos(d * kHalfPi); // 1 at focus, 0 at ±1 Trail
+        lobe          = c * c;
+    }
+    return (1.f - amp) + amp * lobe;
+}
+
+void CaptureEngine::AdvanceSpatial(size_t samples)
+{
+    // Pan Drift velocity (bipolar): |v|² → 0…~2 Hz, sign = direction.
+    float pvel = spatial_.pan_velocity;
+    if(pvel > 1.f)
+        pvel = 1.f;
+    else if(pvel < -1.f)
+        pvel = -1.f;
+    const float pan_hz = pvel * pvel * 2.f;
+    const float pan_dir = pvel >= 0.f ? 1.f : -1.f;
+    pan_phase_master_
+        += pan_dir * pan_hz * sample_rate_inv_ * static_cast<float>(samples);
+    // Keep master in a bounded range.
+    if(pan_phase_master_ > 1024.f || pan_phase_master_ < -1024.f)
+        pan_phase_master_
+            -= static_cast<float>(static_cast<int>(pan_phase_master_));
+
+    // Slight per-Trail jitter (smooth random walk).
+    for(size_t i = 0; i < kTrailCount; ++i)
+    {
+        pan_rng_ = pan_rng_ * 1664525u + 1013904223u;
+        const float noise
+            = (static_cast<float>(pan_rng_ >> 8) * (1.f / 16777215.f)) * 2.f
+              - 1.f;
+        pan_jitter_[i] += 0.002f * static_cast<float>(samples) * noise;
+        pan_jitter_[i] *= 0.995f;
+        pan_jitter_[i] = Clampf(pan_jitter_[i], -1.f, 1.f);
+    }
+
+    // Crossfade travel (bipolar, 4% deadzone already in stored value).
+    float xvel = spatial_.xfade_velocity;
+    if(xvel > 1.f)
+        xvel = 1.f;
+    else if(xvel < -1.f)
+        xvel = -1.f;
+    if(xvel > -0.02f && xvel < 0.02f)
+        return; // frozen (UI deadzone is ±2%; keep a tiny guard)
+
+    const int   count = ActiveCount();
+    const float n     = count > 0 ? static_cast<float>(count) : 1.f;
+    // |v|² → up to ~1.5 Trail-slots / second.
+    const float rate = xvel * xvel * 1.5f;
+    const float dir  = xvel >= 0.f ? 1.f : -1.f;
+    xfade_focus_
+        += dir * rate * sample_rate_inv_ * static_cast<float>(samples);
+    while(xfade_focus_ >= n)
+        xfade_focus_ -= n;
+    while(xfade_focus_ < 0.f)
+        xfade_focus_ += n;
 }
 
 void CaptureEngine::ApplyGlobalPlayFade(bool want_play, size_t /*size*/)
@@ -426,6 +582,35 @@ void CaptureEngine::Process(const float* in_l,
         manual_trig_seen_ = trig_now;
 
     float peak_block = 0.f;
+
+    // BBD replace-slew coefficient (~60 ms τ) — constant for the block.
+    const float replace_coeff
+        = 1.f - std::exp(-sample_rate_inv_ / kReplaceSlewSec);
+
+    // Pan Drift / Crossfade: block-rate is enough (≪1 Trail / LFO cycle per block).
+    AdvanceSpatial(size);
+
+    bool any_solo = false;
+    for(size_t i = 0; i < kTrailCount; ++i)
+    {
+        if(mixer_[i].solo)
+        {
+            any_solo = true;
+            break;
+        }
+    }
+    const int count = ActiveCount();
+
+    // Cache Crossfade + Pan gains for this block (same VCA stage as Trail Level).
+    float xfade_g[kTrailCount];
+    float pan_l[kTrailCount];
+    float pan_r[kTrailCount];
+    for(size_t i = 0; i < kTrailCount; ++i)
+    {
+        const bool soloed = mixer_[i].solo;
+        xfade_g[i] = CrossfadeGain(i, count, soloed && any_solo);
+        ComputeTrailPan(i, pan_l[i], pan_r[i]);
+    }
 
     for(size_t n = 0; n < size; ++n)
     {
@@ -498,17 +683,6 @@ void CaptureEngine::Process(const float* in_l,
 
         // Mix playback
         float mix = 0.f;
-        bool  any_solo = false;
-        for(size_t i = 0; i < kTrailCount; ++i)
-        {
-            if(mixer_[i].solo)
-            {
-                any_solo = true;
-                break;
-            }
-        }
-
-        const int count = ActiveCount();
 
         for(size_t i = 0; i < static_cast<size_t>(count); ++i)
         {
@@ -520,8 +694,18 @@ void CaptureEngine::Process(const float* in_l,
             if(any_solo && !mixer_[i].solo)
                 continue;
 
-            // Per-voice fade gain (incl. ArmingRecord soft-replace)
-            if(v.fade_inc != 0.f)
+            // ArmingRecord: exponential slew toward 0, then overwrite.
+            if(v.state == TrailState::ArmingRecord)
+            {
+                v.fade_gain += replace_coeff * (0.f - v.fade_gain);
+                if(v.fade_gain <= kReplaceDoneEps)
+                {
+                    v.fade_gain = 0.f;
+                    BeginRecordWrites(i);
+                    continue;
+                }
+            }
+            else if(v.fade_inc != 0.f)
             {
                 v.fade_gain += v.fade_inc;
                 if(v.fade_inc > 0.f && v.fade_gain >= 1.f)
@@ -533,11 +717,6 @@ void CaptureEngine::Process(const float* in_l,
                 {
                     v.fade_gain = 0.f;
                     v.fade_inc  = 0.f;
-                    if(v.state == TrailState::ArmingRecord)
-                    {
-                        BeginRecordWrites(i);
-                        continue;
-                    }
                     v.state  = TrailState::Empty;
                     v.length = 0;
                     hold_remaining_norm_[i].store(0.f, std::memory_order_relaxed);
@@ -545,9 +724,11 @@ void CaptureEngine::Process(const float* in_l,
                 }
             }
 
+            const float vca = mixer_[i].level * v.fade_gain * xfade_g[i];
+
             const size_t play = LoopPlayLength(v.length);
             const float  s    = ReadLooped(i, v.read_pos, v.length);
-            mix += s * mixer_[i].level * v.fade_gain;
+            mix += s * vca;
 
             ++v.read_pos;
             if(v.read_pos >= play)
@@ -574,7 +755,7 @@ void CaptureEngine::Process(const float* in_l,
         }
 
         // Dry monitor only here — Spectra (Phase 4+) owns the wet path.
-        // trail_mix is the pre-fader Trail sum × global play gain (Section 2.5).
+        // trail_mix = Trail VCA sum × play (level × fade × Crossfade × play).
         const float wet = mix * play_gain_;
         if(trail_mix != nullptr)
             trail_mix[n] = wet;
@@ -582,23 +763,18 @@ void CaptureEngine::Process(const float* in_l,
         out_r[n] = dry_mon;
     }
 
-    // Swarm grain sources — same audio callback, after this Process returns.
+    // Swarm grain sources + Spectra cloud pan — same audio callback.
     {
-        bool any_solo = false;
-        for(size_t i = 0; i < kTrailCount; ++i)
-        {
-            if(mixer_[i].solo)
-            {
-                any_solo = true;
-                break;
-            }
-        }
-        const int count = ActiveCount();
+        float w_l   = 0.f;
+        float w_r   = 0.f;
+        float w_sum = 0.f;
         for(size_t i = 0; i < kTrailCount; ++i)
         {
             SwarmTrailView& sv = swarm_views_[i];
             sv.length          = 0;
             sv.gain            = 0.f;
+            sv.pan_l           = pan_l[i];
+            sv.pan_r           = pan_r[i];
             if(i >= static_cast<size_t>(count))
                 continue;
             const TrailVoice& v = voices_[i];
@@ -608,8 +784,25 @@ void CaptureEngine::Process(const float* in_l,
                 continue;
             if(any_solo && !mixer_[i].solo)
                 continue;
+            const float vca
+                = mixer_[i].level * v.fade_gain * xfade_g[i] * play_gain_;
             sv.length = static_cast<uint32_t>(v.length);
-            sv.gain   = mixer_[i].level * v.fade_gain * play_gain_;
+            sv.gain   = vca;
+            w_l += vca * pan_l[i];
+            w_r += vca * pan_r[i];
+            w_sum += vca;
+        }
+        if(w_sum > 1e-6f)
+        {
+            const float norm
+                = 1.f / std::sqrt(w_l * w_l + w_r * w_r + 1e-12f);
+            cloud_pan_.l = w_l * norm;
+            cloud_pan_.r = w_r * norm;
+        }
+        else
+        {
+            cloud_pan_.l = 0.70710678f;
+            cloud_pan_.r = 0.70710678f;
         }
     }
 
@@ -678,7 +871,6 @@ void CaptureEngine::Process(const float* in_l,
     }
 
     // R / REC index always within active Count (CNT=1 → only R1 / REC1).
-    const int count = ActiveCount();
     if(active_record_index_ < kTrailCount
        && static_cast<int>(active_record_index_) < count)
     {
@@ -703,6 +895,11 @@ void CaptureEngine::Process(const float* in_l,
             slot = 1;
         rec_slot_display_.store(slot, std::memory_order_relaxed);
     }
+
+    // Dashboard Crossfade marker (UI thread).
+    xfade_focus_ui_.store(xfade_focus_, std::memory_order_relaxed);
+    xfade_amp_ui_.store(Clampf(spatial_.xfade_amplitude, 0.f, 1.f),
+                        std::memory_order_relaxed);
 }
 
 } // namespace perseids

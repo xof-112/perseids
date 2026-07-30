@@ -4,7 +4,7 @@
 #include "capture_engine.h"
 #include "capture_params.h"
 #include "cycle_row.h"
-#include "dummy_params.h"
+#include "spatial_params.h"
 #include "filter_engine.h"
 #include "filter_params.h"
 #include "hw_pins.h"
@@ -34,8 +34,8 @@ perseids::SwarmParamValues      g_swarm_params;
 perseids::ResoParamValues       g_reso_params;
 perseids::ReverbParamValues     g_reverb_params;
 perseids::FilterParamValues     g_filter_params;
-perseids::MultiParamValues      g_multi_params;
-perseids::DummyBlockParamValues g_dummy_params;
+perseids::MultiParamValues   g_multi_params;
+perseids::SpatialParamValues g_spatial_params;
 perseids::CaptureEngine      g_capture;
 perseids::SpectraEngine      g_spectra;
 perseids::SwarmEngine        g_swarm;
@@ -49,7 +49,8 @@ std::atomic<float>           g_cpu_load{0.f};
 std::atomic<float>           g_dry_wet{0.55f};
 
 float g_trail_mix[256];
-float g_spectra_out[256];
+float g_spectra_out_l[256];
+float g_spectra_out_r[256];
 float g_swarm_out_l[256];
 float g_swarm_out_r[256];
 float g_reverb_send_l[256];
@@ -66,6 +67,9 @@ float g_dry_r[256];
 // Filter Destination CountNum labels (1…5 → Off/Inp/Sp/Sw/Rv).
 const char* const kFilterDestLabels[] = {"Off", "Inp", "Sp", "Sw", "Rv"};
 
+// Swarm Direction CountNum labels (0…2 → Fwd/Rev/Rnd).
+const char* const kSwarmDirLabels[] = {"Fwd", "Rev", "Rnd"};
+
 // Multi Time Unit / Settings stub labels (Phase 11 interim dummies).
 const char* const kTimeUnitLabels[]    = {"Sec", "Clk"};
 const char* const kSettingsStubLabels[] = {"---"};
@@ -74,6 +78,7 @@ const uint16_t kTrailsIds[]
     = {perseids::kTrailsCount,
        perseids::kTrailsThreshold,
        perseids::kTrailsContRec,
+       perseids::kTrailsOverwrite,
        perseids::kTrailsOnOff};
 
 const uint16_t kTimeIds[] = {perseids::kTimeBuffer,
@@ -95,6 +100,7 @@ const uint16_t kSpectraIds[]
 const uint16_t kSwarmIds[] = {perseids::kSwarmSize,
                               perseids::kSwarmSpread,
                               perseids::kSwarmScan,
+                              perseids::kSwarmDirection,
                               perseids::kSwarmAtmosphere};
 
 const uint16_t kSettingsIds[]
@@ -103,7 +109,7 @@ const uint16_t kSettingsIds[]
        perseids::kSettingsScale,
        perseids::kSettingsIntonation};
 
-// Dummy cycle lists for Blocks 8–9 (see dummy_params.h). Blocks 6+10 live
+// Cycle lists for Blocks 8–9 (spatial_params.h). Blocks 6+10 live
 // (reverb_params.h / filter_params.h). Block 7 Resonator: reso_params.h.
 const uint16_t kReverbIds[] = {perseids::kReverbMix,
                                perseids::kReverbDecay,
@@ -141,10 +147,10 @@ const perseids::PotMapping kPotMappings[] = {
     {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA2}, // Pot 3  → Engines
     {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA3}, // Pot 4  → Swarm
     {perseids::hw::kMuxChainA, perseids::hw::kPotMuxA4}, // Pot 5  → Spectra
-    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB0}, // Pot 6  → Pan Drift*
+    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB0}, // Pot 6  → Pan Drift
     {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB1}, // Pot 7  → Resonator
     {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB2}, // Pot 8  → Reverb
-    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB3}, // Pot 9  → Crossfade*
+    {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB3}, // Pot 9  → Crossfade
     {perseids::hw::kMuxChainB, perseids::hw::kPotMuxB4}, // Pot 10 → Filter
     // Settings row has no pot (Block 11 = Multi encoder, Phase 11);
     // CPU meter stays default-On for the bench (TODO(release)).
@@ -180,6 +186,15 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          1.f,
          0.f,
          &g_capture_params.cont_rec,
+         DT::Toggle,
+         false},
+        {perseids::kTrailsOverwrite,
+         "Overwrite",
+         "OVR",
+         0.f,
+         1.f,
+         1.f,
+         &g_capture_params.overwrite,
          DT::Toggle,
          false},
         {perseids::kTrailsOnOff,
@@ -325,6 +340,19 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          &g_swarm_params.scan,
          DT::Unipolar,
          false},
+        {perseids::kSwarmDirection,
+         "Direction",
+         "DIR",
+         0.f,
+         2.f,
+         0.f, // Fwd
+         &g_swarm_params.direction,
+         DT::CountNum,
+         false,
+         false,
+         nullptr,
+         nullptr,
+         kSwarmDirLabels},
         {perseids::kSwarmAtmosphere,
          "Atmosphere",
          "ATM",
@@ -416,7 +444,7 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          1.f,
          0.f,
-         &g_dummy_params.pan_phase,
+         &g_spatial_params.pan_phase,
          DT::Unipolar,
          false},
         {perseids::kPanAmplitude,
@@ -425,7 +453,7 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          1.f,
          0.3f,
-         &g_dummy_params.pan_amplitude,
+         &g_spatial_params.pan_amplitude,
          DT::Unipolar,
          false},
         {perseids::kPanVelocity,
@@ -434,7 +462,7 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          -1.f,
          1.f,
          0.f,
-         &g_dummy_params.pan_velocity,
+         &g_spatial_params.pan_velocity,
          DT::Bipolar,
          true},
 
@@ -444,7 +472,7 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          1.f,
          0.f,
-         &g_dummy_params.xfade_amplitude,
+         &g_spatial_params.xfade_amplitude,
          DT::Unipolar,
          false},
         {perseids::kXfadeVelocity,
@@ -453,7 +481,7 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          -1.f,
          1.f,
          0.f,
-         &g_dummy_params.xfade_velocity,
+         &g_spatial_params.xfade_velocity,
          DT::Bipolar,
          true},
 
@@ -638,7 +666,18 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     g_spectra.PushInput(g_trail_mix, size);
 
     if(run_spectra)
-        g_spectra.Process(g_spectra_out, g_spectra_out, size);
+    {
+        // Spectra is mono; apply Capture CloudPan (Trail VCA × Pan Drift).
+        g_spectra.Process(g_spectra_out_l, g_spectra_out_l, size);
+        const perseids::CaptureEngine::CloudPan cp
+            = perseids::CaptureEngine::LastCloudPan();
+        for(size_t i = 0; i < size; ++i)
+        {
+            const float s      = g_spectra_out_l[i];
+            g_spectra_out_l[i] = s * cp.l;
+            g_spectra_out_r[i] = s * cp.r;
+        }
+    }
     if(run_swarm)
     {
         g_swarm.Process(g_swarm_out_l, g_swarm_out_r, size);
@@ -651,13 +690,13 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     const int  flt_dest = g_filter.Destination();
     const bool flt_on   = flt_dest != perseids::kFilterDestOff;
     if(flt_on && flt_dest == perseids::kFilterDestSpectra && run_spectra)
-        g_filter.ProcessMono(g_spectra_out, size);
+        g_filter.Process(g_spectra_out_l, g_spectra_out_r, size);
     if(flt_on && flt_dest == perseids::kFilterDestSwarm && run_swarm)
         g_filter.Process(g_swarm_out_l, g_swarm_out_r, size);
 
     // Multi Dry/Wet — final equal-power blender (ARCHITECTURE 2 / 5a):
     //   dry = clean listen-through (g_dry_*) — ONLY path for raw input to Out
-    //   wet = engines (+ Resonator) + Filter + Reverb (+ future FX)
+    //   wet = engines (+ Resonator) + Filter + Reverb + Pan/Crossfade (in Capture)
     // No effect may inject listen-through into wet (Multi@100% = cloud only).
     float dry_wet = g_dry_wet.load(std::memory_order_relaxed);
     if(dry_wet < 0.f)
@@ -680,11 +719,14 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 
     for(size_t i = 0; i < size; ++i)
     {
-        const float sp  = run_spectra ? g_spectra_out[i] * wet_spectra : 0.f;
+        const float spl
+            = run_spectra ? g_spectra_out_l[i] * wet_spectra : 0.f;
+        const float spr
+            = run_spectra ? g_spectra_out_r[i] * wet_spectra : 0.f;
         const float swl = run_swarm ? g_swarm_out_l[i] * wet_swarm : 0.f;
         const float swr = run_swarm ? g_swarm_out_r[i] * wet_swarm : 0.f;
-        g_eng_l[i] = sp + swl;
-        g_eng_r[i] = sp + swr;
+        g_eng_l[i] = spl + swl;
+        g_eng_r[i] = spr + swr;
     }
 
     // Dest Input → filter the engine sum (wet FX bus), not listen-through.
@@ -744,17 +786,17 @@ int main(void)
     RegisterAllParams(registry);
 
     // Order pairs 1:1 with kPotMappings; rows past the pot count (Settings)
-    // are pot-less. * = dummy blocks, display feedback only.
+    // are pot-less.
     perseids::CycleRow rows[] = {
-        perseids::CycleRow("Trails", kTrailsIds, 4),
+        perseids::CycleRow("Trails", kTrailsIds, 5),
         perseids::CycleRow("Time", kTimeIds, 4),
         perseids::CycleRow("Engines", kEnginesIds, 3),
-        perseids::CycleRow("Swarm", kSwarmIds, 4),
+        perseids::CycleRow("Swarm", kSwarmIds, 5),
         perseids::CycleRow("Spectra", kSpectraIds, 4),
-        perseids::CycleRow("Pan Drift", kPanIds, 3),    // *
+        perseids::CycleRow("Pan Drift", kPanIds, 3),
         perseids::CycleRow("Resonator", kResoIds, 4),
         perseids::CycleRow("Reverb", kReverbIds, 4),
-        perseids::CycleRow("Crossfade", kXfadeIds, 2),  // *
+        perseids::CycleRow("Crossfade", kXfadeIds, 2),
         perseids::CycleRow("Filter", kFilterIds, 4),
         perseids::CycleRow("Settings", kSettingsIds, 4),
     };
@@ -776,6 +818,7 @@ int main(void)
             g_swarm_params,
             multi_row,
             g_multi_params,
+            g_spatial_params,
             &g_dry_wet,
             &g_cpu_load);
 

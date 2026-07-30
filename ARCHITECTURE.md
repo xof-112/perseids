@@ -171,11 +171,11 @@ count in Section 2, point 6. The 5 Trail Level encoders and the Multi encoder ar
 
 | # | Block | Cycle list (first entry = default) |
 |---|---|---|
-| 1 | **Trails** | Count (1–5), Threshold, Cont. Rec, On/Off |
+| 1 | **Trails** | Count (1–5), Threshold, Cont. Rec, Overwrite, On/Off |
 | 2 | **Time** | Buffer (= ring buffer length/max. recording time per Trail, up to 30s ceiling — see Section 2, point 2), Hold (up to 30s, beyond that = infinite; boot default 15s, see 4.8), Fade In, Fade Out |
 | 3 | **Engines** | Blend (Spectra↔Swarm), Pitch Spectra, Pitch Swarm |
 | 4 | **Spectra Parameters** | Partials, Waveshape (Sine↔Saw↔Fold), Umbra/Aurora Macro, Ensemble/Drift |
-| 5 | **Swarm Parameters** | Size, Spread, Scan, Atmosphere Macro (Blur↔Radiation) |
+| 5 | **Swarm Parameters** | Size, Spread, Scan, Direction (Fwd/Rev/Rnd), Atmosphere Macro (Blur↔Radiation) |
 | 6 | **Reverb** | Mix, Decay, Damping, Character Macro (Chorus↔Friction) |
 | 7 | **Spectral Resonator** (acts on Swarm output) | Mix, Decay, Pitch, Quantized (On/Off, scale from Settings) |
 | 8 | **Pan Drift** | Phase, Amplitude, Velocity |
@@ -215,13 +215,14 @@ main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥
   (~6–7 grains steady-state); per-grain amp = `Trail gain × 0.50` (overlap tame). Engine bus
   soft-limited before the final mix. Spread = stereo pan width. Scan = scrub rate through each
   trail (0 = freeze). Pitch Swarm = `2^(±1 octave)` on grain playback rate.
+- **Direction** (OLED `DIR`, CountNum): **Fwd** / **Rev** / **Rnd**. Chosen at grain spawn
+  (`incr = ±pitch`); Rnd is a per-grain coin flip. Scan scrub direction is independent
+  (still advances forward through the buffer). Cycle list: SIZ · SPR · SCN · DIR · ATM
+  (5 entries → CycleView 4-column window scrolls).
 - **Atmosphere:** Blur (negative) flattens grain envelopes; Radiation (positive) adds
   sample-hold lo-fi + BBD-style output slew.
 - **Pot map:** Mux A C3 = Swarm, Mux A C4 = Spectra (full bench map: see 4.5a; Settings
   has no pot — Block 11 = Multi encoder).
-- **TODO — grain playback direction:** grains should be playable **forward, backward, or
-  random** (per-grain direction choice at spawn time). Not implemented yet — currently all
-  grains play forward. Open design questions in Section 8 (UI parameter vs. Scan coupling).
 
 **Block 7 / Spectral Resonator (verified Phase 7 — implementation contract):**
 
@@ -254,6 +255,24 @@ Trail Level, i.e. AFTER the pre-fader taps — Rule 2.5 remains unaffected, the 
 sends don't see the wave. The wave only runs across the Trails currently active per Block 1.
 Solo overrides the wave (the soloed Trail stays fully audible); Lock only protects against
 round-robin replacement, not against the wave.
+
+**Block 8+9 (verified Phase 9 — implementation contract):**
+
+- **Pan Drift:** per-Trail LFO (triangle/sine blend + light jitter), Phase spreads LFO
+  offsets (0 = sync … 1 = even spacing), Amplitude = excursion, Velocity = bipolar rate
+  (sign = direction, up to ~2 Hz). Constant-power pan coeffs feed Swarm grain pans and a
+  VCA-weighted **CloudPan** on mono Spectra → stereo. Lives in `CaptureEngine` / wet bus
+  **before Multi Dry/Wet** (2 / 5a); never on the clean dry tap.
+- **Crossfade:** traveling cosine focus lobe across Block-1 Count Trails; Amplitude =
+  depth; Velocity bipolar (sign = direction, UI 4% deadzone, center = freeze). Multiplies
+  the same VCA as Trail Level (`level × fade × xfade`) for `trail_mix` + `SwarmViews.gain`.
+- **Round-robin replace:** BBD-style one-pole slew (~60 ms τ) on `ArmingRecord` before
+  overwrite (extends the earlier linear soft-replace).
+- **Display — Crossfade focus:** when Amplitude > ~0, matching 1px ticks travel vertically
+  immediately left and right of each `T#` on the Home Dashboard (position = focus index
+  among Count Trails; tick height scales with Amplitude). `T#` stays normal (not inverted).
+  Hidden at Amplitude ≈ 0. Remaining Hold is shown in the Life-Bar countdown only
+  (Wandering Beams removed — redundant).
 
 **Block 4 detail (Umbra/Aurora Macro, bipolar, 4% deadzone):** 0% = neutral 1:1 resynthesis.
 Negative values (Umbra) cut away fundamental frequencies, bringing quiet ambient noise
@@ -391,9 +410,10 @@ focus wave (Block 9), and any further FX must also live **inside this wet bus, b
 Resonator Mix, …) still shape their modules *inside* wet — Multi only balances input vs. that
 whole chain. Encoder on D13/D30; push on Mux B C5.
 **Multi menu (interim):** open with Multi turn (default Dry/Wet). Step entries with
-**Cycle short** (reliable) or Multi push short (Mux B C5, polarity auto-calibrated), or
-**Cycle held + Multi turn**. Edit with Multi turn alone. Long Multi push → Home. Further
-shorts: Dry/Wet → Macro1* → Macro2* → Time Unit* → Settings* → … (`*` = dummy UI only).
+**Multi push short** (Mux B C5, polarity auto-calibrated) or **Cycle held + Multi turn**.
+Edit with Multi turn alone. Long Multi push → Home. Further shorts: Dry/Wet → Macro1* →
+Macro2* → Time Unit* → Settings* → … (`*` = dummy UI only). Cycle short alone does **not**
+step Multi (unused per 4.7).
 Encoder turn edits the bound entry (~0.02/detent). Boot Dry/Wet ~0.55. Reverb send stays
 **pre-fader** (before Multi Dry/Wet). Soft-limit on the final bus. `trail_mix` stays
 **analysis input only** (never mixed to the output). Internal Spectra/Swarm makeup must stay
@@ -460,8 +480,14 @@ via a custom `QuadratureEncoder` class (not `daisy::Encoder`), with pull-ups con
 explicitly on both phase pins.
 
 - **Turn:** this Trail's loudness
-- **Short press:** Lock (protects against round-robin replacement and hold-time fade-out)
-- **Long press:** Solo
+- **Short press:** **context-dependent**
+  - **Home Dashboard:** Lock (protects against round-robin replacement and hold-time fade-out)
+  - **CycleView / MultiView:** return to the Home Dashboard (any of the 5 Trail pushes).
+    Lock is **not** applied on that press — press short again on the Dashboard to Lock.
+    Mental model: “two pushes” when you came from a Block menu (Home, then Lock) — not a
+    timed double-click detector.
+- **Long press:** Solo (works from **any** screen — Dashboard, CycleView, or MultiView —
+  because a clear long press is unambiguous; no need to leave the menu first)
 
 ### 4.3 Mod Slots (×4)
 
@@ -582,10 +608,10 @@ are dummy slots); further shorts step the list; long push = Home. Turn edits the
 | A | C2 | Engines |
 | A | C3 | Swarm |
 | A | C4 | Spectra |
-| B | C0 | Pan Drift *(dummy)* |
+| B | C0 | Pan Drift ✔ |
 | B | C1 | Resonator ✔ |
 | B | C2 | Reverb ✔ |
-| B | C3 | Crossfade *(dummy)* |
+| B | C3 | Crossfade ✔ |
 | B | C4 | Filter ✔ |
 
 *(dummy)* = remaining Blocks 8–9 have full CycleRows with registered dummy parameters
@@ -648,20 +674,25 @@ section):**
     (`kEndCatchPot`) — slightly wider than the snap band because the ADC often tops out
     before 0.94 (otherwise Count=5 / Hold INF / Mix=100% / Blend=100% cannot be picked up).
   - Discrete counts round to the nearest whole number after denormalizing.
-- **Dashboard→CycleView opening & focus policy (verified, Phase 5 UI stabilization):**
-  opening requires **cumulative pot travel ≥ ~4%** (`kOpenThreshold = 0.040`) measured from a
-  baseline captured when the Dashboard was entered. Two hard lessons baked into this:
-  (a) never gate opening on per-frame EMA deltas — slow turns stay below any frame threshold
-  and menus become unreachable; (b) never let the baseline re-center while idle ("quiet
-  tracking") — it silently absorbs slow turns with the same symptom. Exactly **one winner per
-  frame** (the pot with the largest travel) opens its Block; all baselines re-arm on open.
-  **While a Block is open, only its own pot edits — all other pots are ignored** until the
-  idle timeout returns to the Dashboard. This single-owner rule is what stopped Block menus
-  thrashing (Trails↔Time↔Engines) from multi-pot ADC noise. The active pot drives
-  `ChangeValue` **every frame**: pickup catch and post-catch tracking need continuous samples;
-  gating edits behind a per-frame step threshold (~1.5%) froze values right after the catch.
-  The small step threshold (`kEditThreshold = 0.015`) only feeds the activity/idle timer.
-  A pending "delete all" confirmation (4.7) still aborts on pot movement ≥ ~3%.
+- **Dashboard→CycleView opening & focus policy (verified, Phase 5 UI stabilization; refined):**
+  opening requires **cumulative pot travel ≥ ~2.8%** (`kOpenThreshold = 0.028`) from a
+  baseline captured when the Dashboard was entered, **plus** a short same-direction motion
+  burst (`kOpenConfirmTravel ≈ 1.2%`) so slow mux drift cannot open a menu. To restore the
+  older travel-only 4% policy: ask the agent *"Revert pot-menu open to baseline"* (see
+  `REVERT` comment on `kOpenThreshold` in `ui_controller.h`). Two hard lessons baked in:
+  (a) never gate opening on per-frame EMA deltas alone — slow turns stay below any frame
+  threshold and menus become unreachable; (b) never let the baseline re-center while idle
+  ("quiet tracking") — it silently absorbs slow turns with the same symptom. Exactly **one
+  winner per frame** (largest qualifying travel) opens its Block; all baselines re-arm on open.
+  **While a Block is open, its own pot edits every frame.** Other pots are ignored **unless**
+  one exceeds a stricter **switch** threshold (`kSwitchThreshold ≈ 6%` travel +
+  `kSwitchConfirmTravel ≈ 1.8%` same-direction burst) — then that Block steals focus
+  (pickup re-armed, baselines reset). That lets you jump Block→Block while performing
+  without waiting for the idle timeout, while still rejecting mux jitter. The active pot
+  drives `ChangeValue` **every frame**: pickup catch and post-catch tracking need continuous
+  samples; gating edits behind a per-frame step threshold (~1.5%) froze values right after
+  the catch. The small step threshold (`kEditThreshold = 0.015`) only feeds the activity/idle
+  timer. A pending "delete all" confirmation (4.7) still aborts on pot movement ≥ ~3%.
 - **Mux reading (verified — hard requirement):** use libDaisy's native mux support
   (`AdcChannelConfig::InitMux` + `GetMuxFloat`). libDaisy advances the select lines inside
   the ADC/DMA callback *after* caching the sample, so every value is guaranteed to come from
@@ -703,22 +734,21 @@ differently):
 
 ### 4.7a Returning to the Home Dashboard
 
-Two paths lead back to the Home Dashboard (4.9), complementing rather than competing with each
-other:
+Paths back to the Home Dashboard (4.9), complementary:
 
-1. **Explicit:** Multi encoder push, long (see above) — immediate return, regardless of the
-   current context.
-2. **Automatic via inactivity timeout:** If **no** pot has been turned and **no** button has
+1. **Explicit — Multi encoder push, long** (see above) — immediate return from any context.
+2. **Explicit — any Trail Level short press** while in CycleView or MultiView — immediate
+   return (does **not** toggle Lock; Lock only on the Dashboard). Cycle short is **not** used
+   for Home (reserved / previously collided with transport when Play lived on Cycle).
+3. **Automatic via inactivity timeout:** If **no** pot has been turned and **no** button has
    been pressed, the display automatically jumps back to the Home Dashboard after **7
    seconds** — regardless of whether you're currently in a cycle display, a Settings submenu,
    or a segmented selection. The most recently bound pot assignments are unaffected by this;
    only the display changes, no controls get unbound. 7s is a starting value (target range
-   5–10s, see the calibration note in 4.11) — long enough to read a value calmly, short enough
-   to avoid staying unnecessarily "stuck" on a cycle display. Fine-tune this in practical use
-   on real hardware. **Bench interim (Phase 5 UI stabilization): `kInactivityMs = 4000`
-   (4s)** — deliberately shorter while the idle timeout is the *only* automatic return path
-   for pot CycleViews. Multi long-push is now the explicit return gesture (4.7); revisit
-   toward the 5–10s target once that feels solid on the bench.
+   5–10s, see the calibration note in 4.11). **Bench interim: `kInactivityMs = 4000` (4s).**
+   With cross-Block pot switching (4.6) and Trail-short Home, the timeout is no longer the
+   only way out of a CycleView — keep it calm for reading values; do not shorten further
+   just for navigation.
 
 ### 4.7b Imprint (global button — D6)
 
@@ -764,8 +794,15 @@ already existed on Cycle.
 - **Buffer** (Block 2): length of the SDRAM ring buffer per Trail = maximum recording length
   of a single take, up to a fixed ceiling of **30 seconds** (`BUFFER_SIZE`, decided — see
   Section 2, point 2; the code needs updating from its current 5s ceiling to match)
-- **Threshold**: triggers automatic recording into the oldest, non-locked active Trail
-  (round-robin)
+- **Threshold**: triggers automatic recording into the oldest eligible, non-locked active
+  Trail (round-robin; eligibility depends on **Overwrite**, below)
+- **Overwrite** (Block 1 toggle, OLED `OVR`, default **ON**):
+  - **ON** — current behaviour: prefer Empty, else steal the oldest unlocked Playing /
+    FadingOut Trail (including mid finite Hold), with soft-replace before overwrite
+  - **OFF** — Hold-Lock: only Empty slots (plus **INF** Hold Trails, still stealable);
+    finite Hold and Fade-Out are protected until the slot becomes Empty; triggers are
+    ignored while the pool is full. Same rule for Threshold, Cont. Rec, and Rec/Trig
+  - User **Lock** remains stronger: never round-robin, never Hold fade-out
 - **Single write-head (verified in dev-phase3v001):** at most one Trail may be in the
   `Recording` state at any given time. A new trigger (Threshold / Cont. Rec / Rec button /
   Trig) is only accepted if no take is currently active; `StartRecording` must clean up any
@@ -780,11 +817,12 @@ already existed on Cycle.
   *both* Spectra and Swarm at ≥~50% Trail Level). All readers share this material
   (trail_mix → Spectra, trail_buffer → Swarm). Spectra `MagToAmp` stays coherent-only;
   Swarm grain amp stays overlap-tamed; raw `trail_mix` is analysis-only (never mixed out).
-- **Soft replace before overwrite (anti-click):** when Cont.Rec / round-robin must steal a
-  still-playing Trail, the engine fades that voice out (~12 ms) before `Recording` begins.
-  Hard-muting an audible Trail at the moment the previous take finished was the click heard
-  only while Play was on (inaudible in Pause because `play_gain`=0). Swarm grains follow the
-  live Trail gain so they mute with the same fade.
+- **Soft replace before overwrite (anti-click):** when round-robin steals a still-playing
+  Trail (Overwrite ON, or INF under Overwrite OFF), the engine fades that voice out
+  (BBD-style ~60 ms τ) before `Recording` begins. Hard-muting an audible Trail at the
+  moment the previous take finished was the click heard only while Play was on (inaudible
+  in Pause because `play_gain`=0). Swarm grains follow the live Trail gain so they mute
+  with the same fade.
 - **Cont. Rec** (Continuous Recording): keeps re-triggering new recordings for as long as the
   input signal stays above the threshold, instead of waiting for it to drop below
 - **On/Off**: global bypass/enable for the capture system
@@ -814,21 +852,22 @@ already existed on Cycle.
 
 SSD1309, 128×64 px. Includes: cycle display (name at bottom, value on top), Home Dashboard
 with Trail status (Level/Lock/Solo), input threshold VU meter with threshold marker,
-CPU/SDRAM meter (top right, hideable via Settings), "Wandering Beams" — rotating rays around
-the Trail symbol that shorten as hold time elapses, visualizing the remaining hold time
-(shorter/slower = closer to fading out), reset confirmation dialog ("Delete all Trails?", see
-4.7).
+CPU/SDRAM meter (top right, hideable via Settings), record slot indicator (`R1`…`R5` idle /
+`REC1`…`REC5` while armed/recording — same understated **Font_4x6** as the CPU meter),
+Remaining Hold is shown in the Life-Bar countdown (numeric / INF). Reset confirmation dialog
+("Delete all Trails?", see 4.7).
 
 **Dashboard row layout (verified in dev-phase3v001):** each active Trail gets one row:
 
 ```
-[VU] T# [3px] nnn% [1px] L [1px] S [1px] [Life-Bar]
+[VU] [xf] T# [xf] [3px] nnn% [1px] L [1px] S [1px] [Life-Bar]
 ```
 
-Fixed spacing: keep the existing gap between the VU meter and the Trail number (`T#`), then a
-firm 3px gap before the percentage, and 1px each between the percentage, `L` (Lock indicator),
-`S` (Solo indicator), and the Life-Bar. The `L`/`S` columns are reserved space even when
-inactive — so the Life-Bar never visually jumps left/right depending on Lock/Solo state.
+Fixed spacing: 1px Crossfade focus ticks flank `T#` when Block-9 Amplitude > ~0 (`T#` is
+shifted 1px right so both ticks are equal width). Then a firm 3px gap before the percentage,
+and 1px each between the percentage, `L` (Lock indicator), `S` (Solo indicator), and the
+Life-Bar. The `L`/`S` columns are reserved space even when inactive — so the Life-Bar never
+visually jumps left/right depending on Lock/Solo state.
 
 **Count controls visible rows:** only as many Trail rows are drawn as `Count` (Block 1)
 specifies — a Trail index beyond `Count` isn't shown, and the Rec/manual-trigger round-robin
@@ -905,10 +944,15 @@ appearance from scratch each time. Applies equally to the block pots (1–10), t
 2. A continuous horizontal **ceiling line** spanning the full width — a shared 100% reference
    for all parameters of the current block at once, so their bar heights can be compared
    directly against each other (not per individual bar)
-3. Parameter area: up to 5 equal-width columns (for blocks with ≤5 cycle entries; mod
-   slots/Multi have fewer)
-4. A segmented, framed row with all parameter abbreviations (3–4 characters), the active entry
-   fully inverted (white fill, black text)
+3. Parameter area: up to **4** equal-width columns visible at once (`kCyclePageCols`).
+   Column width is always that of a 4-slot page — blocks with only 2–3 entries (e.g.
+   Crossfade, Engines) do **not** stretch wider; unused slots stay empty on the right.
+   Blocks with more cycle entries (e.g. Trails with five params) keep that same width and
+   **slide a window** left/right so the active parameter stays on screen; abbreviations that
+   don't fit scroll out of the segmented row. Header `n/m` always reflects the full list
+   length (e.g. `5/5`), not the visible page size.
+4. A segmented, framed row with the **visible** parameter abbreviations (3–4 characters),
+   the active entry fully inverted (white fill, black text)
 
 **Active parameter — two vertical lines instead of a closed frame:** The column of the
 currently bound parameter gets a vertical line on the left and right, starting seamlessly at
@@ -932,7 +976,7 @@ line, centered above its column.
    for the active parameter**, **half column width for inactive bipolar parameters** (enough
    to signal "this is bipolar" without competing with the bar).
 
-3. **Toggle (2 states, e.g. On/Off, Cont. Rec, Quantized, Instant Playback)** — no bar. Both
+3. **Toggle (2 states, e.g. On/Off, Cont. Rec, Overwrite, Quantized, Instant Playback)** — no bar. Both
    states stay visible side by side (left/right, matching the pot's/encoder's turn direction),
    the current one shown inverted. All other parameters in the column row remain visible as
    normal — the toggle only occupies its own column, never the full screen width.
@@ -1014,7 +1058,7 @@ determined yet.
 | 6 | Engine blend (Block 3) ✔ | Continuous crossfading Spectra↔Swarm |
 | 7 | Spectral Resonator ✔ | Mix/Decay/Pitch/Quantized active, intonation from Settings effective |
 | 8 | Reverb & Filter Mix ✔ | ReverbSc + Character; SVF LP Filter Mix with Destination |
-| 9 | Pan Drift & Crossfade & Wandering Beams | Phase-offset pan LFOs, crossfade slew, display visualization |
+| 9 | Pan Drift & Crossfade ✔ | Phase-offset pan LFOs, crossfade slew, focus ticks on Home |
 | 10 | Mod system | 4 slots, jack normalling, registry destination, divider/clock |
 | 11 | Multi & Settings & Calibration | Dry/Wet/Macros, Settings submenu complete, CV calibration |
 
@@ -1091,7 +1135,7 @@ Read ARCHITECTURE.md first, especially Section 2 (points 2, 4), 4.1 (Block 1+2),
 
 Implement the capture engine:
 - 5 ring buffers via `DSY_SDRAM_BSS float trail_buffer[5][BUFFER_SIZE];`
-- Real CycleRow for Block 1 (Count, Threshold, Cont. Rec, On/Off) and Block 2
+- Real CycleRow for Block 1 (Count, Threshold, Cont. Rec, Overwrite, On/Off) and Block 2
   (Buffer, Hold, Fade In, Fade Out), replacing the dummy rows
 - Round-robin recording on threshold crossing OR Rec button/Trig, into the
   oldest non-locked active Trail
@@ -1143,7 +1187,8 @@ Prompt for Cursor (historical — already implemented):
 Read ARCHITECTURE.md first, especially 4.1 (Block 3+5).
 
 Implement granular Swarm on trail_buffer via Capture SwarmTrailView snapshots.
-CycleRow Block 5: Size, Spread, Scan, Atmosphere (Blur↔Radiation + BBD slew).
+CycleRow Block 5: Size, Spread, Scan, Direction (Fwd/Rev/Rnd), Atmosphere
+(Blur↔Radiation + BBD slew).
 Pitch Swarm + temporary Engines A/B toggle (Swarm ON/OFF). Register in
 ParameterRegistry. Audio: dry×0.85 + selected engine wet.
 ```
@@ -1201,7 +1246,7 @@ Implement:
   gets filtered, pre-fader tap)
 ```
 
-### Phase 9 — Pan Drift, Crossfade & Wandering Beams
+### Phase 9 — Pan Drift & Crossfade
 
 ```
 Prompt for Cursor:
@@ -1219,8 +1264,7 @@ Implement:
   4% deadzone, center = focus freeze); plus slew-rate limiting (BBD-style) on
   round-robin replacement of a Trail. Still part of the wet chain Multi blends
   against clean input (2 / 5a) — do not touch the Multi dry tap.
-- Display: "Wandering Beams" — rotating rays around each Trail symbol that
-  shorten/slow down as hold time elapses
+- Display: Crossfade focus ticks beside `T#` on Home; Hold remaining via Life-Bar
 ```
 
 ### Phase 10 — Mod System
@@ -1306,12 +1350,22 @@ Implement:
   Drive from Daisy GPIO if pin budget allows — **D30 is Multi DT** now; D31–D32 not on
   classic Seed header. Prefer mux-driven LEDs or carrier glue if needed. Confirm polarity/
   current on the carrier before assigning pins. Not required for V1 audio; UI polish.
-- **TODO — Swarm grain playback direction (forward / backward / random):** grains should
-  support different playback directions — forward, backward, and random (per grain). Open:
-  how it's exposed in the UI (a new entry in the Block 5 cycle list vs. folding it into an
-  existing parameter such as negative Scan) and whether "random" means per-grain coin flip
-  or a probability blend. Implementation itself is cheap (negate the grain's playback rate
-  at spawn), the decision is UI/param design.
+- **~~Swarm grain playback direction~~ Resolved:** Block 5 **Direction** (`DIR`) —
+  Fwd / Rev / Rnd as CountNum; Rnd = per-grain coin flip at spawn; Scan scrub unchanged.
+- **TODO — Clock jack + Trig jack (incomplete vs. 4.1a / 4.4 / 4.5):** design notes exist for
+  Time Unit (Clock↔Seconds), plug-detect prompt, clock-lost fallback, and Rec∥Trig, but the
+  story is **not implementation-complete** and likely **not fully specified** yet. Missing /
+  open to flesh out before wiring:
+  - **Clock input:** GPIO or conditioned digital input on the carrier; edge detect; period /
+    BPM measurement; feed Buffer/Hold when Time Unit = Clock; subdivision for Mod Dividers
+    (4.3) and Auto-Mod rates (4.10); silent fallback to Seconds on clock loss (4.1a)
+  - **Trig input:** still **deferred** on the bench (D13 = Multi CLK; `kTrigInput` is a
+    legacy alias). Prefer mux / parallel to Rec (4.5a) — same `RequestManualTrigger` path
+    as the Rec button; confirm active level, debounce, and Overwrite/Hold-Lock rules apply
+  - **Docs gap:** expand 4.1a / 4.4 beyond the current sketch (expected Eurorack clock/trig
+    levels, pulse width, min/max tempo, UI when TU is still a Multi dummy, interaction with
+    Cont. Rec / Overwrite). Track with Phase 11 (Time Unit live) and/or a small dedicated
+    I/O phase once the carrier pins are locked
 - **Macro1/Macro2 target assignment:** currently fixed in code (Phase 11), no front-panel UI decided for it yet
 - **~~Multi encoder push function~~ Resolved:** short = step through the Multi cycle list, long = global return to the Home Dashboard (see 4.7a)
 - **Pot/encoder turn direction:** clockwise = which state for toggles (left/right, see 4.11), which direction for bipolar values — depends on the final hardware wiring, not yet determined

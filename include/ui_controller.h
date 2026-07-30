@@ -15,6 +15,7 @@
 #include "trail_level.h"
 #include "multi_params.h"
 #include "quadrature_encoder.h"
+#include "spatial_params.h"
 
 #include <atomic>
 #include <cstdint>
@@ -38,8 +39,15 @@ class UiController
     static constexpr uint32_t kLongPressMs          = 1500;
     // Value edit once a Block is open (ignore ADC chatter).
     static constexpr float    kEditThreshold        = 0.015f;
-    // Leave Dashboard — intentional pot travel from baseline.
-    static constexpr float    kOpenThreshold        = 0.040f;
+    // Leave Dashboard — cumulative travel from baseline + same-direction confirm.
+    // REVERT "pot-menu open baseline": set kOpenThreshold=0.040f and remove the
+    // kOpenConfirmTravel / open_dir_* gate (Phase-5 policy: travel-only @ 4%).
+    static constexpr float    kOpenThreshold        = 0.028f;
+    static constexpr float    kOpenConfirmTravel    = 0.012f;
+    static constexpr float    kOpenStepNoise        = 0.002f;
+    // Switch Block while another CycleView is open — stricter than open.
+    static constexpr float    kSwitchThreshold      = 0.060f;
+    static constexpr float    kSwitchConfirmTravel  = 0.018f;
     static constexpr float    kResetCancelThreshold = 0.04f;
     static constexpr float    kScrollStepThreshold  = 0.10f;
     static constexpr uint32_t kScrollMinIntervalMs  = 180;
@@ -67,6 +75,7 @@ class UiController
               SwarmParamValues&      swarm_params,
               CycleRow&              multi_row,
               MultiParamValues&      multi_params,
+              SpatialParamValues&    spatial_params,
               std::atomic<float>*    dry_wet,
               std::atomic<float>*    cpu_load = nullptr);
 
@@ -105,6 +114,7 @@ class UiController
     SwarmParamValues*    swarm_params_;
     CycleRow*            multi_row_;
     MultiParamValues*    multi_params_;
+    SpatialParamValues*  spatial_params_;
     std::atomic<float>*  dry_wet_;
     std::atomic<float>*  cpu_load_;
 
@@ -139,6 +149,9 @@ class UiController
     float    pot_prev_[kMaxCycleRows];
     float    pot_baseline_[kMaxCycleRows];
     bool     pot_prev_ok_[kMaxCycleRows];
+    // Same-direction step accumulator for Dashboard→CycleView open confirm.
+    float    open_dir_accum_[kMaxCycleRows];
+    int8_t   open_dir_sign_[kMaxCycleRows];
 };
 
 } // namespace perseids

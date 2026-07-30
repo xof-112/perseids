@@ -40,10 +40,34 @@ void DisplayRenderer::Init(daisy::DaisySeed& seed)
 DisplayRenderer::ColumnGeom DisplayRenderer::ColumnGeometry(size_t index,
                                                             size_t count) const
 {
+    // Always size columns as if the page held kCyclePageCols entries, so
+    // 2- and 3-param blocks match 4-wide Trails/Swarm column width.
+    const size_t slots
+        = (count > 0 && count < kCyclePageCols) ? kCyclePageCols : count;
     const int total_w = kWidth - 2 * kMargin;
-    const int col_w   = static_cast<int>(total_w / static_cast<int>(count));
+    const int col_w   = static_cast<int>(total_w / static_cast<int>(slots));
     const int x       = kMargin + static_cast<int>(index) * col_w;
     return {x, col_w, x + col_w / 2};
+}
+
+void DisplayRenderer::CycleWindow(size_t  param_count,
+                                  size_t  active_col,
+                                  size_t& out_start,
+                                  size_t& out_page)
+{
+    out_page = param_count < kCyclePageCols ? param_count : kCyclePageCols;
+    if(param_count <= out_page || out_page == 0)
+    {
+        out_start = 0;
+        return;
+    }
+    // Keep active visible; left-align until the window must slide right.
+    if(active_col + 1 <= out_page)
+        out_start = 0;
+    else
+        out_start = active_col + 1 - out_page;
+    if(out_start + out_page > param_count)
+        out_start = param_count - out_page;
 }
 
 void DisplayRenderer::Clear()
@@ -453,10 +477,14 @@ void DisplayRenderer::DrawSegmentedRow(const ParameterRegistry& reg,
                                        const CycleRow&          row,
                                        size_t                   active_col)
 {
-    const size_t count = row.ParamCount();
-    for(size_t i = 0; i < count; ++i)
+    size_t       start = 0;
+    size_t       page  = 0;
+    CycleWindow(row.ParamCount(), active_col, start, page);
+
+    for(size_t v = 0; v < page; ++v)
     {
-        const ColumnGeom col = ColumnGeometry(i, count);
+        const size_t        i   = start + v;
+        const ColumnGeom    col = ColumnGeometry(v, page);
         const ParameterDef* def = row.ParamAt(reg, i);
         if(def == nullptr)
             continue;
@@ -531,10 +559,14 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
     Clear();
     DrawCeilingLine();
 
-    const size_t count = row.ParamCount();
-    for(size_t i = 0; i < count; ++i)
+    size_t start = 0;
+    size_t page  = 0;
+    CycleWindow(row.ParamCount(), active_col, start, page);
+
+    for(size_t v = 0; v < page; ++v)
     {
-        const ColumnGeom      col = ColumnGeometry(i, count);
+        const size_t        i   = start + v;
+        const ColumnGeom    col = ColumnGeometry(v, page);
         const ParameterDef* def = row.ParamAt(reg, i);
         if(def == nullptr)
             continue;
@@ -571,6 +603,7 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
         }
     }
 
+    // Header n/m uses full ParamCount (not the visible page).
     DrawValueHeader(reg, row, active_col, show_cpu_meter, cpu_load);
     DrawSegmentedRow(reg, row, active_col);
 
@@ -579,21 +612,25 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
     if(row.PickupActive() && !row.InCycleScroll())
     {
         const size_t bound = row.BoundIndex();
-        if(const ParameterDef* def = row.ParamAt(reg, bound))
+        if(bound >= start && bound < start + page)
         {
-            if(def->display_type != ParamDisplayType::Toggle)
+            if(const ParameterDef* def = row.ParamAt(reg, bound))
             {
-                DrawPickupLine(ColumnGeometry(bound, count),
-                               row.PickupPotNorm(),
-                               def->display_type);
+                if(def->display_type != ParamDisplayType::Toggle)
+                {
+                    DrawPickupLine(ColumnGeometry(bound - start, page),
+                                   row.PickupPotNorm(),
+                                   def->display_type);
+                }
             }
         }
     }
 
-    if(modulated_norm >= 0.f)
+    if(modulated_norm >= 0.f && active_col >= start
+       && active_col < start + page)
     {
         if(const ParameterDef* def = row.ParamAt(reg, active_col))
-            DrawModDots(ColumnGeometry(active_col, count),
+            DrawModDots(ColumnGeometry(active_col - start, page),
                         modulated_norm,
                         def->display_type);
     }
@@ -675,7 +712,9 @@ void DisplayRenderer::DrawDashboard(bool                playing,
                                     size_t              active_trail_count,
                                     bool                show_cpu_meter,
                                     bool                show_ram_meter,
-                                    float               cpu_load)
+                                    float               cpu_load,
+                                    float               xfade_focus,
+                                    float               xfade_amp)
 {
     Clear();
 
@@ -701,13 +740,14 @@ void DisplayRenderer::DrawDashboard(bool                playing,
     display_.SetCursor(0, 0);
     display_.WriteString("PERSEIDS", Font_6x8, true);
 
+    // Same understated Font_4x6 as the CPU/RAM meter (ARCHITECTURE 4.9).
     char rec_hdr[12];
     if(rec_trig_active)
         snprintf(rec_hdr, sizeof(rec_hdr), "REC%u", rec_trail_slot);
     else
         snprintf(rec_hdr, sizeof(rec_hdr), "R%u", rec_trail_slot);
-    display_.SetCursor(54, 0);
-    display_.WriteString(rec_hdr, Font_6x8, true);
+    display_.SetCursor(54, 1);
+    display_.WriteString(rec_hdr, Font_4x6, true);
 
     // PLAY/PAUSE right-aligned; optional C… / R… meters immediately left (4.9).
     const char* play_str = playing ? "PLAY" : "PAUSE";
@@ -792,9 +832,10 @@ void DisplayRenderer::DrawDashboard(bool                playing,
     for(int x = kVuX0; x <= kVuX1; ++x)
         display_.DrawPixel(x, thr_y, true);
 
-    // Row layout: VU | T# | 3px | % | 1px | L | 1px | S | 1px | life bar
+    // Row layout: VU | [xf] T# [xf] | 3px | % | 1px | L | 1px | S | 1px | life
     // Font_6x8: T#=12px, %%=24px ("100%"), L/S=6px each.
-    constexpr int kTx     = 12; // after VU — gap already matches previous layout
+    // T# sits 1px further right so Crossfade side ticks are equal width.
+    constexpr int kTx     = 13;
     constexpr int kGapT   = 3;
     constexpr int kGap    = 1;
     constexpr int kTWidth = 12; // "T1"
@@ -813,6 +854,9 @@ void DisplayRenderer::DrawDashboard(bool                playing,
         shown = 1;
     if(shown > kTrailCount)
         shown = kTrailCount;
+
+    // Crossfade focus — thin ticks left & right of T# (Block 9).
+    DrawCrossfadeFocusBars(kTx, kTWidth, 17, 8, shown, xfade_focus, xfade_amp);
 
     for(size_t i = 0; i < shown; ++i)
     {
@@ -843,6 +887,51 @@ void DisplayRenderer::DrawDashboard(bool                playing,
 
         DrawTrailLifeBar(kBarX, y, kBarW, kBarH, life[i]);
     }
+}
+
+void DisplayRenderer::DrawCrossfadeFocusBars(int    t_x,
+                                             int    t_w,
+                                             int    row0_y,
+                                             int    row_h,
+                                             size_t shown,
+                                             float  focus,
+                                             float  amp)
+{
+    if(amp < 0.04f || shown < 1 || row_h < 1 || t_w < 1)
+        return;
+
+    float f = focus;
+    if(f < 0.f)
+        f = 0.f;
+    const float fmax = static_cast<float>(shown) - 0.001f;
+    if(f > fmax)
+        f = fmax;
+
+    // Continuous Y through the Trail stack (row centers).
+    const float y_mid
+        = static_cast<float>(row0_y) + f * static_cast<float>(row_h) + 3.f;
+    int h = 2 + static_cast<int>(amp * 5.f + 0.5f);
+    if(h > 7)
+        h = 7;
+    int y0 = static_cast<int>(y_mid - 0.5f * static_cast<float>(h) + 0.5f);
+    int y1 = y0 + h - 1;
+
+    const int band0 = row0_y;
+    const int band1 = row0_y + static_cast<int>(shown) * row_h - 1;
+    if(y0 < band0)
+        y0 = band0;
+    if(y1 > band1)
+        y1 = band1;
+    if(y1 < y0)
+        return;
+
+    // Matching 1px ticks immediately left and right of the T# glyph.
+    const int x_left  = t_x - 1;
+    const int x_right = t_x + t_w;
+    if(x_left >= 0)
+        display_.DrawRect(x_left, y0, x_left, y1, true, true);
+    if(x_right < kWidth)
+        display_.DrawRect(x_right, y0, x_right, y1, true, true);
 }
 
 } // namespace perseids

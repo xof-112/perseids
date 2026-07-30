@@ -23,6 +23,8 @@ class DisplayRenderer
     static constexpr int kSegRowH     = 12;
     static constexpr int kParamTop    = 12;
     static constexpr int kParamBottom = 51;
+    // CycleView shows at most this many columns; extra params scroll in.
+    static constexpr size_t kCyclePageCols = 4;
 
     void Init(daisy::DaisySeed& seed);
 
@@ -38,7 +40,9 @@ class DisplayRenderer
                        size_t              active_trail_count,
                        bool                show_cpu_meter = false,
                        bool                show_ram_meter = false,
-                       float               cpu_load       = 0.f);
+                       float               cpu_load       = 0.f,
+                       float               xfade_focus    = 0.f,
+                       float               xfade_amp      = 0.f);
 
     void DrawCycleView(const ParameterRegistry& reg,
                        const CycleRow&          row,
@@ -58,6 +62,12 @@ class DisplayRenderer
     };
 
     ColumnGeom ColumnGeometry(size_t index, size_t count) const;
+
+    // Sliding window so ParamCount > kCyclePageCols keeps 4-wide columns.
+    static void CycleWindow(size_t  param_count,
+                            size_t  active_col,
+                            size_t& out_start,
+                            size_t& out_page);
 
     void Clear();
     void DrawCeilingLine();
@@ -96,6 +106,13 @@ class DisplayRenderer
                           int                w,
                           int                h,
                           const TrailLifeUi& life);
+    void DrawCrossfadeFocusBars(int    t_x,
+                                int    t_w,
+                                int    row0_y,
+                                int    row_h,
+                                size_t shown,
+                                float  focus,
+                                float  amp);
 
     void FormatValue(const ParameterDef& def, char* out, size_t out_len) const;
     void FormatCountLabel(const ParameterDef& def,

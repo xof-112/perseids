@@ -50,6 +50,16 @@ class TrailLevelController
     uint8_t RecTrailSlot() const;
     bool    RecTrigActive() const;
 
+    // When true, Trail short-push requests Home instead of toggling Lock
+    // (CycleView / MultiView). Long-push Solo is unchanged.
+    void SetShortPushHomes(bool enabled) { short_push_homes_ = enabled; }
+    bool ConsumeHomeRequest()
+    {
+        const bool r   = home_requested_;
+        home_requested_ = false;
+        return r;
+    }
+
   private:
     void HandlePush(size_t index, ButtonGesture::Event event);
     void HandleEncoderStep(size_t index, int32_t steps);
@@ -70,6 +80,8 @@ class TrailLevelController
     int32_t       pending_steps_[kCount];
     bool          activity_this_frame_;
     bool          level_edit_activity_;
+    bool          short_push_homes_;
+    bool          home_requested_;
 };
 
 } // namespace perseids
