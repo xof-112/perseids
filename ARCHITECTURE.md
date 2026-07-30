@@ -109,6 +109,11 @@ every request).
 5. **Pre-fader routing everywhere.** Taps for filter destination, mod matrix, and reverb send
    occur strictly before the VCA mixer multipliers. A Trail muted to 0 remains active as a
    modulation source/effect send.
+5a. **Multi Dry/Wet is the final output blender.** Clean input (listen-through) on one side;
+   the **entire wet chain** on the other — Spectra/Swarm, Resonator, Reverb, Filter inserts,
+   **and every future sound-shaper / spatializer** (Pan Drift, Crossfade focus wave, …). New
+   audio effects must insert **before** Multi Dry/Wet, never on the clean dry tap. Local Mix
+   pots stay inside their modules; Multi only balances input vs. the finished wet bus.
 6. **Non-blocking ADC mux polling in the main loop**, never in the audio callback. Smooth
    incoming values with an exponential moving average (EMA) to suppress pot jitter.
    **Note:** The Daisy Seed only has 12 native ADC pins (confirmed via Electrosmith
@@ -315,13 +320,14 @@ exclusive (one knob, two directions), not combinable at the same time.
 
 **Block 10 / Filter Mix (verified Phase 8 — implementation contract):**
 
-- **Role:** stereo DaisySP `Svf` lowpass insert on a selectable pre-fader stage.
+- **Role:** stereo DaisySP `Svf` lowpass insert on a selectable stage **inside the wet chain**
+  (before Multi Dry/Wet). Dest=Input filters listen-through into the wet bus (Multi dry stays
+  clean); Dest Sp/Sw/Rv insert on those buffers in place.
 - **Params:** Cutoff (exp 80 Hz…~16 kHz), Resonance (`SetRes`), Feedback (audio-rate
   feedback into cutoff + mild `SetDrive`), Destination (`CountNum` 1…5, labels
   **Off / Inp / Sp / Sw / Rv** via `ParameterDef::enum_labels`).
 - **Destination:** **1 Off** (SVF skipped, CPU) → 2 Input → 3 Spectra → 4 Swarm → 5 Reverb
-  wet. **Boot default = Off.** Applied in place before the final mix; Reverb dest runs after
-  the tank.
+  wet. **Boot default = Off.** Reverb dest runs after the tank; all dests finish before Multi.
 - **Mode:** LP is the Block 10 default (no Mode param on the CycleRow). BP/HP remain on the
   `Svf` for a later Mode entry if needed.
 - **Pot map:** Mux B C4 = Filter.
@@ -366,12 +372,23 @@ so Sidechain mode (Phase 11) is a mode switch later, not a rewire.
     Spectra/Swarm/Reverb — a live instrument can be "commented on" this way by a completely
     independent audio source, without the two signals interfering with each other's analysis
 
-**Listen-through (temporary bench scaffolding through Phase 11 Dry/Wet):** Stereo mode
-dry-monitors the capture signal onto Out at a reduced gain (~0.35). Engine wet is soft-limited
-(`tanh`) then mixed on top — `trail_mix` stays **analysis input only** (never mixed to the
-output). Internal Spectra/Swarm makeup must stay conservative: raising MagToAmp / grain amp
-for loudness reintroduced crackle above ~50% Trail Level on both engines. Final balance lands
-with Multi Dry/Wet (Block 11).
+**Multi Dry/Wet (Block 11 encoder — live):** Global equal-power blender between **clean
+input** (capture listen-through, never processed) and the **fully processed wet bus** —
+everything that shapes the sound after capture. Today that includes Spectra/Swarm (with
+Spectral Resonator on Swarm), Filter inserts (Dest Sp/Sw/Rv; Dest Input into the wet bus),
+and Reverb return. **Mandatory for later phases:** Pan Drift (Block 8), Crossfade focus wave
+(Block 9), and any further FX must also live **inside this wet bus, before Multi** (Section 2
+point 5a). Local Mix pots (Reverb Mix, Resonator Mix, …) still shape their modules *inside*
+wet — Multi only balances input vs. that whole chain. Encoder on D13/D30; push on Mux B C5.
+**Multi menu (interim):** open with Multi turn (default Dry/Wet). Step entries with
+**Cycle short** (reliable) or Multi push short (Mux B C5, polarity auto-calibrated), or
+**Cycle held + Multi turn**. Edit with Multi turn alone. Long Multi push → Home. Further
+shorts: Dry/Wet → Macro1* → Macro2* → Time Unit* → Settings* → … (`*` = dummy UI only).
+Encoder turn edits the bound entry (~0.02/detent). Boot Dry/Wet ~0.55. Reverb send stays
+**pre-fader** (before Multi Dry/Wet). Soft-limit on the final bus. `trail_mix` stays
+**analysis input only** (never mixed to the output). Internal Spectra/Swarm makeup must stay
+conservative: raising MagToAmp / grain amp for loudness reintroduced crackle above ~50% Trail
+Level on both engines.
 
 ### 4.1a Time Unit (Clock ↔ Seconds) for Buffer and Hold
 
@@ -508,7 +525,7 @@ recording independent of the threshold (same round-robin logic as the automatic 
 | D10 | OLED MOSI (SPI1 MOSI) |
 | D11 | OLED RST (RES) |
 | D12 | Rec button |
-| D13 | Trig input (3.5mm jack) |
+| D13 | Multi encoder CLK (Trig jack deferred — not on dedicated GPIO) |
 | D14 | Trail 1 push (Lock/Solo) |
 | D15 | Mux A ADC (A0) |
 | D16 | Mux B ADC (A1) |
@@ -525,13 +542,26 @@ recording independent of the threshold (same round-robin logic as the automatic 
 | D27 | Trail 4 encoder DT |
 | D28 | Trail 5 encoder CLK |
 | D29 | Trail 5 encoder DT |
-| D30–D32 | *free* |
+| D30 | Multi encoder DT (USB-HS D+ on classic Seed — OK if USB-HS unused) |
+| D31–D32 | *not on classic Seed header* (Seed 2 DFM only) |
 
 Confirms the correction in Section 2, point 6: the two mux chains have **separate** ADC
 inputs (A0/A1, not a shared common line), and the OLED runs on SPI1 in 4-wire mode (no MISO
-needed, display is write-only). D30–D32 are free for future use (e.g. mod slots,
-Multi encoder, jack detection lines — not yet assigned as of Phase 2). **D6 = Imprint button**
-(Play/Pause short, Imprint lock long).
+needed, display is write-only). **D6 = Imprint button** (Play/Pause short, Imprint lock long).
+
+**Multi encoder wiring (implemented — CLK + DT + Push):**
+
+| Multi encoder | Pin / channel | Notes |
+|---|---|---|
+| CLK (A) | **D13** | GPIO (`kMultiEncClk`) |
+| DT (B) | **D30** | GPIO (`kMultiEncDt`) — USB-HS D+; OK if USB-HS unused |
+| Push | **Mux B C5** | digital via ADC (`kMultiPush*`); pull-up to 3V3, switch to GND |
+| Common | GND | |
+
+Rec remains **D12**. OLED unchanged. **D14** = Trail‑1 Push. Mux poll covers C0–C5.
+If Trig jack is added later, prefer mux (parallel to a button net) — **not** D13 (Multi CLK).
+Interim firmware: short push opens Multi menu (Dry/Wet default; Macro1/2, Time Unit, Settings
+are dummy slots); further shorts step the list; long push = Home. Turn edits the bound entry.
 
 **Bench pot map, all 10 block pots wired (`hw_pins.h` / `main.cpp`):**
 
@@ -677,8 +707,8 @@ other:
    to avoid staying unnecessarily "stuck" on a cycle display. Fine-tune this in practical use
    on real hardware. **Bench interim (Phase 5 UI stabilization): `kInactivityMs = 4000`
    (4s)** — deliberately shorter while the idle timeout is the *only* automatic return path
-   (see 4.5a note: Trail-encoder return removed, Multi encoder not built yet). Revisit toward
-   the 5–10s target once the explicit return gesture exists.
+   for pot CycleViews. Multi long-push is now the explicit return gesture (4.7); revisit
+   toward the 5–10s target once that feels solid on the bench.
 
 ### 4.7b Imprint (global button — D6)
 
@@ -1167,12 +1197,13 @@ Implement:
 - Pan Drift: an independent LFO per Trail (triangle/sine blend + slight jitter),
   constant-power panning. CycleRow Block 8: Phase (phase offset between the
   Trails' LFOs, 0%=synchronous, 100%=maximally offset), Amplitude (excursion),
-  Velocity (speed)
+  Velocity (speed). **Route inside the wet bus before Multi Dry/Wet** (2 / 5a).
 - Crossfade: a traveling amplitude wave across the active Trails per 4.1 (Block
   9 detail), multiplicative on the VCA stage AFTER the pre-fader taps. CycleRow
   Block 9: Amplitude (wave depth), Velocity (bipolar: sign = travel direction,
   4% deadzone, center = focus freeze); plus slew-rate limiting (BBD-style) on
-  round-robin replacement of a Trail
+  round-robin replacement of a Trail. Still part of the wet chain Multi blends
+  against clean input (2 / 5a) — do not touch the Multi dry tap.
 - Display: "Wandering Beams" — rotating rays around each Trail symbol that
   shorten/slow down as hold time elapses
 ```
@@ -1228,7 +1259,9 @@ Implement:
 
 ## 8. Open Points
 
-- **~~Exact GPIO pin assignment~~ Resolved:** see 4.5a (verified against Phase 2 implementation, D6/D30–D32 still free for later phases)
+- **~~Exact GPIO pin assignment~~ Resolved:** see 4.5a. **Multi live:** CLK **D13**, DT **D30**,
+  Push **Mux B C5**; Dry/Wet default + Multi menu (Macro1/2/Time Unit/Settings dummies);
+  long push = Home. Full Settings submenu / macros = Phase 11. Rec **D12**. D14 = Trail‑1.
 - **~~Spectra Phase 4 engine contract~~ Resolved:** see 4.1 Block 4 / Spectra engine (FFT 512, 32 partials, trail_mix analysis, stylized additive — not 1:1). Partials→64 only if CPU/flash allow later
 - **~~Phase 4 bench pot map~~ Resolved:** see 4.5a (Mux A Trails/Time/Engines, Mux B Spectra/Settings)
 - **~~Pickup arming / pot-end meet-band~~ Resolved:** see 4.6 (one-shot arm + `kEndCatchPot` 0.90)
@@ -1246,9 +1279,9 @@ Implement:
   level-proportional crackle. Leave as-is until revisited.
 - **TODO — Play / Rec illuminated switch LEDs:** panel switches may have built-in LEDs
   (Play = green solid / blink for playing vs paused; Rec = red while armed/recording).
-  Drive from Daisy GPIO if pin budget allows — likely candidates still free: **D30–D32**
-  (D6 is Imprint). Confirm LED polarity/current (series resistor, active-high/low) on the
-  carrier before assigning pins in `hw_pins.h`. Not required for V1 audio; UI polish.
+  Drive from Daisy GPIO if pin budget allows — **D30 is Multi DT** now; D31–D32 not on
+  classic Seed header. Prefer mux-driven LEDs or carrier glue if needed. Confirm polarity/
+  current on the carrier before assigning pins. Not required for V1 audio; UI polish.
 - **TODO — Swarm grain playback direction (forward / backward / random):** grains should
   support different playback directions — forward, backward, and random (per grain). Open:
   how it's exposed in the UI (a new entry in the Block 5 cycle list vs. folding it into an

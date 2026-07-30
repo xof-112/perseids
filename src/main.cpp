@@ -17,6 +17,7 @@
 #include "spectra_params.h"
 #include "swarm_engine.h"
 #include "swarm_params.h"
+#include "multi_params.h"
 #include "ui_controller.h"
 
 #include <atomic>
@@ -33,6 +34,7 @@ perseids::SwarmParamValues      g_swarm_params;
 perseids::ResoParamValues       g_reso_params;
 perseids::ReverbParamValues     g_reverb_params;
 perseids::FilterParamValues     g_filter_params;
+perseids::MultiParamValues      g_multi_params;
 perseids::DummyBlockParamValues g_dummy_params;
 perseids::CaptureEngine      g_capture;
 perseids::SpectraEngine      g_spectra;
@@ -44,6 +46,7 @@ perseids::ReverbEngine       g_reverb;
 perseids::FilterEngine       g_filter;
 CpuLoadMeter                 g_cpu_meter;
 std::atomic<float>           g_cpu_load{0.f};
+std::atomic<float>           g_dry_wet{0.55f};
 
 float g_trail_mix[256];
 float g_spectra_out[256];
@@ -55,9 +58,17 @@ float g_reverb_wet_l[256];
 float g_reverb_wet_r[256];
 float g_eng_l[256];
 float g_eng_r[256];
+// Clean capture listen-through snapshot for Multi Dry/Wet dry side
+// (Filter Dest=Input must not color the global dry tap).
+float g_dry_l[256];
+float g_dry_r[256];
 
 // Filter Destination CountNum labels (1…5 → Off/Inp/Sp/Sw/Rv).
 const char* const kFilterDestLabels[] = {"Off", "Inp", "Sp", "Sw", "Rv"};
+
+// Multi Time Unit / Settings stub labels (Phase 11 interim dummies).
+const char* const kTimeUnitLabels[]    = {"Sec", "Clk"};
+const char* const kSettingsStubLabels[] = {"---"};
 
 const uint16_t kTrailsIds[]
     = {perseids::kTrailsCount,
@@ -115,6 +126,13 @@ const uint16_t kFilterIds[] = {perseids::kFilterCutoff,
                                perseids::kFilterResonance,
                                perseids::kFilterFeedback,
                                perseids::kFilterDestination};
+
+// Block 11 Multi — Dry/Wet first (default); rest dummy until Phase 11.
+const uint16_t kMultiIds[] = {perseids::kMultiDryWet,
+                              perseids::kMultiMacro1,
+                              perseids::kMultiMacro2,
+                              perseids::kMultiTimeUnit,
+                              perseids::kMultiSettings};
 
 // Index i pairs with rows[i] in main() — keep both lists in the same order.
 const perseids::PotMapping kPotMappings[] = {
@@ -518,6 +536,61 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          &g_capture_params.intonation,
          DT::Toggle,
          false},
+
+        // Phase 11 interim — Multi encoder cycle (Dry/Wet live; rest dummy UI).
+        {perseids::kMultiDryWet,
+         "Dry/Wet",
+         "DW",
+         0.f,
+         1.f,
+         0.55f,
+         &g_multi_params.dry_wet,
+         DT::Unipolar,
+         false},
+        {perseids::kMultiMacro1,
+         "Macro1",
+         "M1",
+         0.f,
+         1.f,
+         0.50f,
+         &g_multi_params.macro1,
+         DT::Unipolar,
+         false},
+        {perseids::kMultiMacro2,
+         "Macro2",
+         "M2",
+         0.f,
+         1.f,
+         0.50f,
+         &g_multi_params.macro2,
+         DT::Unipolar,
+         false},
+        {perseids::kMultiTimeUnit,
+         "Time Unit",
+         "TU",
+         0.f,
+         1.f,
+         0.f,
+         &g_multi_params.time_unit,
+         DT::CountNum,
+         false,
+         false,
+         nullptr,
+         nullptr,
+         kTimeUnitLabels},
+        {perseids::kMultiSettings,
+         "Settings",
+         "SET",
+         0.f,
+         0.f,
+         0.f,
+         &g_multi_params.settings,
+         DT::CountNum,
+         false,
+         false,
+         nullptr,
+         nullptr,
+         kSettingsStubLabels},
     };
 
     for(const auto& def : defs)
@@ -538,6 +611,14 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         size = 256;
 
     g_capture.Process(in[0], in[1], out[0], out[1], g_trail_mix, size);
+
+    // Snapshot clean dry BEFORE any Block 10 Input insert — Multi Dry/Wet dry
+    // side is always unprocessed listen-through (ARCHITECTURE: global blender).
+    for(size_t i = 0; i < size; ++i)
+    {
+        g_dry_l[i] = out[0][i];
+        g_dry_r[i] = out[1][i];
+    }
 
     // Phase 6 — continuous pre-fader Blend (Block 3): equal-power crossfade
     // between the Spectra and Swarm outputs. At the extremes the silent
@@ -565,8 +646,10 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         g_reso.Process(g_swarm_out_l, g_swarm_out_r, size);
     }
 
-    // Phase 8 — Filter Mix Destination (pre-fader taps). Off skips the SVF
-    // entirely (CPU). Reverb dest is applied after the tank below.
+    // Phase 8 — Filter Mix Destination (inserts inside the wet chain, before
+    // Multi Dry/Wet). Off skips the SVF. Reverb dest runs after the tank.
+    // Dest=Input filters the listen-through buffer that feeds the wet bus /
+    // reverb send — not the Multi dry tap (that stays g_dry_*).
     const int  flt_dest = g_filter.Destination();
     const bool flt_on   = flt_dest != perseids::kFilterDestOff;
     if(flt_on && flt_dest == perseids::kFilterDestInput)
@@ -576,9 +659,18 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     if(flt_on && flt_dest == perseids::kFilterDestSwarm && run_swarm)
         g_filter.Process(g_swarm_out_l, g_swarm_out_r, size);
 
-    // Bench scaffolding until Multi Dry/Wet (Phase 11).
-    constexpr float kDryGain = 0.40f;
-    constexpr float kWetGain = 1.10f;
+    // Multi Dry/Wet — final equal-power blender (ARCHITECTURE 2 / 5a):
+    //   dry = clean listen-through (g_dry_*)
+    //   wet = full processed bus: engines (+ Resonator) + Filter inserts +
+    //         Reverb return, and later Pan Drift / Crossfade / any new FX
+    //         (always insert ABOVE this mix — never on g_dry_*).
+    float dry_wet = g_dry_wet.load(std::memory_order_relaxed);
+    if(dry_wet < 0.f)
+        dry_wet = 0.f;
+    else if(dry_wet > 1.f)
+        dry_wet = 1.f;
+    const float dry_g = std::cos(dry_wet * 1.5707964f);
+    const float wet_g = std::sin(dry_wet * 1.5707964f) * 1.10f;
 
     // Cheap soft-limit (replaces per-sample tanh — major CPU at the bus).
     auto SoftLimit = [](float x) -> float {
@@ -590,18 +682,21 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     const float rev_wet_g
         = rev_mix > 0.001f ? std::sin(rev_mix * 1.5707964f) : 0.f;
     const bool run_reverb = rev_wet_g > 0.001f;
+    const bool flt_input  = flt_on && flt_dest == perseids::kFilterDestInput;
 
     for(size_t i = 0; i < size; ++i)
     {
         const float sp  = run_spectra ? g_spectra_out[i] * wet_spectra : 0.f;
         const float swl = run_swarm ? g_swarm_out_l[i] * wet_swarm : 0.f;
         const float swr = run_swarm ? g_swarm_out_r[i] * wet_swarm : 0.f;
-        g_eng_l[i] = (sp + swl) * kWetGain;
-        g_eng_r[i] = (sp + swr) * kWetGain;
+        g_eng_l[i] = sp + swl;
+        g_eng_r[i] = sp + swr;
         if(run_reverb)
         {
-            g_reverb_send_l[i] = out[0][i] * kDryGain + g_eng_l[i];
-            g_reverb_send_r[i] = out[1][i] * kDryGain + g_eng_r[i];
+            // Pre-fader send (before Multi Dry/Wet): listen-through (possibly
+            // Input-filtered) + engines.
+            g_reverb_send_l[i] = out[0][i] * 0.40f + g_eng_l[i];
+            g_reverb_send_r[i] = out[1][i] * 0.40f + g_eng_r[i];
         }
     }
 
@@ -620,10 +715,18 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     {
         const float rl = run_reverb ? g_reverb_wet_l[i] * rev_wet_g : 0.f;
         const float rr = run_reverb ? g_reverb_wet_r[i] * rev_wet_g : 0.f;
-        out[0][i]
-            = SoftLimit(out[0][i] * kDryGain + g_eng_l[i] + rl);
-        out[1][i]
-            = SoftLimit(out[1][i] * kDryGain + g_eng_r[i] + rr);
+        // Wet bus = full processed chain (engines + filter + reverb today;
+        // Pan Drift / Crossfade / future FX join here before Multi).
+        // Dest=Input contributes filtered listen-through into wet only.
+        float wet_l = g_eng_l[i] + rl;
+        float wet_r = g_eng_r[i] + rr;
+        if(flt_input)
+        {
+            wet_l += out[0][i];
+            wet_r += out[1][i];
+        }
+        out[0][i] = SoftLimit(g_dry_l[i] * dry_g + wet_l * wet_g);
+        out[1][i] = SoftLimit(g_dry_r[i] * dry_g + wet_r * wet_g);
     }
 
     g_cpu_meter.OnBlockEnd();
@@ -668,6 +771,8 @@ int main(void)
         perseids::CycleRow("Settings", kSettingsIds, 4),
     };
 
+    perseids::CycleRow multi_row("Multi", kMultiIds, 5);
+
     perseids::UiController ui;
     ui.Init(hw,
             registry,
@@ -681,6 +786,9 @@ int main(void)
             g_spectra_params,
             g_swarm,
             g_swarm_params,
+            multi_row,
+            g_multi_params,
+            &g_dry_wet,
             &g_cpu_load);
 
     hw.StartAudio(AudioCallback);

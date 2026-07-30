@@ -59,6 +59,8 @@ class TrailLevelController
     QuadratureEncoder encoders_[kCount];
     ButtonGesture     push_[kCount];
     ButtonGesture     rec_btn_;
+    // Trig jack GPIO retired while D13 = Multi CLK; Rec button only for now.
+    bool              trig_enabled_;
     ButtonGesture     trig_in_;
 
     TrailSnapshot trails_[kCount];

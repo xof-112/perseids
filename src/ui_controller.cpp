@@ -19,6 +19,9 @@ void UiController::Init(daisy::DaisySeed&   seed,
                         SpectraParamValues& spectra_params,
                         SwarmEngine&        swarm,
                         SwarmParamValues&   swarm_params,
+                        CycleRow&           multi_row,
+                        MultiParamValues&   multi_params,
+                        std::atomic<float>* dry_wet,
                         std::atomic<float>* cpu_load)
 {
     seed_            = &seed;
@@ -33,6 +36,9 @@ void UiController::Init(daisy::DaisySeed&   seed,
     spectra_params_  = &spectra_params;
     swarm_           = &swarm;
     swarm_params_    = &swarm_params;
+    multi_row_       = &multi_row;
+    multi_params_    = &multi_params;
+    dry_wet_         = dry_wet;
     cpu_load_        = cpu_load;
 
     screen_                = UiScreen::Dashboard;
@@ -46,6 +52,13 @@ void UiController::Init(daisy::DaisySeed&   seed,
     pot_moved_during_hold_ = false;
     imprint_mask_          = 0;
     imprint_engaged_       = false;
+    multi_push_prev_       = false;
+    multi_push_long_fired_ = false;
+    multi_push_active_low_ = true;
+    multi_push_down_ms_    = 0;
+    multi_push_idle_       = 1.f;
+    multi_scroll_accum_    = 0;
+    last_multi_scroll_ms_  = 0;
 
     for(size_t i = 0; i < kMaxCycleRows; ++i)
     {
@@ -60,10 +73,16 @@ void UiController::Init(daisy::DaisySeed&   seed,
     display_.Init(seed);
     cycle_btn_.Init(hw::kCycleButton, kLongPressMs);
     imprint_btn_.Init(hw::kImprintButton, kLongPressMs);
+    multi_enc_.Init(hw::kMultiEncClk, hw::kMultiEncDt);
     trails_.Init(seed, capture_);
+
+    if(dry_wet_ != nullptr && multi_params_ != nullptr)
+        dry_wet_->store(multi_params_->dry_wet, std::memory_order_relaxed);
 
     for(size_t n = 0; n < 48; ++n)
         mux_.Process();
+
+    CalibrateMultiPushIdle();
 
     for(size_t i = 0; i < pot_count_ && i < row_count_; ++i)
     {
@@ -87,6 +106,171 @@ void UiController::CapturePotBaselines()
         pot_baseline_[i]      = n;
         pot_prev_ok_[i]       = true;
     }
+}
+
+void UiController::CalibrateMultiPushIdle()
+{
+    float sum = 0.f;
+    for(size_t n = 0; n < 16; ++n)
+    {
+        mux_.Process();
+        sum += mux_.GetRaw(hw::kMultiPushChain, hw::kMultiPushChannel);
+    }
+    multi_push_idle_       = sum * (1.f / 16.f);
+    // Pull-up to 3V3 → idle high, press to GND. Pull-down → idle low, press to 3V3.
+    multi_push_active_low_ = multi_push_idle_ >= 0.45f;
+}
+
+bool UiController::ReadMultiPushPressed()
+{
+    const float v = mux_.GetRaw(hw::kMultiPushChain, hw::kMultiPushChannel);
+    if(multi_push_active_low_)
+    {
+        // Idle high — pressed when low.
+        if(multi_push_prev_)
+            return v < kMultiPushOffThresh;
+        return v < kMultiPushOnThresh;
+    }
+    // Idle low — pressed when high.
+    if(multi_push_prev_)
+        return v > (1.f - kMultiPushOffThresh);
+    return v > (1.f - kMultiPushOnThresh);
+}
+
+void UiController::PollMultiEncoder()
+{
+    if(multi_row_ == nullptr || multi_params_ == nullptr || dry_wet_ == nullptr)
+        return;
+
+    multi_enc_.Debounce();
+    const int32_t steps = multi_enc_.ConsumeSteps();
+    const uint32_t now  = daisy::System::GetNow();
+
+    if(cycle_btn_.IsHeld())
+    {
+        if(steps != 0)
+        {
+            if(screen_ != UiScreen::MultiView)
+                EnterMultiView();
+
+            pot_moved_during_hold_ = true;
+            multi_scroll_accum_ += steps;
+            TouchActivity();
+        }
+
+        // One menu step per detent-ish burst, rate-limited — stops the list
+        // from leaping through all entries on a single click.
+        if(screen_ == UiScreen::MultiView
+           && (now - last_multi_scroll_ms_) >= kMultiScrollMinIntervalMs)
+        {
+            if(multi_scroll_accum_ >= kMultiScrollTicksPerStep)
+            {
+                multi_row_->StepBound(1);
+                multi_scroll_accum_ -= kMultiScrollTicksPerStep;
+                last_multi_scroll_ms_ = now;
+                TouchActivity();
+            }
+            else if(multi_scroll_accum_ <= -kMultiScrollTicksPerStep)
+            {
+                multi_row_->StepBound(-1);
+                multi_scroll_accum_ += kMultiScrollTicksPerStep;
+                last_multi_scroll_ms_ = now;
+                TouchActivity();
+            }
+        }
+    }
+    else
+    {
+        multi_scroll_accum_ = 0;
+        if(steps != 0)
+        {
+            if(screen_ != UiScreen::MultiView)
+                EnterMultiView();
+            ApplyMultiEncoderSteps(steps);
+            TouchActivity();
+        }
+    }
+
+    const bool pressed = ReadMultiPushPressed();
+
+    if(pressed && !multi_push_prev_)
+    {
+        multi_push_down_ms_    = now;
+        multi_push_long_fired_ = false;
+    }
+
+    if(pressed && !multi_push_long_fired_
+       && (now - multi_push_down_ms_) >= kLongPressMs)
+    {
+        multi_push_long_fired_ = true;
+        EnterDashboard();
+        TouchActivity();
+    }
+
+    if(!pressed && multi_push_prev_ && !multi_push_long_fired_)
+        HandleMultiShortPress();
+
+    multi_push_prev_ = pressed;
+}
+
+void UiController::EnterMultiView()
+{
+    screen_ = UiScreen::MultiView;
+    // Re-baseline pots so ADC chatter cannot steal the screen into Trails
+    // (active_row_ defaults to 0) on the next PollControls tick.
+    CapturePotBaselines();
+    TouchActivity();
+}
+
+void UiController::HandleMultiShortPress()
+{
+    TouchActivity();
+    if(screen_ == UiScreen::MultiView)
+    {
+        // Already in Multi — step Dry/Wet → Macro1 → Macro2 → Time → Settings.
+        multi_row_->StepBound(1);
+        return;
+    }
+    // First short press opens Multi on the current bound entry (Dry/Wet default).
+    EnterMultiView();
+}
+
+void UiController::ApplyMultiEncoderSteps(int32_t steps)
+{
+    if(steps == 0 || multi_row_ == nullptr || registry_ == nullptr)
+        return;
+
+    const ParameterDef* def = multi_row_->BoundParam(*registry_);
+    if(def == nullptr || def->value_ptr == nullptr)
+        return;
+
+    // Settings stub is display-only (single label).
+    if(def->id == kMultiSettings)
+        return;
+
+    if(def->display_type == ParamDisplayType::Toggle
+       || def->display_type == ParamDisplayType::CountNum
+       || def->display_type == ParamDisplayType::CountBar)
+    {
+        float v = *def->value_ptr + static_cast<float>(steps);
+        v       = ParameterRegistry::Clamp(
+            *def, static_cast<float>(static_cast<int>(v + (v >= 0.f ? 0.5f : -0.5f))));
+        *def->value_ptr = v;
+    }
+    else
+    {
+        float norm = ParameterRegistry::Normalize(*def, *def->value_ptr);
+        norm += static_cast<float>(steps) * 0.02f;
+        if(norm < 0.f)
+            norm = 0.f;
+        else if(norm > 1.f)
+            norm = 1.f;
+        *def->value_ptr
+            = ParameterRegistry::Clamp(*def, ParameterRegistry::Denormalize(*def, norm));
+    }
+
+    if(def->id == kMultiDryWet && dry_wet_ != nullptr)
+        dry_wet_->store(*def->value_ptr, std::memory_order_relaxed);
 }
 
 void UiController::SyncEngines()
@@ -132,8 +316,11 @@ void UiController::HandleCycleButton(ButtonGesture::Event event)
     switch(event)
     {
     case ButtonGesture::Event::ShortPress:
-        // Play/Pause lives on Imprint (D6). Ignore short after hold+scroll so
-        // cycling parameters cannot accidentally fire a leftover ShortPress.
+        // While Multi is open: Cycle short steps the Multi list (reliable
+        // fallback when Mux B C5 push is unwired / noisy). Ignore leftover
+        // ShortPress after hold+turn (pot_moved_during_hold_).
+        if(screen_ == UiScreen::MultiView && !pot_moved_during_hold_)
+            HandleMultiShortPress();
         break;
 
     case ButtonGesture::Event::LongPress:
@@ -254,6 +441,9 @@ void UiController::PollControls()
     cycle_btn_.Debounce();
     imprint_btn_.Debounce();
 
+    // After Cycle debounce so hold+Multi-turn scroll sees a fresh IsHeld().
+    PollMultiEncoder();
+
     const bool cycle_held = cycle_btn_.IsHeld();
     if(cycle_held && !cycle_held_prev_)
     {
@@ -264,6 +454,9 @@ void UiController::PollControls()
             scroll_anchor_[i]     = mux_.Get(map.chain, map.channel);
             last_scroll_ms_[i]    = daisy::System::GetNow();
         }
+        // Start Multi list from the currently bound entry when Cycle goes down.
+        if(multi_row_ != nullptr && screen_ == UiScreen::MultiView)
+            multi_row_->SyncScrollToBound();
     }
 
     if(cycle_held_prev_ && !cycle_held)
@@ -273,6 +466,8 @@ void UiController::PollControls()
             rows_[i].SetCycleScrollActive(false);
             rows_[i].CommitScrollBinding(*registry_);
         }
+        if(multi_row_ != nullptr)
+            multi_row_->SetCycleScrollActive(false);
     }
     cycle_held_prev_ = cycle_held;
 
@@ -311,9 +506,10 @@ void UiController::PollControls()
             pot_moved_during_hold_ = true;
     }
 
-    if(screen_ == UiScreen::Dashboard)
+    if(screen_ == UiScreen::Dashboard || screen_ == UiScreen::MultiView)
     {
-        // Exactly one winner — largest travel from Dashboard baseline.
+        // Exactly one winner — largest travel from baseline. From MultiView a
+        // deliberate pot turn leaves Multi and opens that Block (same threshold).
         size_t best   = n_pots;
         float  best_t = 0.f;
         for(size_t i = 0; i < n_pots; ++i)
@@ -330,13 +526,10 @@ void UiController::PollControls()
             CapturePotBaselines();
         }
     }
-    else if(active_row_ < n_pots)
+    else if(screen_ == UiScreen::CycleView && active_row_ < n_pots)
     {
-        // While a Block is open, ONLY its pot edits (others ignored until
-        // idle returns to Dashboard). Drive it EVERY frame: pickup catch and
-        // post-catch tracking need continuous samples — an edit threshold
-        // here froze values after the catch (slow turns never exceeded it).
-        // HandlePotTurn touches the idle timer only on real steps.
+        // While a pot Block is open, ONLY its pot edits. Do NOT run this for
+        // MultiView — that used to force Trails (active_row_==0) every frame.
         HandlePotTurn(active_row_, norms[active_row_], steps[active_row_]);
     }
 
@@ -401,6 +594,12 @@ void UiController::UpdateScreen()
                                show_cpu,
                                show_ram,
                                cpu_load);
+    }
+    else if(screen_ == UiScreen::MultiView && multi_row_ != nullptr)
+    {
+        const size_t col = multi_row_->BoundIndex();
+        display_.DrawCycleView(
+            *registry_, *multi_row_, col, -1.f, show_cpu, cpu_load);
     }
     else
     {

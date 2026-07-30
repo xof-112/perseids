@@ -99,6 +99,23 @@ void CycleRow::Scroll(int direction)
         scroll_index_ = (scroll_index_ + param_count_ - 1) % param_count_;
 }
 
+void CycleRow::StepBound(int direction)
+{
+    if(param_count_ == 0)
+        return;
+
+    if(direction > 0)
+        bound_index_ = (bound_index_ + 1) % param_count_;
+    else if(direction < 0)
+        bound_index_ = (bound_index_ + param_count_ - 1) % param_count_;
+    scroll_index_ = bound_index_;
+}
+
+void CycleRow::SyncScrollToBound()
+{
+    scroll_index_ = bound_index_;
+}
+
 void CycleRow::UpdatePotPosition(float pot_norm)
 {
     physical_pot_norm_ = pot_norm;

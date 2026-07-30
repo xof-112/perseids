@@ -29,6 +29,12 @@ class CycleRow
     // Cycle button held + turn: scroll list, no value change (Section 4.6).
     void Scroll(int direction);
 
+    // Multi encoder short-push: step the bound entry (scroll follows).
+    void StepBound(int direction);
+
+    // Align scroll cursor to bound before hold+turn scrolling starts.
+    void SyncScrollToBound();
+
     // Normal turn: change bound parameter with pickup/catch (Section 4.6).
     void ChangeValue(const ParameterRegistry& reg, float pot_norm);
 

@@ -19,7 +19,7 @@ class MuxAdcPoller
   public:
     static constexpr size_t kChains       = 2;
     static constexpr size_t kChannels     = 16;
-    static constexpr size_t kPollChannels = 5; // C0–C4 per chain = 10 bench pots
+    static constexpr size_t kPollChannels = 6; // C0–C5 (C5 = Multi Push on chain B)
     // EMA smoothing on top of the hardware-synced cache.
     static constexpr float kEmaAlphaIdle  = 0.15f;
     static constexpr float kEmaSnapThresh = 0.05f;
@@ -31,6 +31,8 @@ class MuxAdcPoller
 
     float Get(size_t chain, size_t channel) const;
     float GetDelta(size_t chain, size_t channel) const;
+    // Unsmoothed last sample — for digital mux buttons (Multi push).
+    float GetRaw(size_t chain, size_t channel) const;
 
   private:
     void UpdateEma(size_t chain, size_t channel, float sample);
@@ -39,6 +41,7 @@ class MuxAdcPoller
     daisy::GPIO      sel_hi_; // 4067 S3 held low (libDaisy drives S0–S2, C0–C7)
     float            ema_[kChains][kChannels];
     float            prev_ema_[kChains][kChannels];
+    float            raw_[kChains][kChannels];
 };
 
 } // namespace perseids

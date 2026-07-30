@@ -13,6 +13,8 @@
 #include "swarm_engine.h"
 #include "swarm_params.h"
 #include "trail_level.h"
+#include "multi_params.h"
+#include "quadrature_encoder.h"
 
 #include <atomic>
 #include <cstdint>
@@ -24,6 +26,7 @@ enum class UiScreen : uint8_t
 {
     Dashboard,
     CycleView,
+    MultiView,
 };
 
 // Top-level UI state machine — main loop only, never in the audio callback.
@@ -44,6 +47,11 @@ class UiController
     static constexpr uint32_t kDisplayMinIntervalMs = 33;
     static constexpr size_t   kMuxStepsPerTick      = 1; // Process reads full mux cache
     static constexpr uint32_t kLoopDelayMs          = 1;
+    static constexpr float    kMultiPushOnThresh    = 0.35f;
+    static constexpr float    kMultiPushOffThresh   = 0.65f;
+    // Cycle+Multi scroll: quad encoders emit several ticks per detent.
+    static constexpr int      kMultiScrollTicksPerStep = 4;
+    static constexpr uint32_t kMultiScrollMinIntervalMs = 220;
 
     void Init(daisy::DaisySeed&      seed,
               ParameterRegistry&     registry,
@@ -57,6 +65,9 @@ class UiController
               SpectraParamValues&    spectra_params,
               SwarmEngine&           swarm,
               SwarmParamValues&      swarm_params,
+              CycleRow&              multi_row,
+              MultiParamValues&      multi_params,
+              std::atomic<float>*    dry_wet,
               std::atomic<float>*    cpu_load = nullptr);
 
     void Process();
@@ -70,9 +81,15 @@ class UiController
     void HandlePotTurn(size_t row_idx, float pot_norm, float delta);
     void TouchActivity();
     void EnterDashboard();
+    void EnterMultiView();
+    void HandleMultiShortPress();
+    void ApplyMultiEncoderSteps(int32_t steps);
+    bool ReadMultiPushPressed();
+    void CalibrateMultiPushIdle();
     void UpdateScreen();
     void SyncEngines();
     void CapturePotBaselines();
+    void PollMultiEncoder();
 
     daisy::DaisySeed*    seed_;
     ParameterRegistry*   registry_;
@@ -86,6 +103,9 @@ class UiController
     SpectraParamValues*  spectra_params_;
     SwarmEngine*         swarm_;
     SwarmParamValues*    swarm_params_;
+    CycleRow*            multi_row_;
+    MultiParamValues*    multi_params_;
+    std::atomic<float>*  dry_wet_;
     std::atomic<float>*  cpu_load_;
 
     MuxAdcPoller         mux_;
@@ -93,6 +113,7 @@ class UiController
     ButtonGesture        cycle_btn_;
     ButtonGesture        imprint_btn_;
     TrailLevelController trails_;
+    QuadratureEncoder    multi_enc_;
 
     UiScreen screen_;
     size_t   active_row_;
@@ -106,6 +127,13 @@ class UiController
     // Bitmask of Trails locked by Imprint (selective release, 4.7b).
     uint8_t  imprint_mask_;
     bool     imprint_engaged_;
+    bool     multi_push_prev_;
+    bool     multi_push_long_fired_;
+    bool     multi_push_active_low_; // idle high → press pulls to GND
+    uint32_t multi_push_down_ms_;
+    float    multi_push_idle_;
+    int32_t  multi_scroll_accum_;
+    uint32_t last_multi_scroll_ms_;
     float    scroll_anchor_[kMaxCycleRows];
     uint32_t last_scroll_ms_[kMaxCycleRows];
     float    pot_prev_[kMaxCycleRows];

@@ -79,7 +79,8 @@ void TrailLevelController::Init(daisy::DaisySeed& seed, CaptureEngine* capture)
     }
 
     rec_btn_.Init(hw::kRecButton, kLongPressMs);
-    trig_in_.Init(hw::kTrigInput, kLongPressMs);
+    // D13 is Multi encoder CLK on the bench — do not claim it as Trig.
+    trig_enabled_ = false;
 }
 
 void TrailLevelController::FillMixerState(TrailMixerState out[kCount]) const
@@ -247,11 +248,12 @@ void TrailLevelController::Process()
     if(rec_btn_.RisingEdge())
         OnRecTrig();
 
-    trig_in_.Debounce();
-    // Hardware may present either polarity; accept either edge but rate-limit
-    // so a floating jack cannot spam every frame (dashboard kick is separate).
-    if(trig_in_.RisingEdge() || trig_in_.FallingEdge())
-        OnRecTrig();
+    if(trig_enabled_)
+    {
+        trig_in_.Debounce();
+        if(trig_in_.RisingEdge() || trig_in_.FallingEdge())
+            OnRecTrig();
+    }
 }
 
 } // namespace perseids

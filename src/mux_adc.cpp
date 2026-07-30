@@ -15,10 +15,11 @@ void MuxAdcPoller::Init(daisy::DaisySeed& seed)
         {
             ema_[c][ch]      = 0.f;
             prev_ema_[c][ch] = 0.f;
+            raw_[c][ch]      = 0.f;
         }
     }
 
-    // 4067 top address line stays low — libDaisy drives S0–S2 for C0–C4.
+    // 4067 top address line stays low — libDaisy drives S0–S2 for C0–C5.
     sel_hi_.Init(hw::kMuxSel3, daisy::GPIO::Mode::OUTPUT);
     sel_hi_.Write(false);
 
@@ -41,6 +42,7 @@ void MuxAdcPoller::Init(daisy::DaisySeed& seed)
                                              static_cast<uint8_t>(ch));
             ema_[c][ch]      = v;
             prev_ema_[c][ch] = v;
+            raw_[c][ch]      = v;
         }
     }
 }
@@ -65,6 +67,7 @@ void MuxAdcPoller::Process()
         {
             const float sample = adc_.GetMuxFloat(static_cast<uint8_t>(chain),
                                                   static_cast<uint8_t>(ch));
+            raw_[chain][ch] = sample;
             UpdateEma(chain, ch, sample);
         }
     }
@@ -82,6 +85,13 @@ float MuxAdcPoller::GetDelta(size_t chain, size_t channel) const
     if(chain >= kChains || channel >= kChannels)
         return 0.f;
     return ema_[chain][channel] - prev_ema_[chain][channel];
+}
+
+float MuxAdcPoller::GetRaw(size_t chain, size_t channel) const
+{
+    if(chain >= kChains || channel >= kChannels)
+        return 0.f;
+    return raw_[chain][channel];
 }
 
 } // namespace perseids

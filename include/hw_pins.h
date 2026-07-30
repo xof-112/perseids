@@ -75,13 +75,13 @@ constexpr daisy::Pin kTrailPush2 = daisy::seed::D18;
 constexpr daisy::Pin kTrailPush3 = daisy::seed::D19;
 constexpr daisy::Pin kTrailPush4 = daisy::seed::D20;
 
-// Rec panel button — momentary, parallel to Trig jack (Section 4.5).
+// Rec panel button — momentary (Section 4.5). Trig jack shares this role later
+// (mux or parallel); D13 is Multi encoder CLK on the current bench.
 constexpr daisy::Pin kRecButton = daisy::seed::D12;
 
-// Trig jack — 3.5 mm mono trigger input, one GPIO only (Section 4.4/4.5).
-// Carrier PCB: tip = signal, sleeve = GND; conditioning (e.g. comparator/schmitt)
-// presents a digital rising edge to this pin — same record trigger as kRecButton.
-constexpr daisy::Pin kTrigInput = daisy::seed::D13;
+// Trig jack — reserved; not on a dedicated GPIO while Multi uses D13.
+// When added: prefer Mux B (parallel Rec) — see ARCHITECTURE 4.5a.
+constexpr daisy::Pin kTrigInput = daisy::seed::D13; // legacy name; Multi CLK below
 
 constexpr daisy::Pin kTrailPushPins[5]
     = {kTrailPush0, kTrailPush1, kTrailPush2, kTrailPush3, kTrailPush4};
@@ -97,8 +97,15 @@ constexpr uint8_t kPotRow4 = kPotMuxB1;
 constexpr daisy::Pin kCycleButton = daisy::seed::D5;
 
 // Imprint button (momentary, active low with internal pull-up) — Play/Pause +
-// Imprint lock gestures (ARCHITECTURE 4.7 / 4.7b). Was free GPIO.
+// Imprint lock gestures (ARCHITECTURE 4.7 / 4.7b).
 constexpr daisy::Pin kImprintButton = daisy::seed::D6;
+
+// Block 11 Multi encoder (quadrature + push). Push is digital on Mux B C5
+// (external pull-up to 3V3, switch to GND). CLK/DT on free GPIOs.
+constexpr daisy::Pin kMultiEncClk = daisy::seed::D13;
+constexpr daisy::Pin kMultiEncDt  = daisy::seed::D30;
+constexpr uint8_t    kMultiPushChain   = kMuxChainB;
+constexpr uint8_t    kMultiPushChannel = 5; // Mux B C5
 
 } // namespace hw
 
