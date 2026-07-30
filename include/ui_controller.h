@@ -37,6 +37,8 @@ class UiController
     static constexpr uint32_t kInactivityMs         = 4000;
     static constexpr uint32_t kResetConfirmMs       = 3000;
     static constexpr uint32_t kLongPressMs          = 1500;
+    // Imprint lock-all — shorter than Cycle delete so a firm hold registers.
+    static constexpr uint32_t kImprintLongPressMs   = 800;
     // Value edit once a Block is open (ignore ADC chatter).
     static constexpr float    kEditThreshold        = 0.015f;
     // Leave Dashboard — cumulative travel from baseline + same-direction confirm.

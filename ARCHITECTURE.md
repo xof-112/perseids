@@ -760,7 +760,7 @@ Cycle (D5) and Rec/Trig.
 | Gesture | Action |
 |---|---|
 | Short | **Play/Pause** (global, all Trails — Fade In/Out times from Block 2) |
-| Long | **Imprint lock toggle** — see below |
+| Long | **Imprint lock toggle** (~800 ms hold) — see below |
 
 **Imprint lock (long press, toggle):** applies Lock (4.2) to all currently active Trails
 simultaneously, freezing the present sound in place — conceptually similar to a "freeze"

@@ -76,7 +76,7 @@ void UiController::Init(daisy::DaisySeed&   seed,
     mux_.Init(seed);
     display_.Init(seed);
     cycle_btn_.Init(hw::kCycleButton, kLongPressMs);
-    imprint_btn_.Init(hw::kImprintButton, kLongPressMs);
+    imprint_btn_.Init(hw::kImprintButton, kImprintLongPressMs);
     multi_enc_.Init(hw::kMultiEncClk, hw::kMultiEncDt);
     trails_.Init(seed, capture_);
 

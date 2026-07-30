@@ -16,9 +16,10 @@ void ButtonGesture::Init(daisy::Pin pin, uint32_t long_press_ms)
 
 void ButtonGesture::Debounce()
 {
+    switch_.Debounce();
+    // Clear after Debounce so RisingEdge sees this frame's sample (4.6 note).
     if(switch_.RisingEdge())
         long_fired_ = false;
-    switch_.Debounce();
 }
 
 ButtonGesture::Event ButtonGesture::Poll()

@@ -289,8 +289,8 @@
         <h2><span class="en">Home dashboard</span><span class="de">Home-Dashboard</span></h2>
         <p class="en">Per Trail: level %, Lock (L), Solo (S), life bar (Hold countdown). Crossfade: thin <strong>focus ticks</strong> beside T#. Header: <strong>R1…R5</strong> / <strong>REC1…REC5</strong> (small type like CPU). Left: input VU + threshold.</p>
         <p class="de">Pro Trail: Level-%, Lock (L), Solo (S), Life-Bar (Hold-Countdown). Crossfade: schmale <strong>Fokus-Striche</strong> neben T#. Header: <strong>R1…R5</strong> / <strong>REC1…REC5</strong> (kleine Schrift wie CPU). Links: Input-VU + Threshold.</p>
-        <p class="en">OLED CycleView: block name left, <strong>n/m</strong> top-right, value centered, bars + abbreviations (max 4 columns; extra params scroll).</p>
-        <p class="de">OLED CycleView: Blockname links, <strong>n/m</strong> oben rechts, Wert zentriert, Balken + Abkürzungen (max. 4 Spalten; weitere scrollen).</p>
+        <p class="en">OLED CycleView: block name left, <strong>n/m</strong> top-right, value centered. Column width always matches a 4-slot page (2–3 params leave empty space; &gt;4 scroll).</p>
+        <p class="de">OLED CycleView: Blockname links, <strong>n/m</strong> oben rechts, Wert zentriert. Spaltenbreite immer wie 4er-Seite (2–3 Params: rechts leer; &gt;4 scrollen).</p>
       </section>
     </div>
 
@@ -302,12 +302,14 @@
           <li class="de"><strong>Block-Pot</strong> — Menü öffnen; Drehen editiert (Pickup). Klareres Drehen an anderem Pot = Block→Block (Anti-Jitter).</li>
           <li class="en"><strong>Cycle short</strong> — unused alone (except delete-all confirm).</li>
           <li class="de"><strong>Cycle kurz</strong> — allein unbenutzt (außer Delete-all bestätigen).</li>
-          <li class="en"><strong>Cycle hold + pot / Multi</strong> — scroll list (no edits); &gt;4 params keep 4-wide columns.</li>
-          <li class="de"><strong>Cycle halten + Pot / Multi</strong> — Liste scrollen; &gt;4 Params bleiben 4 Spalten breit.</li>
+          <li class="en"><strong>Cycle hold + pot / Multi</strong> — scroll list; column width always as for 4 slots.</li>
+          <li class="de"><strong>Cycle halten + Pot / Multi</strong> — Liste scrollen; Spaltenbreite immer wie bei 4 Slots.</li>
           <li class="en"><strong>Cycle long</strong> — delete-all Trails (confirm).</li>
           <li class="de"><strong>Cycle lang</strong> — alle Trails löschen (Bestätigung).</li>
           <li class="en"><strong>Imprint short</strong> — Play / Pause.</li>
           <li class="de"><strong>Imprint kurz</strong> — Play / Pause.</li>
+          <li class="en"><strong>Imprint long</strong> — Lock all active Trails (~800 ms; toggle; 2nd long unlocks Imprint locks only).</li>
+          <li class="de"><strong>Imprint lang</strong> — alle aktiven Trails locken (~800 ms; Toggle; 2. Lang löst nur Imprint-Locks).</li>
           <li class="en"><strong>Rec</strong> — manual capture (same Overwrite rules as Threshold).</li>
           <li class="de"><strong>Rec</strong> — manuelle Aufnahme (gleiche Overwrite-Regeln wie Threshold).</li>
         </ul>
