@@ -754,6 +754,36 @@ void CaptureEngine::Process(const float* in_l,
             }
         }
 
+        // The arming slot must still finish when the mix loop above cannot
+        // reach it — lowering Count past its index or soloing another Trail
+        // would otherwise leave the record head claimed forever, and
+        // RecordSlotBusy() then silently swallows every later trigger
+        // (Threshold, Cont. Rec and Rec/Trig alike).
+        if(arming_record_index_ < kTrailCount)
+        {
+            const size_t ai = arming_record_index_;
+            TrailVoice&  av = voices_[ai];
+            if(av.state != TrailState::ArmingRecord)
+            {
+                arming_record_index_ = kTrailCount;
+            }
+            else
+            {
+                const bool reached = ai < static_cast<size_t>(count)
+                                     && av.length != 0
+                                     && !(any_solo && !mixer_[ai].solo);
+                if(!reached)
+                {
+                    av.fade_gain += replace_coeff * (0.f - av.fade_gain);
+                    if(av.fade_gain <= kReplaceDoneEps)
+                    {
+                        av.fade_gain = 0.f;
+                        BeginRecordWrites(ai);
+                    }
+                }
+            }
+        }
+
         // Dry monitor only here — Spectra (Phase 4+) owns the wet path.
         // trail_mix = Trail VCA sum × play (level × fade × Crossfade × play).
         const float wet = mix * play_gain_;

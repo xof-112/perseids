@@ -45,6 +45,9 @@ daisysp::ReverbSc DSY_SDRAM_BSS g_reverb_sc;
 perseids::ReverbEngine       g_reverb;
 perseids::FilterEngine       g_filter;
 CpuLoadMeter                 g_cpu_meter;
+// Second meter for the Swarm load governor only. The display average is
+// smoothed at 1 Hz (~160 ms), far too slow to catch a block before it overruns.
+CpuLoadMeter                 g_gov_meter;
 std::atomic<float>           g_cpu_load{0.f};
 std::atomic<float>           g_dry_wet{0.55f};
 
@@ -118,6 +121,8 @@ const uint16_t kReverbIds[] = {perseids::kReverbMix,
 
 const uint16_t kResoIds[] = {perseids::kResoMix,
                              perseids::kResoDecay,
+                             perseids::kResoDamping,
+                             perseids::kResoSpread,
                              perseids::kResoPitch,
                              perseids::kResoQuantized};
 
@@ -419,6 +424,24 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          &g_reso_params.decay,
          DT::Unipolar,
          false},
+        {perseids::kResoDamping,
+         "Damping",
+         "DMP",
+         0.f,
+         1.f,
+         0.5f,
+         &g_reso_params.damping,
+         DT::Unipolar,
+         false},
+        {perseids::kResoSpread,
+         "Spread",
+         "SPR",
+         0.f,
+         1.f,
+         0.35f,
+         &g_reso_params.spread,
+         DT::Unipolar,
+         false},
         {perseids::kResoPitch,
          "Pitch",
          "PIT",
@@ -634,9 +657,12 @@ void AudioCallback(AudioHandle::InputBuffer  in,
                    size_t                    size)
 {
     g_cpu_meter.OnBlockStart();
+    g_gov_meter.OnBlockStart();
 
     if(size > 256)
         size = 256;
+
+    g_swarm.UpdateGovernor(g_gov_meter.GetAvgCpuLoad());
 
     g_capture.Process(in[0], in[1], out[0], out[1], g_trail_mix, size);
 
@@ -760,6 +786,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     }
 
     g_cpu_meter.OnBlockEnd();
+    g_gov_meter.OnBlockEnd();
     g_cpu_load.store(g_cpu_meter.GetAvgCpuLoad(), std::memory_order_relaxed);
 }
 
@@ -769,7 +796,8 @@ DaisySeed hw;
 
 int main(void)
 {
-    hw.Init();
+    // Boost = 480 MHz instead of the 400 MHz default; caches stay on.
+    hw.Init(true);
     hw.SetAudioBlockSize(256);
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
     hw.SetLed(true);
@@ -781,6 +809,8 @@ int main(void)
     g_reverb.Init(hw.AudioSampleRate(), g_reverb_sc);
     g_filter.Init(hw.AudioSampleRate());
     g_cpu_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
+    // 30 Hz smoothing ≈ 1.4 blocks — the governor reacts within a few blocks.
+    g_gov_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize(), 30.f);
 
     perseids::ParameterRegistry registry;
     RegisterAllParams(registry);
@@ -794,7 +824,7 @@ int main(void)
         perseids::CycleRow("Swarm", kSwarmIds, 5),
         perseids::CycleRow("Spectra", kSpectraIds, 4),
         perseids::CycleRow("Pan Drift", kPanIds, 3),
-        perseids::CycleRow("Resonator", kResoIds, 4),
+        perseids::CycleRow("Resonator", kResoIds, 6),
         perseids::CycleRow("Reverb", kReverbIds, 4),
         perseids::CycleRow("Crossfade", kXfadeIds, 2),
         perseids::CycleRow("Filter", kFilterIds, 4),

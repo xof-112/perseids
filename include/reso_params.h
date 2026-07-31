@@ -12,14 +12,19 @@ enum ResoParamId : uint16_t
     kResoDecay     = 71,
     kResoPitch     = 72,
     kResoQuantized = 73,
+    kResoDamping   = 74,
+    kResoSpread    = 75,
 };
 
 struct ResoParamValues
 {
     float mix       = 0.25f; // 0..1 dry/wet on Swarm → Resonator
-    float decay     = 0.5f;  // 0..1 → resonator Q / ring time
+    float decay     = 0.5f;  // 0..1 → ring time T60, 0.08 s … 8 s (exponential)
     float pitch     = 0.f;   // bipolar ±1 octave on the bank root
     float quantized = 0.f;   // toggle — force pitches onto Settings scale
+    float damping   = 0.5f;  // 0 = metallic (all modes ring equally)
+                             // 1 = body (upper modes decay much faster)
+    float spread    = 0.35f; // 0 = mono bank, 1 = modes fanned across stereo
 };
 
 } // namespace perseids

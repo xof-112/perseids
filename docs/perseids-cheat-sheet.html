@@ -638,6 +638,8 @@
         <div>
           <p class="en">Trail levels, Lock/Solo, life bar (Hold countdown / INF). When Crossfade Amplitude is up, thin <strong>focus ticks</strong> travel top→bottom left &amp; right of T#. Header center: <strong>R1…R5</strong> / <strong>REC1…REC5</strong> (same small type as the CPU meter). Left: input VU with threshold marker.</p>
           <p class="de">Trail-Level, Lock/Solo, Life-Bar (Hold-Countdown / INF). Bei Crossfade-Amplitude wandern schmale <strong>Fokus-Striche</strong> oben→unten links &amp; rechts von T#. Header-Mitte: <strong>R1…R5</strong> / <strong>REC1…REC5</strong> (gleiche kleine Schrift wie die CPU-Anzeige). Links: Input-VU mit Threshold-Marke.</p>
+          <p class="en"><strong>Load governor:</strong> <strong>L!</strong> immediately left of the CPU figure (<strong>L!C42</strong>) means the module is temporarily running fewer Swarm grains to keep the audio from breaking up. The SDRAM figure is hidden while it shows, and the cloud sounds slightly thinner. The marker disappears on its own once the load drops.</p>
+          <p class="de"><strong>Load-Governor:</strong> <strong>L!</strong> direkt links vom CPU-Wert (<strong>L!C42</strong>) heißt: Das Modul fährt vorübergehend weniger Swarm-Grains, damit die Audio-Wiedergabe nicht abreißt. Der SDRAM-Wert wird solange ausgeblendet, und die Wolke klingt etwas dünner. Der Marker verschwindet von selbst, sobald die Last sinkt.</p>
         </div>
         <figure class="oled-fig" aria-hidden="true">
           <div class="oled"><div class="oled-screen">
@@ -1020,10 +1022,10 @@
                 <div class="oled-col active"><span class="oled-toggle">OFF</span></div>
               </div>
               <div class="oled-seg">
-                <span>MIX</span><span>DEC</span><span>PIT</span><span class="on">QNT</span>
+                <span>MIX</span><span>DEC</span><span>DMP</span><span class="on">SPR</span>
               </div>
             </div></div>
-            <figcaption>MIX · DEC · PIT · QNT</figcaption>
+            <figcaption>MIX · DEC · DMP · SPR · PIT · QNT — <span class="en">4 visible; scroll</span><span class="de">4 sichtbar; scrollt</span></figcaption>
           </figure>
         </div>
         <table>
@@ -1037,7 +1039,17 @@
             <tr>
               <td class="param">Decay</td>
               <td class="oled-abbr"><span class="abbr">DEC</span></td>
-              <td><span class="en">Ring time — short pluck vs. sustained hum.</span><span class="de">Ausklingzeit — kurzer Pluck vs. anhaltendes Summen.</span></td>
+              <td><span class="en">Ring time, 0.08 s to 8 s — short pluck vs. sustained hum. The scale is exponential, so the upper third is where it really sings.</span><span class="de">Ausklingzeit, 0,08 s bis 8 s — kurzer Pluck vs. anhaltendes Summen. Die Skala ist exponentiell; im oberen Drittel singt er richtig.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Damping</td>
+              <td class="oled-abbr"><span class="abbr">DMP</span></td>
+              <td><span class="en">Wood ↔ metal. At 0 all eight modes ring equally long (glassy, bell-like). Turning up makes the upper modes die away first, which reads as a struck wooden body.</span><span class="de">Holz ↔ Metall. Bei 0 klingen alle acht Moden gleich lang aus (glasig, glockig). Aufgedreht sterben die oberen Moden zuerst — das klingt wie ein angeschlagener Holzkörper.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Spread</td>
+              <td class="oled-abbr"><span class="abbr">SPR</span></td>
+              <td><span class="en">Fans the modes across the stereo field. The root stays centered, the partials open outward. At 0 the bank is mono.</span><span class="de">Fächert die Moden über das Stereofeld. Der Grundton bleibt mittig, die Obertöne öffnen nach außen. Bei 0 ist die Bank mono.</span></td>
             </tr>
             <tr>
               <td class="param">Pitch</td>

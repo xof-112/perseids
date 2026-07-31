@@ -34,13 +34,19 @@ enum class UiScreen : uint8_t
 class UiController
 {
   public:
-    static constexpr uint32_t kInactivityMs         = 4000;
+    // Auto-return to Home (ARCHITECTURE 4.7a). Was 4s bench interim — too
+    // short once CycleViews scroll (Resonator 6 params) and slow pot turns
+    // no longer reset the timer every frame.
+    static constexpr uint32_t kInactivityMs         = 7000;
     static constexpr uint32_t kResetConfirmMs       = 3000;
     static constexpr uint32_t kLongPressMs          = 1500;
     // Imprint lock-all — shorter than Cycle delete so a firm hold registers.
     static constexpr uint32_t kImprintLongPressMs   = 800;
     // Value edit once a Block is open (ignore ADC chatter).
     static constexpr float    kEditThreshold        = 0.015f;
+    // Idle-timer refresh: below kEditThreshold so slow turns still count as
+    // activity, above mux noise so a parked pot cannot freeze the timeout.
+    static constexpr float    kActivityThreshold    = 0.004f;
     // Leave Dashboard — cumulative travel from baseline + same-direction confirm.
     // REVERT "pot-menu open baseline": set kOpenThreshold=0.040f and remove the
     // kOpenConfirmTravel / open_dir_* gate (Phase-5 policy: travel-only @ 4%).

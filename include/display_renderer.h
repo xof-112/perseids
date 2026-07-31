@@ -42,14 +42,16 @@ class DisplayRenderer
                        bool                show_ram_meter = false,
                        float               cpu_load       = 0.f,
                        float               xfade_focus    = 0.f,
-                       float               xfade_amp      = 0.f);
+                       float               xfade_amp      = 0.f,
+                       bool                governor       = false);
 
     void DrawCycleView(const ParameterRegistry& reg,
                        const CycleRow&          row,
                        size_t                   active_col,
                        float                    modulated_norm = -1.f,
                        bool                     show_cpu_meter = false,
-                       float                    cpu_load       = 0.f);
+                       float                    cpu_load       = 0.f,
+                       bool                     governor       = false);
 
     void Present();
 
@@ -100,7 +102,8 @@ class DisplayRenderer
                          const CycleRow&          row,
                          size_t                   active_col,
                          bool                     show_cpu_meter,
-                         float                    cpu_load);
+                         float                    cpu_load,
+                         bool                     governor);
     void DrawTrailLifeBar(int                x0,
                           int                y,
                           int                w,

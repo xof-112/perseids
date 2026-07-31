@@ -352,18 +352,23 @@ void DisplayRenderer::DrawValueHeader(const ParameterRegistry& reg,
                                       const CycleRow&          row,
                                       size_t                   active_col,
                                       bool                     show_cpu_meter,
-                                      float                    cpu_load)
+                                      float                    cpu_load,
+                                      bool                     governor)
 {
     char pos[8];
     FormatPosition(active_col, row.ParamCount(), pos, sizeof(pos));
 
+    const char* name = row.BlockName();
     display_.SetCursor(0, kHeaderY);
-    display_.WriteString(row.BlockName(), Font_6x8, true);
+    display_.WriteString(name, Font_6x8, true);
+    const int name_w = static_cast<int>(strlen(name)) * 6;
 
     constexpr int kGlyphW = 4;
+    constexpr int kGap    = 2;
     const int     pos_w   = static_cast<int>(strlen(pos)) * kGlyphW;
+    int           right_edge = kWidth - pos_w;
 
-    if(show_cpu_meter)
+    if(show_cpu_meter || governor)
     {
         float load = cpu_load;
         if(load < 0.f)
@@ -377,10 +382,18 @@ void DisplayRenderer::DrawValueHeader(const ParameterRegistry& reg,
             pct = 999;
 
         char cpu[8];
-        snprintf(cpu, sizeof(cpu), "C%u%%", static_cast<unsigned>(pct));
+        if(!show_cpu_meter)
+            snprintf(cpu, sizeof(cpu), "L!");
+        else if(governor)
+        {
+            // Governor marker replaces the trailing '%'.
+            snprintf(cpu, sizeof(cpu), "L!C%u", static_cast<unsigned>(pct));
+        }
+        else
+            snprintf(cpu, sizeof(cpu), "C%u%%", static_cast<unsigned>(pct));
         const int cpu_w = static_cast<int>(strlen(cpu)) * kGlyphW;
-        constexpr int kGap = 2;
-        display_.SetCursor(kWidth - pos_w - kGap - cpu_w, kHeaderY + 1);
+        right_edge -= kGap + cpu_w;
+        display_.SetCursor(right_edge, kHeaderY + 1);
         display_.WriteString(cpu, Font_4x6, true);
     }
 
@@ -394,11 +407,35 @@ void DisplayRenderer::DrawValueHeader(const ParameterRegistry& reg,
     char val[12];
     FormatValue(*def, val, sizeof(val));
 
-    const int text_w = static_cast<int>(strlen(val)) * 6;
-    const int x      = (kWidth - text_w) / 2;
+    // Long block names (Resonator / Crossfade / Pan Drift = 9×6 = 54 px)
+    // collide with a centred bipolar "+100%". Draw the sign in Font_4x6 and
+    // clamp the value so it never eats into the title or the right chrome.
+    const bool small_sign = def->display_type == ParamDisplayType::Bipolar
+                            && (val[0] == '+' || val[0] == '-');
+    const char* body   = small_sign ? val + 1 : val;
+    const int   sign_w = small_sign ? kGlyphW : 0;
+    const int   body_w = static_cast<int>(strlen(body)) * 6;
+    const int   text_w = sign_w + body_w;
 
-    display_.SetCursor(x, kHeaderY);
-    display_.WriteString(val, Font_6x8, true);
+    int x = (kWidth - text_w) / 2;
+    if(x < name_w + kGap)
+        x = name_w + kGap;
+    if(x + text_w > right_edge - kGap)
+        x = right_edge - kGap - text_w;
+
+    if(small_sign)
+    {
+        char sign[2] = {val[0], '\0'};
+        display_.SetCursor(x, kHeaderY + 1);
+        display_.WriteString(sign, Font_4x6, true);
+        display_.SetCursor(x + sign_w, kHeaderY);
+        display_.WriteString(body, Font_6x8, true);
+    }
+    else
+    {
+        display_.SetCursor(x, kHeaderY);
+        display_.WriteString(val, Font_6x8, true);
+    }
 }
 
 void DisplayRenderer::DrawPickupLine(const ColumnGeom& col,
@@ -554,7 +591,8 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
                                     size_t                   active_col,
                                     float                    modulated_norm,
                                     bool                     show_cpu_meter,
-                                    float                    cpu_load)
+                                    float                    cpu_load,
+                                    bool                     governor)
 {
     Clear();
     DrawCeilingLine();
@@ -604,7 +642,7 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
     }
 
     // Header n/m uses full ParamCount (not the visible page).
-    DrawValueHeader(reg, row, active_col, show_cpu_meter, cpu_load);
+    DrawValueHeader(reg, row, active_col, show_cpu_meter, cpu_load, governor);
     DrawSegmentedRow(reg, row, active_col);
 
     // Catch-up line on the bound column (solid + end ticks), not while scrolling
@@ -714,7 +752,8 @@ void DisplayRenderer::DrawDashboard(bool                playing,
                                     bool                show_ram_meter,
                                     float               cpu_load,
                                     float               xfade_focus,
-                                    float               xfade_amp)
+                                    float               xfade_amp,
+                                    bool                governor)
 {
     Clear();
 
@@ -740,21 +779,17 @@ void DisplayRenderer::DrawDashboard(bool                playing,
     display_.SetCursor(0, 0);
     display_.WriteString("PERSEIDS", Font_6x8, true);
 
-    // Same understated Font_4x6 as the CPU/RAM meter (ARCHITECTURE 4.9).
-    char rec_hdr[12];
-    if(rec_trig_active)
-        snprintf(rec_hdr, sizeof(rec_hdr), "REC%u", rec_trail_slot);
-    else
-        snprintf(rec_hdr, sizeof(rec_hdr), "R%u", rec_trail_slot);
-    display_.SetCursor(54, 1);
-    display_.WriteString(rec_hdr, Font_4x6, true);
-
     // PLAY/PAUSE right-aligned; optional C… / R… meters immediately left (4.9).
     const char* play_str = playing ? "PLAY" : "PAUSE";
     const int   play_w   = static_cast<int>(strlen(play_str)) * 6;
-    int         right_x  = kWidth - play_w;
+    const int   right_x  = kWidth - play_w;
 
-    if(show_cpu_meter || show_ram_meter)
+    constexpr int kMeterGlyphW = 4;
+    constexpr int kMeterGap    = 2;
+
+    char meter[20];
+    meter[0] = '\0';
+    if(show_cpu_meter || show_ram_meter || governor)
     {
         float load = cpu_load;
         if(load < 0.f)
@@ -773,9 +808,24 @@ void DisplayRenderer::DrawDashboard(bool                playing,
             (100ull * CaptureEngine::kTrailSdramBytes + kSdramTotal / 2)
             / kSdramTotal);
 
-        char meter[20];
-        meter[0] = '\0';
-        if(show_cpu_meter && show_ram_meter)
+        // Governor marker "L!" sits directly left of the CPU figure. While it
+        // shows, the SDRAM figure is suppressed: it is a compile-time constant
+        // and the live CPU number is what matters when the cloud is throttled.
+        if(governor)
+        {
+            if(show_cpu_meter)
+            {
+                snprintf(meter,
+                         sizeof(meter),
+                         "L!C%u",
+                         static_cast<unsigned>(cpu_pct));
+            }
+            else if(show_ram_meter)
+                snprintf(meter, sizeof(meter), "L!R%u", kSdramPct);
+            else
+                snprintf(meter, sizeof(meter), "L!");
+        }
+        else if(show_cpu_meter && show_ram_meter)
         {
             snprintf(meter,
                      sizeof(meter),
@@ -794,11 +844,32 @@ void DisplayRenderer::DrawDashboard(bool                playing,
         {
             snprintf(meter, sizeof(meter), "R%u", kSdramPct);
         }
+    }
 
-        constexpr int kGlyphW = 4;
-        const int     meter_w = static_cast<int>(strlen(meter)) * kGlyphW;
-        constexpr int kGap    = 2;
-        display_.SetCursor(right_x - kGap - meter_w, 1);
+    const int meter_w = static_cast<int>(strlen(meter)) * kMeterGlyphW;
+    const int meter_x
+        = meter[0] != '\0' ? right_x - kMeterGap - meter_w : right_x;
+
+    // Same understated Font_4x6 as the CPU/RAM meter (ARCHITECTURE 4.9).
+    char rec_hdr[12];
+    if(rec_trig_active)
+        snprintf(rec_hdr, sizeof(rec_hdr), "REC%u", rec_trail_slot);
+    else
+        snprintf(rec_hdr, sizeof(rec_hdr), "R%u", rec_trail_slot);
+    const int rec_w = static_cast<int>(strlen(rec_hdr)) * kMeterGlyphW;
+    // Nominally at 54, but the meter block wins: REC slides left rather than
+    // collide with it. 48 is the first free column after "PERSEIDS".
+    int rec_x = 54;
+    if(rec_x + rec_w + kMeterGap > meter_x)
+        rec_x = meter_x - rec_w - kMeterGap;
+    if(rec_x < 48)
+        rec_x = 48;
+    display_.SetCursor(rec_x, 1);
+    display_.WriteString(rec_hdr, Font_4x6, true);
+
+    if(meter[0] != '\0')
+    {
+        display_.SetCursor(meter_x, 1);
         display_.WriteString(meter, Font_4x6, true);
     }
 

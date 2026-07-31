@@ -177,7 +177,7 @@ count in Section 2, point 6. The 5 Trail Level encoders and the Multi encoder ar
 | 4 | **Spectra Parameters** | Partials, Waveshape (Sine↔Saw↔Fold), Umbra/Aurora Macro, Ensemble/Drift |
 | 5 | **Swarm Parameters** | Size, Spread, Scan, Direction (Fwd/Rev/Rnd), Atmosphere Macro (Blur↔Radiation) |
 | 6 | **Reverb** | Mix, Decay, Damping, Character Macro (Chorus↔Friction) |
-| 7 | **Spectral Resonator** (acts on Swarm output) | Mix, Decay, Pitch, Quantized (On/Off, scale from Settings) |
+| 7 | **Spectral Resonator** (acts on Swarm output) | Mix, Decay (ring time 0.08–8 s), Damping (metal↔body), Spread (stereo fan), Pitch, Quantized (On/Off, scale from Settings) |
 | 8 | **Pan Drift** | Phase, Amplitude, Velocity |
 | 9 | **Crossfade across 5 Trails** | Amplitude, Velocity |
 | 10 | **Filter Mix** | Cutoff, Resonance, Feedback (Drive), Destination |
@@ -210,7 +210,8 @@ main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥
 - **Trail access:** `CaptureEngine` publishes per-block `SwarmTrailView` (length + gain =
   level × fade × play_gain) after `Process`; Swarm reads the same callback. Recording /
   empty / solo-muted trails are skipped.
-- **Grains:** up to **16** overlapping grains, linear-interpolated buffer reads, Hann window
+- **Grains:** up to **16** overlapping grains (load governor may hold this down to 5 — see
+  below), linear-interpolated buffer reads, Hann window
   at Atmosphere center. Size maps ~8–180 ms. Spawn interval = `grain_length × 0.15`
   (~6–7 grains steady-state); per-grain amp = `Trail gain × 0.50` (overlap tame). Engine bus
   soft-limited before the final mix. Spread = stereo pan width. Scan = scrub rate through each
@@ -221,6 +222,32 @@ main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥
   (5 entries → CycleView 4-column window scrolls).
 - **Atmosphere:** Blur (negative) flattens grain envelopes; Radiation (positive) adds
   sample-hold lo-fi + BBD-style output slew.
+- **Grain envelope is tabulated, not evaluated:** the Hann↔Blur curve used to call
+  `cos` + `sin` + **`pow`** per grain per sample — with 16 grains that alone exceeded the
+  block budget and was the main freeze cause. Atmosphere is block-constant, so `SyncFromUi`
+  (main loop) builds the **exact** curve for the current Blur into a 1024-point table and
+  flips a double-buffer index; the callback only interpolates. Blur is quantised to 1/128
+  before a rebuild is triggered, so an Atmosphere sweep costs a bounded number of rebuilds.
+  Interpolation error ≈ −110 dB, i.e. inaudible against the direct evaluation.
+- **Per-block hoisting (bit-identical results):** `SwarmViews()` is written once per block at
+  the end of `Capture::Process`, so Trail play length, gain, scan increment and the
+  grain-pan × Pan-Drift normalisation (`std::sqrt`) are all computed **block-rate** and cached.
+  Grain reads index `trail_buffer` directly instead of going through the non-inlinable
+  `CaptureEngine::ReadLooped`; `1/sqrt(n_on)` comes from a table. Radiation used to call
+  `ReadInterp` **twice** and discard the first result — now once. `tanh` at the Swarm output
+  is deliberately **kept**: the cheap rational soft-clip does not saturate (→ `x/9` for large
+  x) and would change the character of dense clouds for ~2% of CPU.
+- **Load governor** (`UpdateGovernor`, audio thread, block rate): fed by a **second**
+  `CpuLoadMeter` smoothed at 30 Hz — the display average (1 Hz, ~160 ms) is far too slow to
+  catch a block before it overruns. Above 85% load the grain cap drops by 1 per block (by 2
+  above 92%) down to a floor of **5**; below 70% it recovers 1 grain every 8 blocks. Only
+  *spawning* is capped — grains already running finish their envelope, so throttling never
+  clicks. OLED: **`L!`** appears immediately left of the CPU figure (`L!C42`) and disappears
+  by itself once the cap is back at 16. While it shows, the SDRAM figure is suppressed — it
+  is a compile-time constant, and dropping it keeps the meter block narrow enough that a
+  three-digit CPU reading still fits. The REC header is no longer pinned to x=54: it slides
+  left (floor 48, the first column after `PERSEIDS`) whenever the meter block would reach it,
+  which also fixes a pre-existing 2px overlap with `PAUSE` + both meters.
 - **Pot map:** Mux A C3 = Swarm, Mux A C4 = Spectra (full bench map: see 4.5a; Settings
   has no pot — Block 11 = Multi encoder).
 
@@ -228,11 +255,33 @@ main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥
 
 - **Role:** parallel bandpass bank on the **Swarm** stereo output (not Spectra, not dry).
   Complements the granular cloud with a pitched resonant body.
-- **Topology:** 8× DaisySP `Svf` bandpass on the Swarm mid `(L+R)/2`; wet summed mono back
-  onto both channels with equal-power Mix. Mix≈0 skips the bank (CPU). Soft-`tanh` on the
-  bank sum before the wet mix.
-- **Params:** Mix (unipolar), Decay (unipolar → Q 0.15…0.92), Pitch (bipolar ±1 octave on
-  root C2 ≈ 65.4 Hz), Quantized (toggle).
+- **Topology:** 8× DaisySP `Svf` bandpass on the Swarm mid `(L+R)/2`; each mode is weighted,
+  panned and summed into a stereo wet pair, then soft-clipped per channel and blended with
+  equal-power Mix. Mix≈0 skips the bank (CPU).
+- **Params:** Mix, Decay, Damping, Spread (all unipolar), Pitch (bipolar ±1 octave on root
+  C2 ≈ 65.4 Hz), Quantized (toggle). Six entries — the CycleRow scrolls (4.6).
+- **Decay is a ring time, not a raw Q.** `Svf::SetRes` maps res through
+  `damp = 2·(1 − res^0.25)`, and that fourth root squeezes everything musical into the last
+  few percent of the knob: the old linear `res = 0.15…0.92` spanned only **Q 1.3 … 24**, i.e.
+  half a second of ring at the maximum — coloration, never a pitched body. Decay now maps
+  exponentially to **T60 = 0.08 … 8 s** and each mode derives the damping it needs from
+  `damp = 2.199/(f·T60)` (bandpass envelope `exp(−π·d·f·t)`), inverting the Svf curve with
+  `res = (1 − damp/2)^4` — exact to float precision. Frequency-correct by construction: high
+  modes need less damping for the same ring time. The old full-scale maximum now sits at the
+  **centre** of the knob.
+- **Damping = the wood/metal axis.** Upper modes get `T60·(f/root)^−1.2·damping`. At 0 the bank
+  is glassy and even (all modes ring equally); at 1 the 8th harmonic dies roughly an order of
+  magnitude before the fundamental, which reads as a struck body.
+- **Spread** fans the modes across the stereo field with equal-power pan, fundamental centred
+  and upper modes alternating outward (`kModePan`). At 0 the bank is mono as before.
+- **Level:** modes are weighted `1/√n` and normalised by the **vector** norm, not the plain
+  sum — they sit on different frequencies and add incoherently, so the previous `1/8` average
+  threw away ~9 dB. `Svf::SetDrive(0.5)` is the bank's safety net rather than a tone control:
+  the filter subtracts `drive·band³`, so a mode settles near `√(damp/drive)` no matter how
+  high Q goes. That, `kBankTrim` and the per-channel soft clip keep the new Q range in bounds.
+- **UI-rate cost:** `UpdateTuning` runs `sinf`/`powf` per mode and is called from the main
+  loop every iteration, so it is guarded by a dirty check on its six inputs; Spread alone only
+  triggers the cheap `UpdateGains`.
 - **Quantized OFF:** odd-harmonic series of the pitched root.
 - **Quantized ON:** 8 scale degrees from Settings **Scale** (0 Major / 1 Minor / 2 Pentatonic)
   with Settings **Intonation** (0 Equal Temperament / 1 Just ratios). Scale/Intonation live
@@ -268,6 +317,14 @@ round-robin replacement, not against the wave.
   the same VCA as Trail Level (`level × fade × xfade`) for `trail_mix` + `SwarmViews.gain`.
 - **Round-robin replace:** BBD-style one-pole slew (~60 ms τ) on `ArmingRecord` before
   overwrite (extends the earlier linear soft-replace).
+- **Arming must always complete (fixed):** the slew normally runs inside the playback mix
+  loop, which skips Trails outside `Count`, with `length == 0`, or muted by another Trail's
+  Solo. Lowering Count past an arming slot — or soloing elsewhere while one armed — stranded
+  it in `ArmingRecord`, so `arming_record_index_` stayed claimed, `RecordSlotBusy()` stayed
+  true, and **every** later trigger (Threshold, Cont. Rec, Rec/Trig) was silently swallowed
+  until power-cycle or Clear-All. The header showed a permanent `REC<n>`. A fallback after
+  the mix loop now finishes any arming slot the loop could not reach, and releases a stale
+  `arming_record_index_` whose voice is no longer `ArmingRecord`.
 - **Display — Crossfade focus:** when Amplitude > ~0, matching 1px ticks travel vertically
   immediately left and right of each `T#` on the Home Dashboard (position = focus index
   among Count Trails; tick height scales with Amplitude). `T#` stays normal (not inverted).
@@ -298,13 +355,37 @@ bank, without external delay lines.
   tmpBuf API in this tree. Hann window via `arm_mult_f32`, magnitudes via `arm_cmplx_mag_f32`.
   Full prebuilt `libarm_cortexM7lfdp_math.a` overflowed the 128 KB flash budget (~+51 KB); the
   build uses a **lite CMSIS** object set from `link_cmsis_dsp.py` (selective RFFT-512 tables +
-  required transform/basicmath sources).
+  required transform/basicmath sources). That +51 KB would fit since the BOOT_SRAM move, but the
+  lite set covers everything in use, so there is no reason to link the full archive.
 - **Sizes (CPU/Flash budget):** FFT **512**, hop **256**, Partials UI/engine **4…32** (default
   16). Architecture examples that mention 64 partials are aspirational — raise only when audio
   CPU and flash headroom allow. Audio block size **256** @ 48 kHz (was 128; larger blocks
   cut ISR overhead so the UI loop still runs under heavy DSP). ReverbSc runs at **half rate**
   inside `ReverbEngine`. Filter bypasses when open; `SetFreq` is block-rate unless Feedback
   drives cutoff FM (then every 4 samples).
+- **Clock / build flags:** `hw.Init(true)` = libDaisy Boost → **480 MHz** (the 400 MHz default
+  cost ~20% headroom). `-fno-math-errno` + `-ffp-contract=fast` make `sqrtf` a single
+  `VSQRT.F32` instead of a libm call and contract `a*b+c` to `VFMA`; both are flash-negative.
+  Optimisation level is deliberately split: libDaisy carries its own `library.json` →
+  `platformio_extra_build_script.py`, which forces `-O3` on the whole library, while the
+  stm32cube default is `-Os`. That left **only the Perseids engines** — the actual load — on
+  `-Os`. `build_src_flags = -O3` now covers `src/` too (it lands after the platform's `-Os`, so
+  it wins); DaisySP stays `-Os` because nothing hot lives there. Cost: +32 KB code, irrelevant
+  against the 480 KB SRAM budget. `-O3` changes no floating-point semantics.
+  Sample rate is fixed at **48 kHz**: libDaisy's `SaiHandle::Config::SampleRate` only offers
+  8/16/32/48/96 kHz, so 44.1 kHz is not an option without a custom PLL3 config.
+- **Boot: Daisy bootloader, `APP_TYPE = BOOT_SRAM`.** The 128 KB internal flash was 97.1% full
+  with Phases 10/11 still unwritten, so the app moved out of it. `dsy_bootloader_v6_4-intdfu-2000ms`
+  now owns internal flash; the app lives in QSPI at **0x90040000** and the bootloader copies it to
+  AXI-SRAM on every boot. Wiring in `platformio.ini`: `board_build.ldscript = STM32H750IB_sram.lds`,
+  `-D BOOT_APP`, and `upload_protocol = custom` calling `dfu-util … -s 0x90040000:leave`.
+  `board_upload.maximum_size/maximum_ram_size` must be overridden as well, otherwise PlatformIO
+  keeps size-checking against the board manifest's 128 KB and aborts the link.
+  New budgets — code in **SRAM 480 KB** (32% at `-O3`), `.data`/`.bss` in **DTCM 128 KB**
+  (57%). DTCM is the tighter one from here on, and it is zero-wait-state, so the move is also a
+  small speed win for globals. DMA cannot reach DTCM, but libDaisy already places its buffers in
+  `RAM_D2_DMA`. Uploading needs the bootloader's **2 s** window after reset (hold BOOT to extend);
+  the ST DFU mode (BOOT + RESET) is only needed to reflash the bootloader itself.
 - **Resynthesis:** custom phasor bank + cheap FastSin (not 32× DaisySP `Oscillator`). Waveshape
   bipolar: center = sine, left → saw mix, right → wavefold. Peak pick + **frequency-continuity
   matching** across hops (nearest previous partial within ~2.5 bins / 8% relative). Absolute
@@ -363,6 +444,9 @@ through **Off → Inp (engine bus) → Spectra → Swarm → Reverb**.
    while the Settings pot is unwired (`// TODO(release)` markers in `capture_params.h` /
    `main.cpp`) — final firmware must default it back to Off. Display format: CPU-only shows a
    trailing percent sign (`C42%`); combined CPU+RAM stays compact without it (`C42 R12`).
+   While the Swarm load governor is throttling, **`L!`** takes the place of that trailing `%`
+   and the SDRAM figure is suppressed (`L!C42`); with both meters Off a lone `L!` is shown.
+   It clears itself when the grain cap is back at maximum (4.1 Block 5).
 2. Instant Playback Mode (On/Off) — ON: resynthesis starts immediately, analysis refines live
    as the buffer fills up (reactive like a reverb/resonator). OFF: waits for a full buffer,
    then a single analysis pass (behaves like a delay/looper)
@@ -744,11 +828,15 @@ Paths back to the Home Dashboard (4.9), complementary:
    been pressed, the display automatically jumps back to the Home Dashboard after **7
    seconds** — regardless of whether you're currently in a cycle display, a Settings submenu,
    or a segmented selection. The most recently bound pot assignments are unaffected by this;
-   only the display changes, no controls get unbound. 7s is a starting value (target range
-   5–10s, see the calibration note in 4.11). **Bench interim: `kInactivityMs = 4000` (4s).**
-   With cross-Block pot switching (4.6) and Trail-short Home, the timeout is no longer the
-   only way out of a CycleView — keep it calm for reading values; do not shorten further
-   just for navigation.
+   only the display changes, no controls get unbound. 7s is the target (range 5–10s, see the
+   calibration note in 4.11). **`kInactivityMs = 7000`.** With cross-Block pot switching (4.6)
+   and Trail-short Home, the timeout is no longer the only way out of a CycleView — keep it
+   calm for reading values; do not shorten further just for navigation.
+   **Idle-timer arming (verified):** `HandlePotTurn` runs every frame for the open Block, so
+   the timer must not refresh on every call. It refreshes on Block enter, on pot motion above
+   `kActivityThreshold` (0.4% — below the 1.5% edit chatter gate so slow turns still count),
+   on each Cycle-hold scroll step, and on Cycle press/release. The old gate on `kEditThreshold`
+   alone meant careful scrolling through a 6-param row (Resonator) could expire mid-gesture.
 
 ### 4.7b Imprint (global button — D6)
 
@@ -852,7 +940,8 @@ already existed on Cycle.
 
 SSD1309, 128×64 px. Includes: cycle display (name at bottom, value on top), Home Dashboard
 with Trail status (Level/Lock/Solo), input threshold VU meter with threshold marker,
-CPU/SDRAM meter (top right, hideable via Settings), record slot indicator (`R1`…`R5` idle /
+CPU/SDRAM meter (top right, hideable via Settings, with an `L!` prefix while the Swarm load
+governor throttles), record slot indicator (`R1`…`R5` idle /
 `REC1`…`REC5` while armed/recording — same understated **Font_4x6** as the CPU meter),
 Remaining Hold is shown in the Life-Bar countdown (numeric / INF). Reset confirmation dialog
 ("Delete all Trails?", see 4.7).
@@ -1056,7 +1145,7 @@ determined yet.
 | 4 | Spectra engine (additive) ✔ | Partials/Waveshape/Umbra-Aurora/Ensemble-Drift audible (stylized; see 4.1 contract) |
 | 5 | Swarm engine (granular) ✔ | Size/Spread/Scan/Atmosphere audible; A/B vs Spectra |
 | 6 | Engine blend (Block 3) ✔ | Continuous crossfading Spectra↔Swarm |
-| 7 | Spectral Resonator ✔ | Mix/Decay/Pitch/Quantized active, intonation from Settings effective |
+| 7 | Spectral Resonator ✔ | Mix/Decay/Damping/Spread/Pitch/Quantized active, intonation from Settings effective |
 | 8 | Reverb & Filter Mix ✔ | ReverbSc + Character; SVF LP Filter Mix with Destination |
 | 9 | Pan Drift & Crossfade ✔ | Phase-offset pan LFOs, crossfade slew, focus ticks on Home |
 | 10 | Mod system | 4 slots, jack normalling, registry destination, divider/clock |
@@ -1341,10 +1430,10 @@ Implement:
   stays cloud-only). At >0, scale listen-through into Reverb send / shared FX bus by that
   amount without breaking Multi Dry/Wet as the final blender. Wire in Phase 11 with the full
   Settings submenu.
-- **TODO — Spectral Resonator presence:** currently deliberately subtle (`1/8` mode average +
-  soft-`tanh` + Swarm-only). Deferred: raise makeup / reduce averaging (and optionally
-  rethink routing) so Mix/Decay read as a clearer pitched body — without reintroducing
-  level-proportional crackle. Leave as-is until revisited.
+- **✔ Resolved — Spectral Resonator presence:** the culprit was not makeup gain but the Decay
+  mapping, which never reached a Q that rings (see Block 7 above). Decay is now a real T60,
+  the `1/8` average became a vector norm, and Damping + Spread were added. Still Swarm-only —
+  routing was left alone deliberately.
 - **TODO — Play / Rec illuminated switch LEDs:** panel switches may have built-in LEDs
   (Play = green solid / blink for playing vs paused; Rec = red while armed/recording).
   Drive from Daisy GPIO if pin budget allows — **D30 is Multi DT** now; D31–D32 not on

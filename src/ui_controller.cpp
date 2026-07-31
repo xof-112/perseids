@@ -387,7 +387,10 @@ void UiController::HandlePotTurn(size_t row_idx, float pot_norm, float delta)
     const bool entering_block
         = (screen_ != UiScreen::CycleView) || (active_row_ != row_idx);
 
-    if(entering_block || std::fabs(delta) >= kEditThreshold)
+    // HandlePotTurn runs every frame for the open Block — do not touch on
+    // every call. Refresh the idle timer on enter, on real pot motion
+    // (including slow turns below kEditThreshold), and on scroll steps below.
+    if(entering_block || std::fabs(delta) >= kActivityThreshold)
         TouchActivity();
 
     active_row_ = row_idx;
@@ -409,12 +412,14 @@ void UiController::HandlePotTurn(size_t row_idx, float pot_norm, float delta)
                 row.Scroll(1);
                 scroll_anchor_[row_idx] += kScrollStepThreshold;
                 last_scroll_ms_[row_idx] = now;
+                TouchActivity();
             }
             else if(moved <= -kScrollStepThreshold)
             {
                 row.Scroll(-1);
                 scroll_anchor_[row_idx] -= kScrollStepThreshold;
                 last_scroll_ms_[row_idx] = now;
+                TouchActivity();
             }
         }
     }
@@ -453,6 +458,7 @@ void UiController::PollControls()
     if(cycle_held && !cycle_held_prev_)
     {
         pot_moved_during_hold_ = false;
+        TouchActivity(); // holding Cycle is interaction (scroll / reset path)
         for(size_t i = 0; i < n_pots; ++i)
         {
             const PotMapping& map = pot_mappings_[i];
@@ -466,6 +472,7 @@ void UiController::PollControls()
 
     if(cycle_held_prev_ && !cycle_held)
     {
+        TouchActivity(); // commit after scroll — reading the new param is not idle
         for(size_t i = 0; i < n_pots; ++i)
         {
             rows_[i].SetCycleScrollActive(false);
@@ -615,6 +622,8 @@ void UiController::UpdateScreen()
         = cpu_load_ != nullptr
               ? cpu_load_->load(std::memory_order_relaxed)
               : 0.f;
+    // Clears itself as soon as the Swarm grain cap is back at maximum.
+    const bool governor = swarm_ != nullptr && swarm_->GovernorActive();
 
     if(reset_confirm_ || screen_ == UiScreen::Dashboard)
     {
@@ -649,20 +658,22 @@ void UiController::UpdateScreen()
                                show_ram,
                                cpu_load,
                                capture_->CrossfadeFocus(),
-                               capture_->CrossfadeAmplitudeUi());
+                               capture_->CrossfadeAmplitudeUi(),
+                               governor);
     }
     else if(screen_ == UiScreen::MultiView && multi_row_ != nullptr)
     {
         const size_t col = multi_row_->BoundIndex();
         display_.DrawCycleView(
-            *registry_, *multi_row_, col, -1.f, show_cpu, cpu_load);
+            *registry_, *multi_row_, col, -1.f, show_cpu, cpu_load, governor);
     }
     else
     {
         const CycleRow& row = rows_[active_row_];
         const size_t    col
             = row.InCycleScroll() ? row.ScrollIndex() : row.BoundIndex();
-        display_.DrawCycleView(*registry_, row, col, -1.f, show_cpu, cpu_load);
+        display_.DrawCycleView(
+            *registry_, row, col, -1.f, show_cpu, cpu_load, governor);
     }
 
     display_.Present();
