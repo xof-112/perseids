@@ -170,7 +170,9 @@ void SwarmEngine::UpdateGovernor(float cpu_load)
 
 float SwarmEngine::PitchRatio() const
 {
-    return std::pow(2.f, BipolarNorm(params_.pitch_swarm, -1.f, 1.f));
+    // Pitch Both expands PSW's octave span from ±1 (PB=0) to ±2 (PB=1).
+    const float span = 1.f + Clampf(params_.pitch_both, 0.f, 1.f);
+    return std::pow(2.f, BipolarNorm(params_.pitch_swarm, -1.f, 1.f) * span);
 }
 
 float SwarmEngine::GrainDurationSec() const

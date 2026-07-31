@@ -1,69 +1,63 @@
 # Perseids
 
-Firmware for **Perseids**, a Eurorack-style granular/spectral audio module on the
-Electrosmith Daisy Seed (libDaisy/DaisySP).
+Eurorack-style firmware for the **Electrosmith Daisy Seed** (libDaisy / DaisySP): capture audio
+into up to five **Trails**, then shape a stereo cloud with **Spectra** (additive) and **Swarm**
+(granular), plus resonator, reverb, filter, and spatial motion.
 
-Up to 5 audio voices (**Trails**) are captured in a round-robin pool and later processed
-by global resynthesis engines (**Spectra** / **Swarm**), resonator, reverb, filter, and
-spatial motion (Pan Drift / Crossfade). Processing is global and pre-fader; each Trail
-only has a light mixer tap (Level/Lock/Solo).
+DSP is **global and pre-fader**; each Trail only has a light mixer tap (Level / Lock / Solo).
+**Multi Dry/Wet** is the final blender between clean listen-through and the finished wet bus.
 
-Conceptually inspired by [Coastline](https://aqeelaadamsound.com/b/coastline) by Aqeel Aadam
-Sound — independently designed, not affiliated.
+Inspired by [Coastline](https://aqeelaadamsound.com/b/coastline) by Aqeel Aadam Sound —
+independently designed, not affiliated.
+
+![Perseids Phase 9 v003 bench](images/dev-phase9v003.jpg)
 
 ---
 
-## Status — Phase 9 · Pan Drift & Crossfade
+## Status — Phase 9 · `dev-phase9v003`
 
-**Pan Drift + Crossfade are in.** Block 8 gives each Trail an independent pan LFO
-(Phase / Amplitude / Velocity). Block 9 runs a traveling focus lobe across the active
-Trails, with focus ticks beside `T#` on the Home dashboard. Soft round-robin replace uses
-a BBD-style slew before overwrite.
+Phase 9 (**Pan Drift** + **Crossfade**) is complete. This bench line also folds in post-9
+polish on the Home life bar, Multi → Settings defaults, and wet-bus balance.
 
-Also on this bench line (post Phase-8 polish): Swarm load governor (`L!`), grain Direction,
-Resonator Damping/Spread with real ring-time Decay, Overwrite (OVR) hold-lock, Daisy
-**BOOT_SRAM** bootloader (app in QSPI → AXI-SRAM — internal 128 KB flash was full).
+| What’s in | Notes |
+|-----------|--------|
+| Capture (SDRAM rings, THR / CRE / OVR, Hold · FIN · FOUT) | Working |
+| Home dashboard (VU, life bars, REC header, CPU / `L!`) | Working |
+| Life-Bar **REC** styles | **PLR** (default) · **PRS** · **CTR** — Settings |
+| Spectra · Swarm · Blend · Resonator · Reverb · Filter | Working |
+| Pan Drift · Crossfade (focus ticks on Home) | Working |
+| Multi (D/W · M1 · M2 · TU · SET) | Cycle short / Cycle-hold+Multi steps the list |
+| Settings | CPU · RAM · SCL · INT · **REC** · **LVL** · **#T** |
+| Default Trail level / count | LVL 0…100% @ 5% · #T 1…5 (boot 3 / 50%) |
+| Daisy **BOOT_SRAM** | App in QSPI → AXI-SRAM; room for `-O3` |
 
-![Perseids Phase 9 v002 bench setup](images/dev-phase9v002.jpg)
+| Still ahead | |
+|-------------|--|
+| **Phase 10** | Mod system (4 slots) |
+| **Phase 11** | Multi macros, Time Unit, calibration, FX→Input |
 
-| Area | State |
-|------|--------|
-| UI / ParameterRegistry / Cycle rows | Working (all 10 block pots; >4 params scroll) |
-| Trail Level, Lock/Solo, Rec/Trig, Imprint lock-all | Working |
-| Capture engine (SDRAM rings, threshold, Cont.Rec, Hold/FIN/FOUT, OVR) | Working |
-| Dashboard (VU, life bars, Count-limited trails, CPU/`L!`, REC header) | Working |
-| Spectra engine (additive: Partials, Waveshape, Umbra/Aurora, Ensemble) | Working |
-| Swarm engine (granular: Size, Spread, Scan, Direction, Atmosphere) | Working |
-| Engine blend (continuous Spectra↔Swarm, equal-power, pre-fader) | Working |
-| Spectral Resonator (Mix/Decay/Damping/Spread/Pitch/Quantized) | Working |
-| Reverb (ReverbSc + Character) | Working |
-| Filter Mix (SVF LP + Destination) | Working |
-| Pan Drift (per-Trail LFO, CloudPan) | Working |
-| Crossfade (focus lobe + Home ticks) | Working |
-| Mod system (4 slots) | **Next** — Phase 10 |
-| Multi / Settings / Calibration | Phase 11 |
+Full roadmap & DSP contracts: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 
-Tag / photo: **`dev-phase9v002`** · Full roadmap: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+**Cheat sheets** (3-page)
 
-Cheat sheets:
+- HTML (EN/DE toggle): [`docs/perseids-cheat-sheet.html`](./docs/perseids-cheat-sheet.html)
+- PDF DE: [`docs/perseids_cheatsheet_3page.pdf`](./docs/perseids_cheatsheet_3page.pdf)
+- PDF EN: [`docs/perseids_cheatsheet_3page_en.pdf`](./docs/perseids_cheatsheet_3page_en.pdf)
 
-- HTML (bilingual): [`docs/perseids-cheat-sheet.html`](./docs/perseids-cheat-sheet.html)
-- PDF DE: [`docs/perseids_cheatsheet_2page.pdf`](./docs/perseids_cheatsheet_2page.pdf)
-- PDF EN: [`docs/perseids_cheatsheet_2page_en.pdf`](./docs/perseids_cheatsheet_2page_en.pdf)
+Bench photo: [`images/dev-phase9v003.jpg`](./images/dev-phase9v003.jpg)
 
 ---
 
 ## Hardware
 
-- Electrosmith Daisy Seed (STM32H750 @ 480 MHz boost, 64 MB SDRAM)
+- Electrosmith Daisy Seed (STM32H750 @ **480 MHz**, 64 MB SDRAM)
 - SSD1309 OLED 128×64 (SPI)
-- Custom carrier PCB (pots, encoders, buttons, jacks)
+- Custom carrier (10 block pots, Multi + 5 Trail encoders, Cycle / Imprint / Rec, jacks)
 
-**Bootloader:** the app runs as Daisy `BOOT_SRAM` (binary in QSPI @ `0x90040000`, copied to
-AXI-SRAM on boot). Flash the Daisy bootloader once into internal flash; afterward reset into
-the ~2 s grace window (hold BOOT to extend) and upload with PlatformIO as usual. ST DFU
-(BOOT+RESET) is only needed to reflash the bootloader itself. Details in `ARCHITECTURE.md`
-(Block 4 / clock & boot notes).
+**Bootloader:** `BOOT_SRAM` — Daisy bootloader in internal flash; app binary at QSPI
+`0x90040000`, copied to AXI-SRAM on boot. Reset into the ~2 s upload window (hold **BOOT** to
+extend), then PlatformIO upload. ST DFU (BOOT+RESET) only to install/replace the bootloader.
+See `ARCHITECTURE.md` §2a / Block 4.
 
 ---
 
@@ -72,18 +66,19 @@ the ~2 s grace window (hold BOOT to extend) and upload with PlatformIO as usual.
 ```bash
 git clone https://github.com/xof-112/perseids.git
 cd perseids
-git checkout dev-phase9v002   # this milestone
+# optional: git checkout <tag>   # e.g. when a phase9v003 tag is published
+
 git clone --recurse-submodules https://github.com/electro-smith/libDaisy.git lib/libDaisy
 git clone --recurse-submodules https://github.com/electro-smith/DaisySP.git lib/DaisySP
-# ReverbSc lives in DaisySP-LGPL (LGPL-2.1) — ensure the submodule is present:
+# ReverbSc is LGPL — init DaisySP-LGPL if needed:
 #   cd lib/DaisySP && git submodule update --init DaisySP-LGPL
 
-# One-time (if not already on the board): flash Daisy bootloader via ST DFU
+# One-time: flash Daisy bootloader via ST DFU if the Seed is still stock
 #   dfu-util -a 0 -s 0x08000000:leave \
 #     -D lib/libDaisy/core/dsy_bootloader_v6_4-intdfu-2000ms.bin -d ,0483:df11
 
 pio run
-# Reset Daisy (LED pulses) — hold BOOT to keep the upload window open, then:
+# Reset Daisy (LED pulses) — hold BOOT if needed — then:
 pio run --target upload
 ```
 
@@ -91,5 +86,5 @@ pio run --target upload
 
 ## License
 
-**GPL-3.0** — see [`LICENSE`](./LICENSE). libDaisy / DaisySP are MIT; **DaisySP-LGPL**
-(`ReverbSc`) is LGPL-2.1.
+**GPL-3.0** — see [`LICENSE`](./LICENSE).  
+libDaisy / DaisySP are MIT; **DaisySP-LGPL** (`ReverbSc`) is LGPL-2.1.

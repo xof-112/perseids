@@ -74,8 +74,15 @@ const char* const kFilterDestLabels[] = {"Off", "Inp", "Sp", "Sw", "Rv"};
 const char* const kSwarmDirLabels[] = {"Fwd", "Rev", "Rnd"};
 
 // Multi Time Unit / Settings stub labels (Phase 11 interim dummies).
-const char* const kTimeUnitLabels[]    = {"Sec", "Clk"};
+const char* const kTimeUnitLabels[]     = {"Sec", "Clk"};
 const char* const kSettingsStubLabels[] = {"---"};
+// Life-Bar recording style (Settings → REC).
+const char* const kRecStyleLabels[] = {"PRS", "PLR", "CTR"};
+// Settings default Trail Level: CountNum 0..20 → 0%..100% in 5% steps.
+const char* const kDefaultTrailLvlLabels[] = {
+    "0%",  "5%",  "10%", "15%", "20%", "25%", "30%", "35%", "40%", "45%",
+    "50%", "55%", "60%", "65%", "70%", "75%", "80%", "85%", "90%", "95%",
+    "100%"};
 
 const uint16_t kTrailsIds[]
     = {perseids::kTrailsCount,
@@ -92,7 +99,8 @@ const uint16_t kTimeIds[] = {perseids::kTimeBuffer,
 // Block 3 — Phase 6: Blend (Spectra↔Swarm), Pitch Spectra, Pitch Swarm.
 const uint16_t kEnginesIds[] = {perseids::kEnginesBlend,
                                 perseids::kEnginesPitchSpectra,
-                                perseids::kEnginesPitchSwarm};
+                                perseids::kEnginesPitchSwarm,
+                                perseids::kEnginesPitchBoth};
 
 const uint16_t kSpectraIds[]
     = {perseids::kSpectraPartials,
@@ -110,7 +118,10 @@ const uint16_t kSettingsIds[]
     = {perseids::kSettingsCpuMeter,
        perseids::kSettingsRamMeter,
        perseids::kSettingsScale,
-       perseids::kSettingsIntonation};
+       perseids::kSettingsIntonation,
+       perseids::kSettingsRecStyle,
+       perseids::kSettingsTrailLevel,
+       perseids::kSettingsTrailCount};
 
 // Cycle lists for Blocks 8–9 (spatial_params.h). Blocks 6+10 live
 // (reverb_params.h / filter_params.h). Block 7 Resonator: reso_params.h.
@@ -260,8 +271,8 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          DT::Unipolar,
          false,
          true,   // center_mark: subtle 50% dots (equal Spectra/Swarm mix)
-         "SP",   // seg row hint below 50% — Spectra side (Font_4x6, like CPU%)
-         "SW"},  // seg row hint above 50% — Swarm side (nothing at exactly 50%)
+         "SP",   // value-header hint below 50% — Spectra (Font_4x6)
+         "SW"},  // value-header hint above 50% — Swarm (nothing at exactly 50%)
         {perseids::kEnginesPitchSpectra,
          "Pitch Spectra",
          "PSP",
@@ -270,7 +281,12 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          &g_spectra_params.pitch_spectra,
          DT::Bipolar,
-         true},
+         true,
+         false,
+         nullptr,
+         nullptr,
+         nullptr,
+         &g_swarm_params.pitch_both},
         {perseids::kEnginesPitchSwarm,
          "Pitch Swarm",
          "PSW",
@@ -279,7 +295,21 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          &g_swarm_params.pitch_swarm,
          DT::Bipolar,
-         true},
+         true,
+         false,
+         nullptr,
+         nullptr,
+         nullptr,
+         &g_swarm_params.pitch_both},
+        {perseids::kEnginesPitchBoth,
+         "Pitch Both",
+         "PB",
+         0.f,
+         1.f,
+         0.f,
+         &g_swarm_params.pitch_both,
+         DT::Unipolar,
+         false},
 
         {perseids::kSpectraPartials,
          "Partials",
@@ -298,7 +328,10 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          &g_spectra_params.waveshape,
          DT::Bipolar,
-         true},
+         true,
+         false,
+         "SA", // Saw side (left of center)
+         "FO"}, // Fold side (right of center)
         {perseids::kSpectraUmbraAurora,
          "Umbra/Aurora",
          "UMB",
@@ -307,7 +340,10 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          &g_spectra_params.umbra_aurora,
          DT::Bipolar,
-         true},
+         true,
+         false,
+         "UM",
+         "AU"},
         {perseids::kSpectraEnsemble,
          "Ensemble",
          "ENS",
@@ -366,7 +402,10 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          &g_swarm_params.atmosphere,
          DT::Bipolar,
-         true},
+         true,
+         false,
+         "BL", // Blur
+         "RD"}, // Radiation
 
         // --- Block 6 Reverb (Phase 8) ---
         {perseids::kReverbMix,
@@ -404,7 +443,10 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          0.f,
          &g_reverb_params.character,
          DT::Bipolar,
-         true},
+         true,
+         false,
+         "CH", // Chorus
+         "FR"}, // Friction
 
         {perseids::kResoMix,
          "Mix",
@@ -587,11 +629,46 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          &g_capture_params.intonation,
          DT::Toggle,
          false},
+        {perseids::kSettingsRecStyle,
+         "Rec bar",
+         "REC",
+         0.f,
+         2.f,
+         1.f, // 0 PRS center, 1 PLR L→R (default), 2 CTR solid
+         &g_capture_params.rec_style,
+         DT::CountNum,
+         false,
+         false,
+         nullptr,
+         nullptr,
+         kRecStyleLabels},
+        {perseids::kSettingsTrailLevel,
+         "Trail lvl",
+         "LVL",
+         0.f,
+         20.f,
+         10.f, // 10 → 50%
+         &g_capture_params.trail_lvl,
+         DT::CountNum,
+         false,
+         false,
+         nullptr,
+         nullptr,
+         kDefaultTrailLvlLabels},
+        {perseids::kSettingsTrailCount,
+         "Trail cnt",
+         "#T",
+         1.f,
+         5.f,
+         3.f, // boot / Reset default active Trails
+         &g_capture_params.trail_cnt,
+         DT::CountNum,
+         false},
 
         // Phase 11 interim — Multi encoder cycle (Dry/Wet live; rest dummy UI).
         {perseids::kMultiDryWet,
          "Dry/Wet",
-         "DW",
+         "D/W",
          0.f,
          1.f,
          0.55f,
@@ -729,8 +806,13 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         dry_wet = 0.f;
     else if(dry_wet > 1.f)
         dry_wet = 1.f;
-    const float dry_g = std::cos(dry_wet * 1.5707964f);
-    const float wet_g = std::sin(dry_wet * 1.5707964f) * 1.10f;
+    // Dry sits under wet at equal Multi — listen-through was dominating the blend.
+    constexpr float kDryBusTrim = 0.85f;
+    constexpr float kWetBusTrim = 1.30f;
+    const float     dry_g
+        = std::cos(dry_wet * 1.5707964f) * kDryBusTrim;
+    const float wet_g
+        = std::sin(dry_wet * 1.5707964f) * kWetBusTrim;
 
     // Cheap soft-limit (replaces per-sample tanh — major CPU at the bus).
     auto SoftLimit = [](float x) -> float {
@@ -814,13 +896,15 @@ int main(void)
 
     perseids::ParameterRegistry registry;
     RegisterAllParams(registry);
+    // Live CNT follows Settings default Trail count at boot.
+    g_capture_params.count = g_capture_params.trail_cnt;
 
     // Order pairs 1:1 with kPotMappings; rows past the pot count (Settings)
     // are pot-less.
     perseids::CycleRow rows[] = {
         perseids::CycleRow("Trails", kTrailsIds, 5),
         perseids::CycleRow("Time", kTimeIds, 4),
-        perseids::CycleRow("Engines", kEnginesIds, 3),
+        perseids::CycleRow("Engines", kEnginesIds, 4),
         perseids::CycleRow("Swarm", kSwarmIds, 5),
         perseids::CycleRow("Spectra", kSpectraIds, 4),
         perseids::CycleRow("Pan Drift", kPanIds, 3),
@@ -828,7 +912,7 @@ int main(void)
         perseids::CycleRow("Reverb", kReverbIds, 4),
         perseids::CycleRow("Crossfade", kXfadeIds, 2),
         perseids::CycleRow("Filter", kFilterIds, 4),
-        perseids::CycleRow("Settings", kSettingsIds, 4),
+        perseids::CycleRow("Settings", kSettingsIds, 7),
     };
 
     perseids::CycleRow multi_row("Multi", kMultiIds, 5);

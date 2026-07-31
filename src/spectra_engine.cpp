@@ -63,7 +63,7 @@ void SpectraEngine::Init(float sample_rate)
     sample_rate_inv_ = 1.f / sample_rate_;
     bin_hz_          = sample_rate_ / static_cast<float>(kFftSize);
     params_          = SpectraParamValues{};
-
+    pitch_both_      = 0.f;
     input_write_.store(0, std::memory_order_relaxed);
     input_read_.store(0, std::memory_order_relaxed);
     analysis_count_ = 0;
@@ -111,14 +111,18 @@ void SpectraEngine::BuildWindow()
     }
 }
 
-void SpectraEngine::SyncFromUi(const SpectraParamValues& params)
+void SpectraEngine::SyncFromUi(const SpectraParamValues& params, float pitch_both)
 {
-    params_ = params;
+    params_     = params;
+    pitch_both_ = pitch_both;
 }
 
 float SpectraEngine::PitchRatio() const
 {
-    return std::pow(2.f, BipolarNorm(params_.pitch_spectra, -1.f, 1.f));
+    // Pitch Both expands PSP's octave span from ±1 (PB=0) to ±2 (PB=1) —
+    // it is not an extra pitch offset. Up to ±2 oct can alias.
+    const float span = 1.f + Clampf(pitch_both_, 0.f, 1.f);
+    return std::pow(2.f, BipolarNorm(params_.pitch_spectra, -1.f, 1.f) * span);
 }
 
 void SpectraEngine::PushInput(const float* samples, size_t size)

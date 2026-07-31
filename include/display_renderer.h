@@ -43,7 +43,8 @@ class DisplayRenderer
                        float               cpu_load       = 0.f,
                        float               xfade_focus    = 0.f,
                        float               xfade_amp      = 0.f,
-                       bool                governor       = false);
+                       bool                governor       = false,
+                       uint8_t             rec_style      = 1);
 
     void DrawCycleView(const ParameterRegistry& reg,
                        const CycleRow&          row,
@@ -108,7 +109,20 @@ class DisplayRenderer
                           int                y,
                           int                w,
                           int                h,
-                          const TrailLifeUi& life);
+                          size_t             trail_index,
+                          const TrailLifeUi& life,
+                          uint8_t            rec_style);
+    // Perseids embers: motion CenterOut (PRS) or L→R (PLR); visibility 0..1 soft gate.
+    void DrawRecSparkleFill(int      x0,
+                            int      y,
+                            int      w,
+                            int      h,
+                            float    grow,
+                            uint32_t seed,
+                            bool     left_to_right,
+                            float    visibility);
+    // Recording life fill: solid bar grows center → L+R (style CTR).
+    void DrawRecCenterSolid(int x0, int y, int w, int h, float grow);
     void DrawCrossfadeFocusBars(int    t_x,
                                 int    t_w,
                                 int    row0_y,
@@ -123,7 +137,24 @@ class DisplayRenderer
                           size_t              out_len) const;
     void FormatPosition(size_t index, size_t count, char* out, size_t out_len) const;
 
+    // UI-only soft gate for Perseids rec (~200 ms in / out).
+    enum class RecSoft : uint8_t
+    {
+        Idle = 0,
+        FadeIn,
+        FadeOut,
+    };
+    struct LifeBarAnim
+    {
+        TrailLifePhase last_phase = TrailLifePhase::Empty;
+        RecSoft        soft       = RecSoft::Idle;
+        uint32_t       soft_t0    = 0;
+        float          grow_latch = 1.f;
+        bool           ltr_latch  = false;
+    };
+
     daisy::OledDisplay<daisy::SSD130x4WireSpi128x64Driver> display_;
+    LifeBarAnim life_anim_[kTrailCount];
 };
 
 } // namespace perseids

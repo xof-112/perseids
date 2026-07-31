@@ -851,7 +851,7 @@ void CaptureEngine::Process(const float* in_l,
         if(v.state == TrailState::Recording
            || v.state == TrailState::ArmingRecord)
         {
-            // Arming still shows as Recording (striped) — write head imminent.
+            // Arming still shows as Recording (sparkle) — write head imminent.
             phase = TrailLifePhase::Recording;
             if(v.state == TrailState::Recording)
             {

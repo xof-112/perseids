@@ -29,6 +29,7 @@ void UiController::Init(daisy::DaisySeed&   seed,
     registry_        = &registry;
     rows_            = rows;
     row_count_       = row_count;
+    settings_row_    = row_count; // invalid until resolved below
     pot_mappings_    = pot_mappings;
     pot_count_       = pot_count;
     capture_         = &capture;
@@ -61,6 +62,8 @@ void UiController::Init(daisy::DaisySeed&   seed,
     multi_push_idle_       = 1.f;
     multi_scroll_accum_    = 0;
     last_multi_scroll_ms_  = 0;
+    multi_boot_ignore_until_ms_ = 0;
+    last_discrete_enc_ms_  = 0;
 
     for(size_t i = 0; i < kMaxCycleRows; ++i)
     {
@@ -78,7 +81,7 @@ void UiController::Init(daisy::DaisySeed&   seed,
     cycle_btn_.Init(hw::kCycleButton, kLongPressMs);
     imprint_btn_.Init(hw::kImprintButton, kImprintLongPressMs);
     multi_enc_.Init(hw::kMultiEncClk, hw::kMultiEncDt);
-    trails_.Init(seed, capture_);
+    trails_.Init(seed, capture_, &capture_params_->trail_lvl);
 
     if(dry_wet_ != nullptr && multi_params_ != nullptr)
         dry_wet_->store(multi_params_->dry_wet, std::memory_order_relaxed);
@@ -87,6 +90,26 @@ void UiController::Init(daisy::DaisySeed&   seed,
         mux_.Process();
 
     CalibrateMultiPushIdle();
+
+    // Drain encoder chatter from GPIO init; sync push edge so boot cannot
+    // fake a short-press → MultiView. Ignore Multi opens briefly after boot.
+    for(size_t n = 0; n < 16; ++n)
+        multi_enc_.Debounce();
+    (void)multi_enc_.ConsumeSteps();
+    multi_push_prev_            = ReadMultiPushPressed();
+    multi_boot_ignore_until_ms_ = daisy::System::GetNow() + kMultiBootIgnoreMs;
+
+    for(size_t i = 0; i < row_count_; ++i)
+    {
+        if(const ParameterDef* p = rows_[i].ParamAt(registry, 0))
+        {
+            if(p->id == kSettingsCpuMeter)
+            {
+                settings_row_ = i;
+                break;
+            }
+        }
+    }
 
     for(size_t i = 0; i < pot_count_ && i < row_count_; ++i)
     {
@@ -149,36 +172,46 @@ void UiController::PollMultiEncoder()
         return;
 
     multi_enc_.Debounce();
-    const int32_t steps = multi_enc_.ConsumeSteps();
-    const uint32_t now  = daisy::System::GetNow();
+    const int32_t  steps = multi_enc_.ConsumeSteps();
+    const uint32_t now   = daisy::System::GetNow();
+
+    // Boot: stay on Dashboard — mux/GPIO settle must not open Multi.
+    if(now < multi_boot_ignore_until_ms_)
+    {
+        multi_scroll_accum_ = 0;
+        multi_push_prev_    = ReadMultiPushPressed();
+        return;
+    }
 
     if(cycle_btn_.IsHeld())
     {
         if(steps != 0)
         {
-            if(screen_ != UiScreen::MultiView)
-                EnterMultiView();
-
             pot_moved_during_hold_ = true;
             multi_scroll_accum_ += steps;
             TouchActivity();
+            // Stay in Settings submenu when Cycle+Multi scrolls there;
+            // otherwise open Multi list.
+            if(!InSettingsView() && screen_ != UiScreen::MultiView)
+                EnterMultiView();
         }
 
         // One menu step per detent-ish burst, rate-limited — stops the list
         // from leaping through all entries on a single click.
-        if(screen_ == UiScreen::MultiView
-           && (now - last_multi_scroll_ms_) >= kMultiScrollMinIntervalMs)
+        if((now - last_multi_scroll_ms_) >= kMultiScrollMinIntervalMs)
         {
             if(multi_scroll_accum_ >= kMultiScrollTicksPerStep)
             {
-                multi_row_->StepBound(1);
+                if(InSettingsView() || screen_ == UiScreen::MultiView)
+                    StepMultiOrSettingsMenu(1);
                 multi_scroll_accum_ -= kMultiScrollTicksPerStep;
                 last_multi_scroll_ms_ = now;
                 TouchActivity();
             }
             else if(multi_scroll_accum_ <= -kMultiScrollTicksPerStep)
             {
-                multi_row_->StepBound(-1);
+                if(InSettingsView() || screen_ == UiScreen::MultiView)
+                    StepMultiOrSettingsMenu(-1);
                 multi_scroll_accum_ += kMultiScrollTicksPerStep;
                 last_multi_scroll_ms_ = now;
                 TouchActivity();
@@ -190,9 +223,16 @@ void UiController::PollMultiEncoder()
         multi_scroll_accum_ = 0;
         if(steps != 0)
         {
-            if(screen_ != UiScreen::MultiView)
-                EnterMultiView();
-            ApplyMultiEncoderSteps(steps);
+            if(InSettingsView())
+            {
+                ApplyMultiEncoderSteps(steps);
+            }
+            else
+            {
+                if(screen_ != UiScreen::MultiView)
+                    EnterMultiView();
+                ApplyMultiEncoderSteps(steps);
+            }
             TouchActivity();
         }
     }
@@ -228,55 +268,149 @@ void UiController::EnterMultiView()
     TouchActivity();
 }
 
+void UiController::EnterSettingsView()
+{
+    if(settings_row_ >= row_count_)
+        return;
+    active_row_ = settings_row_;
+    screen_     = UiScreen::CycleView;
+    CapturePotBaselines();
+    TouchActivity();
+}
+
+bool UiController::InSettingsView() const
+{
+    return screen_ == UiScreen::CycleView && settings_row_ < row_count_
+           && active_row_ == settings_row_;
+}
+
+bool UiController::TryEnterSettingsIfBound()
+{
+    if(multi_row_ == nullptr || registry_ == nullptr)
+        return false;
+    const ParameterDef* def = multi_row_->BoundParam(*registry_);
+    if(def == nullptr || def->id != kMultiSettings)
+        return false;
+    EnterSettingsView();
+    return true;
+}
+
 void UiController::HandleMultiShortPress()
 {
     TouchActivity();
-    if(screen_ == UiScreen::MultiView)
+    if(InSettingsView() || screen_ == UiScreen::MultiView)
     {
-        // Already in Multi — step Dry/Wet → Macro1 → Macro2 → Time → Settings.
-        multi_row_->StepBound(1);
+        StepMultiOrSettingsMenu(1);
         return;
     }
     // First short press opens Multi on the current bound entry (Dry/Wet default).
     EnterMultiView();
 }
 
+void UiController::StepMultiOrSettingsMenu(int direction)
+{
+    if(direction == 0)
+        return;
+
+    if(InSettingsView())
+    {
+        rows_[settings_row_].StepBound(direction);
+        return;
+    }
+
+    if(screen_ != UiScreen::MultiView || multi_row_ == nullptr)
+        return;
+
+    // Already on Settings gateway → open submenu; else step, then enter if landed.
+    if(direction > 0 && TryEnterSettingsIfBound())
+        return;
+
+    multi_row_->StepBound(direction);
+    if(direction > 0)
+        TryEnterSettingsIfBound();
+}
+
+void UiController::ApplyEncoderToParam(const ParameterDef& def, int32_t steps)
+{
+    if(def.value_ptr == nullptr || steps == 0)
+        return;
+
+    if(def.display_type == ParamDisplayType::Toggle
+       || def.display_type == ParamDisplayType::CountNum
+       || def.display_type == ParamDisplayType::CountBar)
+    {
+        // Quad encoders emit several ticks per detent — never jump discrete
+        // enums by |steps| (PRS→CTR was skipping PLR). Also rate-limit so one
+        // detent split across polls cannot double-step.
+        const uint32_t now = daisy::System::GetNow();
+        if(now - last_discrete_enc_ms_ < kDiscreteEncMinIntervalMs)
+            return;
+        last_discrete_enc_ms_ = now;
+
+        const float delta = (steps > 0) ? 1.f : -1.f;
+        float       v     = *def.value_ptr + delta;
+        v                 = ParameterRegistry::Clamp(
+            def,
+            static_cast<float>(
+                static_cast<int>(v + (v >= 0.f ? 0.5f : -0.5f))));
+        *def.value_ptr = v;
+    }
+    else
+    {
+        float norm = ParameterRegistry::Normalize(def, *def.value_ptr);
+        norm += static_cast<float>(steps) * 0.02f;
+        if(norm < 0.f)
+            norm = 0.f;
+        else if(norm > 1.f)
+            norm = 1.f;
+        *def.value_ptr = ParameterRegistry::Clamp(
+            def, ParameterRegistry::Denormalize(def, norm));
+    }
+
+    if(def.id == kMultiDryWet && dry_wet_ != nullptr)
+        dry_wet_->store(*def.value_ptr, std::memory_order_relaxed);
+
+    if(def.id == kSettingsTrailLevel)
+        trails_.ApplyDefaultLevels();
+
+    if(def.id == kSettingsTrailCount && capture_params_ != nullptr)
+    {
+        float c = *def.value_ptr;
+        if(c < 1.f)
+            c = 1.f;
+        else if(c > static_cast<float>(kTrailCount))
+            c = static_cast<float>(kTrailCount);
+        c = static_cast<float>(static_cast<int>(c + 0.5f));
+        *def.value_ptr           = c;
+        capture_params_->count   = c;
+        capture_params_->trail_cnt = c;
+    }
+}
+
 void UiController::ApplyMultiEncoderSteps(int32_t steps)
 {
-    if(steps == 0 || multi_row_ == nullptr || registry_ == nullptr)
+    if(steps == 0 || registry_ == nullptr)
+        return;
+
+    if(InSettingsView())
+    {
+        if(const ParameterDef* def = rows_[settings_row_].BoundParam(*registry_))
+            ApplyEncoderToParam(*def, steps);
+        return;
+    }
+
+    if(multi_row_ == nullptr)
         return;
 
     const ParameterDef* def = multi_row_->BoundParam(*registry_);
     if(def == nullptr || def->value_ptr == nullptr)
         return;
 
-    // Settings stub is display-only (single label).
+    // Settings gateway is display-only — enter via short press / land.
     if(def->id == kMultiSettings)
         return;
 
-    if(def->display_type == ParamDisplayType::Toggle
-       || def->display_type == ParamDisplayType::CountNum
-       || def->display_type == ParamDisplayType::CountBar)
-    {
-        float v = *def->value_ptr + static_cast<float>(steps);
-        v       = ParameterRegistry::Clamp(
-            *def, static_cast<float>(static_cast<int>(v + (v >= 0.f ? 0.5f : -0.5f))));
-        *def->value_ptr = v;
-    }
-    else
-    {
-        float norm = ParameterRegistry::Normalize(*def, *def->value_ptr);
-        norm += static_cast<float>(steps) * 0.02f;
-        if(norm < 0.f)
-            norm = 0.f;
-        else if(norm > 1.f)
-            norm = 1.f;
-        *def->value_ptr
-            = ParameterRegistry::Clamp(*def, ParameterRegistry::Denormalize(*def, norm));
-    }
-
-    if(def->id == kMultiDryWet && dry_wet_ != nullptr)
-        dry_wet_->store(*def->value_ptr, std::memory_order_relaxed);
+    ApplyEncoderToParam(*def, steps);
 }
 
 void UiController::SyncEngines()
@@ -284,7 +418,7 @@ void UiController::SyncEngines()
     TrailMixerState mixer[TrailLevelController::kCount];
     trails_.FillMixerState(mixer);
     capture_->SyncFromUi(*capture_params_, mixer, playing_, *spatial_params_);
-    spectra_->SyncFromUi(*spectra_params_);
+    spectra_->SyncFromUi(*spectra_params_, swarm_params_->pitch_both);
     swarm_->SyncFromUi(*swarm_params_);
 }
 
@@ -314,6 +448,17 @@ void UiController::HandleCycleButton(ButtonGesture::Event event)
             imprint_engaged_ = false;
             reset_confirm_   = false;
             playing_         = true;
+            if(capture_params_ != nullptr)
+            {
+                float c = capture_params_->trail_cnt;
+                if(c < 1.f)
+                    c = 1.f;
+                else if(c > static_cast<float>(kTrailCount))
+                    c = static_cast<float>(kTrailCount);
+                c = static_cast<float>(static_cast<int>(c + 0.5f));
+                capture_params_->trail_cnt = c;
+                capture_params_->count     = c;
+            }
             EnterDashboard();
         }
         return;
@@ -322,8 +467,13 @@ void UiController::HandleCycleButton(ButtonGesture::Event event)
     switch(event)
     {
     case ButtonGesture::Event::ShortPress:
-        // Unused alone (ARCHITECTURE 4.7) — next param = Cycle hold + pot/encoder.
-        // Multi list steps via Multi push short only.
+        // Interim: Multi encoder push is unreliable — step Multi/Settings like
+        // Cycle-hold+turn does for block pots. Elsewhere short stays unused (4.7).
+        if(InSettingsView() || screen_ == UiScreen::MultiView)
+        {
+            StepMultiOrSettingsMenu(1);
+            TouchActivity();
+        }
         break;
 
     case ButtonGesture::Event::LongPress:
@@ -659,7 +809,9 @@ void UiController::UpdateScreen()
                                cpu_load,
                                capture_->CrossfadeFocus(),
                                capture_->CrossfadeAmplitudeUi(),
-                               governor);
+                               governor,
+                               static_cast<uint8_t>(
+                                   capture_params_->rec_style + 0.5f));
     }
     else if(screen_ == UiScreen::MultiView && multi_row_ != nullptr)
     {

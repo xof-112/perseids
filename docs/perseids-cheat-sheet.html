@@ -450,7 +450,8 @@
       color: var(--oled);
     }
 
-    .oled-seg .hint {
+    .oled-seg .hint,
+    .oled-hdr .hint {
       font-size: 5px;
       opacity: 0.85;
     }
@@ -609,15 +610,15 @@
       <h2><span class="en">Idea</span><span class="de">Idee</span></h2>
       <p class="en">PERSEIDS captures audio into up to five <strong>Trails</strong>. From those it builds a stereo <strong>sound cloud</strong>: Spectra (stylized additive) blended with Swarm (grains), plus Resonator, Filter, Reverb, and spatial motion.</p>
       <p class="de">PERSEIDS nimmt Audio in bis zu fünf <strong>Trails</strong> auf. Daraus entsteht eine Stereo-<strong>Klangwolke</strong>: Spectra (stilisiert additiv) gemischt mit Swarm (Grains), plus Resonator, Filter, Reverb und räumliche Bewegung.</p>
-      <p class="note en"><strong>Multi Dry/Wet</strong> balances clean input against the finished cloud. Full wet = cloud only.</p>
-      <p class="note de"><strong>Multi Dry/Wet</strong> mischt Clean-Input gegen die fertige Wolke. Voll wet = nur Cloud.</p>
+      <p class="note en"><strong>Multi Dry/Wet</strong> balances clean input against the finished cloud (equal-power; bus trim dry ×0.85 / wet ×1.30 so engines sit forward). Full wet = cloud only.</p>
+      <p class="note de"><strong>Multi Dry/Wet</strong> mischt Clean-Input gegen die fertige Wolke (Equal-Power; Bus-Trim Dry ×0.85 / Wet ×1.30, damit Engines präsenter sind). Voll wet = nur Cloud.</p>
     </section>
 
     <section id="operation" class="bilingual">
       <h2><span class="en">Operation</span><span class="de">Bedienung</span></h2>
       <ul class="compact">
         <li><span class="en"><strong>Block pot</strong> — opens that menu; turn edits the active parameter (pickup). From another open Block, a clearer turn on a different pot jumps to that Block (anti-jitter threshold).</span><span class="de"><strong>Block-Pot</strong> — öffnet das Menü; Drehen ändert den aktiven Parameter (Pickup). Aus einem anderen offenen Block: klareres Drehen an einem anderen Pot springt dorthin (mit Anti-Jitter-Schwelle).</span></li>
-        <li><span class="en"><strong>Cycle short</strong> — unused alone (except confirming delete-all). Not for next parameter / not for Multi.</span><span class="de"><strong>Cycle kurz</strong> — allein unbenutzt (außer Delete-all bestätigen). Nicht für nächsten Parameter / nicht für Multi.</span></li>
+        <li><span class="en"><strong>Cycle short</strong> — while Multi/Settings open: next entry (same role as Cycle-hold+turn / broken Multi push). Elsewhere unused alone (except confirming delete-all).</span><span class="de"><strong>Cycle kurz</strong> — bei offenem Multi/Settings: nächster Eintrag (wie Cycle halten+drehen / defekter Multi-Push). Sonst allein unbenutzt (außer Delete-all bestätigen).</span></li>
         <li><span class="en"><strong>Cycle hold + pot / Multi turn</strong> — scroll the list without changing values. All blocks use the same column width (as if 4 slots); extra params slide; 2–3-param blocks don’t stretch wider.</span><span class="de"><strong>Cycle halten + Pot / Multi drehen</strong> — Liste scrollen ohne Werte zu ändern. Alle Blocks gleiche Spaltenbreite (wie 4 Slots); weitere Params scrollen; 2–3 Params werden nicht breiter.</span></li>
         <li><span class="en"><strong>Cycle long</strong> — delete-all Trails (confirm).</span><span class="de"><strong>Cycle lang</strong> — alle Trails löschen (Bestätigung).</span></li>
         <li><span class="en"><strong>Trail encoder short</strong> — on Home: Lock. In a Block/Multi menu: back to the Trail overview (Home); press short again on Home to Lock.</span><span class="de"><strong>Trail-Encoder kurz</strong> — auf Home: Lock. Im Block-/Multi-Menü: zurück zur Trail-Übersicht (Home); nochmal kurz auf Home = Lock.</span></li>
@@ -626,18 +627,20 @@
         <li><span class="en"><strong>Imprint long</strong> — Lock all active Trails (~800 ms hold; toggle; second long unlocks only what Imprint locked).</span><span class="de"><strong>Imprint lang</strong> — alle aktiven Trails locken (~800 ms; Toggle; zweites Lang löst nur Imprint-Locks).</span></li>
         <li><span class="en"><strong>Multi long push</strong> — Home.</span><span class="de"><strong>Multi lang</strong> — Home.</span></li>
         <li><span class="en"><strong>Rec</strong> — manual capture (same round-robin / Overwrite rules as Threshold).</span><span class="de"><strong>Rec</strong> — manuelle Aufnahme (gleiche Round-Robin-/Overwrite-Regeln wie Threshold).</span></li>
-        <li><span class="en"><strong>Idle (~4&nbsp;s)</strong> — automatic return to Home (for reading calmly; not needed for jumping menus).</span><span class="de"><strong>Idle (~4&nbsp;s)</strong> — automatisch zurück zu Home (zum ruhigen Ablesen; nicht nötig zum Menü-Springen).</span></li>
+        <li><span class="en"><strong>Idle (~7&nbsp;s)</strong> — automatic return to Home (for reading calmly; not needed for jumping menus).</span><span class="de"><strong>Idle (~7&nbsp;s)</strong> — automatisch zurück zu Home (zum ruhigen Ablesen; nicht nötig zum Menü-Springen).</span></li>
       </ul>
       <p class="en">On the OLED: <strong>block name</strong> top-left, position <strong>n/m</strong> (and optional CPU%) top-right, <strong>value</strong> centered above the bars, <strong>abbreviations</strong> in the bottom segmented row (active cell inverted). Columns always use the <strong>same width as a 4-slot page</strong> — blocks with only 2–3 params leave empty space on the right; blocks with more than four scroll the row.</p>
       <p class="de">Auf dem OLED: <strong>Blockname</strong> oben links, Position <strong>n/m</strong> (und optional CPU%) oben rechts, <strong>Wert</strong> zentriert über den Balken, <strong>Abkürzungen</strong> unten in der Segmentzeile (aktive Zelle invertiert). Spalten haben immer die <strong>Breite einer 4er-Seite</strong> — bei nur 2–3 Params bleibt rechts Platz leer; bei mehr als vier scrollt die Zeile.</p>
+      <p class="en"><strong>Named-pole header hints</strong> (small type beside the value): <strong>SP/SW</strong> (Blend), <strong>SA/FO</strong> (Waveshape), <strong>UM/AU</strong> (Umbra/Aurora), <strong>BL/RD</strong> (Atmosphere), <strong>CH/FR</strong> (Character). Below 50% the left pole sits before the number; above 50% the right pole after it; at center neither. While a pole hint shows, <strong>%</strong> is dropped so the label cannot overwrite it — Pitch and Velocity stay plain ±%.</p>
+      <p class="de"><strong>Pol-Hinweise im Header</strong> (kleine Schrift neben dem Wert): <strong>SP/SW</strong> (Blend), <strong>SA/FO</strong> (Waveshape), <strong>UM/AU</strong> (Umbra/Aurora), <strong>BL/RD</strong> (Atmosphere), <strong>CH/FR</strong> (Character). Unter 50% steht der linke Pol vor der Zahl, darüber der rechte danach; in der Mitte keiner. Solange ein Polhinweis sichtbar ist, entfällt das <strong>%</strong>, damit das Kürzel es nicht überschreibt — Pitch und Velocity bleiben normales ±%.</p>
     </section>
 
     <section id="home" class="bilingual">
       <h2><span class="en">Home dashboard</span><span class="de">Home-Dashboard</span></h2>
       <div class="block-top">
         <div>
-          <p class="en">Trail levels, Lock/Solo, life bar (Hold countdown / INF). When Crossfade Amplitude is up, thin <strong>focus ticks</strong> travel top→bottom left &amp; right of T#. Header center: <strong>R1…R5</strong> / <strong>REC1…REC5</strong> (same small type as the CPU meter). Left: input VU with threshold marker.</p>
-          <p class="de">Trail-Level, Lock/Solo, Life-Bar (Hold-Countdown / INF). Bei Crossfade-Amplitude wandern schmale <strong>Fokus-Striche</strong> oben→unten links &amp; rechts von T#. Header-Mitte: <strong>R1…R5</strong> / <strong>REC1…REC5</strong> (gleiche kleine Schrift wie die CPU-Anzeige). Links: Input-VU mit Threshold-Marke.</p>
+          <p class="en">Trail levels, Lock/Solo, life bar. <strong>Life-Bar:</strong> Recording = Settings <span class="abbr">REC</span> style (<span class="abbr">PLR</span> embers L→R default / <span class="abbr">PRS</span> center-out / <span class="abbr">CTR</span> solid center); Fade In solid L→R; Hold = full bar + countdown/INF; Fade Out empties L→R. When Crossfade Amplitude is up, thin <strong>focus ticks</strong> travel top→bottom left &amp; right of T#. Header center: <strong>R1…R5</strong> / <strong>REC1…REC5</strong> (same small type as the CPU meter). Left: input VU with threshold marker.</p>
+          <p class="de">Trail-Level, Lock/Solo, Life-Bar. <strong>Life-Bar:</strong> Aufnahme = Settings-<span class="abbr">REC</span>-Stil (<span class="abbr">PLR</span> Funken L→R Default / <span class="abbr">PRS</span> Mitte→außen / <span class="abbr">CTR</span> solid Mitte); Fade-In solid L→R; Hold = volle Bar + Countdown/INF; Fade-Out leert L→R. Bei Crossfade-Amplitude wandern schmale <strong>Fokus-Striche</strong> oben→unten links &amp; rechts von T#. Header-Mitte: <strong>R1…R5</strong> / <strong>REC1…REC5</strong> (gleiche kleine Schrift wie die CPU-Anzeige). Links: Input-VU mit Threshold-Marke.</p>
           <p class="en"><strong>Load governor:</strong> <strong>L!</strong> immediately left of the CPU figure (<strong>L!C42</strong>) means the module is temporarily running fewer Swarm grains to keep the audio from breaking up. The SDRAM figure is hidden while it shows, and the cloud sounds slightly thinner. The marker disappears on its own once the load drops.</p>
           <p class="de"><strong>Load-Governor:</strong> <strong>L!</strong> direkt links vom CPU-Wert (<strong>L!C42</strong>) heißt: Das Modul fährt vorübergehend weniger Swarm-Grains, damit die Audio-Wiedergabe nicht abreißt. Der SDRAM-Wert wird solange ausgeblendet, und die Wolke klingt etwas dünner. Der Marker verschwindet von selbst, sobald die Last sinkt.</p>
         </div>
@@ -694,7 +697,7 @@
             <tr>
               <td class="param">Count</td>
               <td class="oled-abbr"><span class="abbr">CNT</span></td>
-              <td><span class="en">1–5 Trails. Fewer = thinner; more = denser stack.</span><span class="de">1–5 Trails. Weniger = dünner; mehr = dichterer Stack.</span></td>
+              <td><span class="en">1–5 Trails (session). Boot default from Settings <span class="abbr">#T</span> (usually 3). Fewer = thinner; more = denser stack.</span><span class="de">1–5 Trails (Session). Boot-Default aus Settings <span class="abbr">#T</span> (meist 3). Weniger = dünner; mehr = dichterer Stack.</span></td>
             </tr>
             <tr>
               <td class="param">Threshold</td>
@@ -785,23 +788,24 @@
               <h3>Engines</h3>
               <span class="pot">Pot 3</span>
             </div>
-            <p class="sound en">Balance the two engines and their pitch. On BLD the small hint <strong>SP</strong>/<strong>SW</strong> shows which side you’re on.</p>
-            <p class="sound de">Balance der beiden Engines und deren Pitch. Bei BLD zeigt der kleine Hinweis <strong>SP</strong>/<strong>SW</strong> die Seite.</p>
+            <p class="sound en">Balance the two engines and their pitches. On Blend, the header shows <strong>SP</strong>/<strong>SW</strong> beside the %.</p>
+            <p class="sound de">Balance der beiden Engines und ihrer Pitches. Bei Blend zeigt der Header <strong>SP</strong>/<strong>SW</strong> neben dem %.</p>
           </div>
           <figure class="oled-fig" aria-hidden="true">
             <div class="oled"><div class="oled-screen">
-              <div class="oled-hdr"><span>Engines</span><span class="val">0%</span></div>
+              <div class="oled-hdr"><span>Engines</span><span class="val"><span class="hint">SP</span> 8</span></div>
               <div class="oled-ceil"></div>
               <div class="oled-cols">
                 <div class="oled-col active"><div class="oled-bar" style="height:8%"></div></div>
                 <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
                 <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
+                <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
               </div>
               <div class="oled-seg">
-                <span class="on">BLD<span class="hint">SP</span></span><span>PSP</span><span>PSW</span>
+                <span class="on">BLD</span><span>PSP</span><span>PSW</span><span>PB</span>
               </div>
             </div></div>
-            <figcaption>BLD (+SP/SW) · PSP · PSW</figcaption>
+            <figcaption>BLD · PSP · PSW · PB — <span class="en">SP/SW in header</span><span class="de">SP/SW im Header</span></figcaption>
           </figure>
         </div>
         <table>
@@ -810,7 +814,7 @@
             <tr>
               <td class="param">Blend</td>
               <td class="oled-abbr"><span class="abbr">BLD</span></td>
-              <td><span class="en">Toward Spectra (SP) or Swarm (SW). Middle = both.</span><span class="de">Richtung Spectra (SP) oder Swarm (SW). Mitte = beides.</span></td>
+              <td><span class="en">Toward Spectra (<strong>SP</strong> in header) or Swarm (<strong>SW</strong>). Middle = both; no side hint at 50%.</span><span class="de">Richtung Spectra (<strong>SP</strong> im Header) oder Swarm (<strong>SW</strong>). Mitte = beides; bei 50% kein Seitenhinweis.</span></td>
             </tr>
             <tr>
               <td class="param">Pitch Spectra</td>
@@ -821,6 +825,11 @@
               <td class="param">Pitch Swarm</td>
               <td class="oled-abbr"><span class="abbr">PSW</span></td>
               <td><span class="en">±1 octave on the grains.</span><span class="de">±1 Oktave auf die Grains.</span></td>
+            </tr>
+            <tr>
+              <td class="param">Pitch Both</td>
+              <td class="oled-abbr"><span class="abbr">PB</span></td>
+              <td><span class="en">Expands PSP <em>and</em> PSW from ±100% (±1 oct) to ±200% (±2 oct). Not a pitch offset — pots keep their travel; header % and DSP scale. Pitch-up may alias.</span><span class="de">Weitet PSP <em>und</em> PSW von ±100% (±1 Okt.) auf ±200% (±2 Okt.). Kein eigener Pitch — Pot-Weg bleibt; Header-% und DSP skalieren. Nach oben ggf. Aliasing.</span></td>
             </tr>
           </tbody>
         </table>
@@ -835,24 +844,24 @@
               <h3>Spectra</h3>
               <span class="pot">Pot 5</span>
             </div>
-            <p class="sound en">Stylized harmonic body — character resynthesis, not a transparent freeze.</p>
-            <p class="sound de">Stilisierter Harmonik-Körper — Charakter-Resynthese, kein transparentes Freeze.</p>
+            <p class="sound en">Stylized harmonic body — character resynthesis, not a transparent freeze. WSH/UMB show pole hints in the header (<strong>SA/FO</strong>, <strong>UM/AU</strong>).</p>
+            <p class="sound de">Stilisierter Harmonik-Körper — Charakter-Resynthese, kein transparentes Freeze. WSH/UMB mit Pol-Hinweisen im Header (<strong>SA/FO</strong>, <strong>UM/AU</strong>).</p>
           </div>
           <figure class="oled-fig" aria-hidden="true">
             <div class="oled"><div class="oled-screen">
-              <div class="oled-hdr"><span>Spectra</span><span class="val">16</span></div>
+              <div class="oled-hdr"><span>Spectra</span><span class="val"><span class="hint">UM</span> 40</span></div>
               <div class="oled-ceil"></div>
               <div class="oled-cols">
-                <div class="oled-col active"><div class="oled-bar" style="height:45%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:45%"></div></div>
                 <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
-                <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
+                <div class="oled-col active"><div class="oled-dash"></div><div class="oled-bar" style="height:40%;align-self:flex-end"></div></div>
                 <div class="oled-col"><div class="oled-bar" style="height:25%"></div></div>
               </div>
               <div class="oled-seg">
-                <span class="on">PAR</span><span>WSH</span><span>UMB</span><span>ENS</span>
+                <span>PAR</span><span>WSH</span><span class="on">UMB</span><span>ENS</span>
               </div>
             </div></div>
-            <figcaption>PAR · WSH · UMB · ENS</figcaption>
+            <figcaption>PAR · WSH · UMB · ENS — <span class="en">UM/AU · SA/FO in header</span><span class="de">UM/AU · SA/FO im Header</span></figcaption>
           </figure>
         </div>
         <table>
@@ -866,12 +875,12 @@
             <tr>
               <td class="param">Waveshape</td>
               <td class="oled-abbr"><span class="abbr">WSH</span></td>
-              <td><span class="en">Center = sine · left = saw-ish · right = fold / harsh.</span><span class="de">Mitte = Sinus · links = sägeartig · rechts = Fold / scharf.</span></td>
+              <td><span class="en">Center = sine · left = saw (<strong>SA</strong> in header) · right = fold (<strong>FO</strong>). Pole replaces ±; no % while the hint shows.</span><span class="de">Mitte = Sinus · links = Saw (<strong>SA</strong> im Header) · rechts = Fold (<strong>FO</strong>). Pol ersetzt ±; ohne % solange der Hinweis da ist.</span></td>
             </tr>
             <tr>
               <td class="param">Umbra / Aurora</td>
               <td class="oled-abbr"><span class="abbr">UMB</span></td>
-              <td><span class="en">Left = airy (Umbra). Right = vocal/formant (Aurora). Center = neutral.</span><span class="de">Links = luftig (Umbra). Rechts = vokal/Formant (Aurora). Mitte = neutral.</span></td>
+              <td><span class="en">Header <strong>UM</strong>/<strong>AU</strong> · left airy · right vocal/formant · center neutral.</span><span class="de">Header <strong>UM</strong>/<strong>AU</strong> · links luftig · rechts vokal/Formant · Mitte neutral.</span></td>
             </tr>
             <tr>
               <td class="param">Ensemble / Drift</td>
@@ -891,24 +900,24 @@
               <h3>Swarm</h3>
               <span class="pot">Pot 4</span>
             </div>
-            <p class="sound en">Granular texture — the cloudy, moving half of the blend.</p>
-            <p class="sound de">Granulare Textur — die wolkige, bewegte Hälfte des Blends.</p>
+            <p class="sound en">Granular texture — the cloudy, moving half of the blend. Atmosphere header poles: <strong>BL/RD</strong>.</p>
+            <p class="sound de">Granulare Textur — die wolkige, bewegte Hälfte des Blends. Atmosphere-Pol im Header: <strong>BL/RD</strong>.</p>
           </div>
           <figure class="oled-fig" aria-hidden="true">
             <div class="oled"><div class="oled-screen">
-              <div class="oled-hdr"><span>Swarm</span><span><span class="val">Fwd</span> <span style="font-size:6px;opacity:.65">4/5</span></span></div>
+              <div class="oled-hdr"><span>Swarm</span><span class="val">35 <span class="hint">RD</span></span></div>
               <div class="oled-ceil"></div>
               <div class="oled-cols">
                 <div class="oled-col"><div class="oled-bar" style="height:42%"></div></div>
                 <div class="oled-col"><div class="oled-bar" style="height:35%"></div></div>
                 <div class="oled-col"><div class="oled-bar" style="height:20%"></div></div>
-                <div class="oled-col active"><span class="oled-toggle">Fwd</span></div>
+                <div class="oled-col active"><div class="oled-dash"></div><div class="oled-bar" style="height:35%"></div></div>
               </div>
               <div class="oled-seg">
-                <span>SIZ</span><span>SPR</span><span>SCN</span><span class="on">DIR</span>
+                <span>SIZ</span><span>SPR</span><span>SCN</span><span>DIR</span>
               </div>
             </div></div>
-            <figcaption>SIZ · SPR · SCN · DIR · ATM — <span class="en">4 visible; scroll</span><span class="de">4 sichtbar; scrollt</span></figcaption>
+            <figcaption>SIZ · SPR · SCN · DIR · ATM — <span class="en">scroll; ATM → BL/RD in header</span><span class="de">scrollt; ATM → BL/RD im Header</span></figcaption>
           </figure>
         </div>
         <table>
@@ -937,7 +946,7 @@
             <tr>
               <td class="param">Atmosphere</td>
               <td class="oled-abbr"><span class="abbr">ATM</span></td>
-              <td><span class="en">Left = Blur (soft). Right = Radiation (lo-fi / warble).</span><span class="de">Links = Blur (weich). Rechts = Radiation (Lo-Fi / Warble).</span></td>
+              <td><span class="en">Header <strong>BL</strong>/<strong>RD</strong> — Blur (soft) ↔ Radiation (lo-fi / warble).</span><span class="de">Header <strong>BL</strong>/<strong>RD</strong> — Blur (weich) ↔ Radiation (Lo-Fi / Warble).</span></td>
             </tr>
           </tbody>
         </table>
@@ -952,24 +961,24 @@
               <h3>Reverb</h3>
               <span class="pot">Pot 8</span>
             </div>
-            <p class="sound en">Space around the cloud — not around the dry input.</p>
-            <p class="sound de">Raum um die Wolke — nicht um den Dry-Input.</p>
+            <p class="sound en">Space around the cloud — not around the dry input. Character header poles: <strong>CH/FR</strong>.</p>
+            <p class="sound de">Raum um die Wolke — nicht um den Dry-Input. Character-Pol im Header: <strong>CH/FR</strong>.</p>
           </div>
           <figure class="oled-fig" aria-hidden="true">
             <div class="oled"><div class="oled-screen">
-              <div class="oled-hdr"><span>Reverb</span><span class="val">25%</span></div>
+              <div class="oled-hdr"><span>Reverb</span><span class="val">40 <span class="hint">FR</span></span></div>
               <div class="oled-ceil"></div>
               <div class="oled-cols">
-                <div class="oled-col active"><div class="oled-bar" style="height:25%"></div></div>
+                <div class="oled-col"><div class="oled-bar" style="height:25%"></div></div>
                 <div class="oled-col"><div class="oled-bar" style="height:50%"></div></div>
                 <div class="oled-col"><div class="oled-bar" style="height:50%"></div></div>
-                <div class="oled-col"><div class="oled-dash"></div><div class="oled-bar" style="height:4%;align-self:center"></div></div>
+                <div class="oled-col active"><div class="oled-dash"></div><div class="oled-bar" style="height:40%"></div></div>
               </div>
               <div class="oled-seg">
-                <span class="on">MIX</span><span>DEC</span><span>DMP</span><span>CHR</span>
+                <span>MIX</span><span>DEC</span><span>DMP</span><span class="on">CHR</span>
               </div>
             </div></div>
-            <figcaption>MIX · DEC · DMP · CHR</figcaption>
+            <figcaption>MIX · DEC · DMP · CHR — <span class="en">CH/FR in header</span><span class="de">CH/FR im Header</span></figcaption>
           </figure>
         </div>
         <table>
@@ -993,7 +1002,7 @@
             <tr>
               <td class="param">Character</td>
               <td class="oled-abbr"><span class="abbr">CHR</span></td>
-              <td><span class="en">Left = Chorus (lush). Right = Friction (saturated wall). Center = plain.</span><span class="de">Links = Chorus (üppig). Rechts = Friction (gesättigte Wand). Mitte = normal.</span></td>
+              <td><span class="en">Header <strong>CH</strong>/<strong>FR</strong> — Chorus (lush) ↔ Friction (saturated wall). Center = plain.</span><span class="de">Header <strong>CH</strong>/<strong>FR</strong> — Chorus (üppig) ↔ Friction (gesättigte Wand). Mitte = normal.</span></td>
             </tr>
           </tbody>
         </table>
@@ -1219,7 +1228,7 @@
     <section id="trails" class="bilingual">
       <h2><span class="en">Trail encoders</span><span class="de">Trail-Encoder</span></h2>
       <ul class="compact">
-        <li><span class="en"><strong>Turn</strong> — loudness of that Trail.</span><span class="de"><strong>Drehen</strong> — Lautstärke dieses Trails.</span></li>
+        <li><span class="en"><strong>Turn</strong> — loudness of that Trail. Boot / Reset default from Settings <span class="abbr">LVL</span> (5% steps, usually 50%).</span><span class="de"><strong>Drehen</strong> — Lautstärke dieses Trails. Boot-/Reset-Default aus Settings <span class="abbr">LVL</span> (5 %-Schritte, meist 50 %).</span></li>
         <li><span class="en"><strong>Short on Home — Lock (L)</strong> — no overwrite, no hold fade-out.</span><span class="de"><strong>Kurz auf Home — Lock (L)</strong> — kein Überschreiben, kein Hold-Fade-Out.</span></li>
         <li><span class="en"><strong>Short in a menu — Home</strong> — any of the five pushes returns to the Trail overview; short again on Home to Lock.</span><span class="de"><strong>Kurz im Menü — Home</strong> — jeder der fünf Pushes zurück zur Trail-Übersicht; nochmal kurz auf Home = Lock.</span></li>
         <li><span class="en"><strong>Long — Solo (S)</strong> — that Trail alone (any screen); ignores Crossfade wave.</span><span class="de"><strong>Lang — Solo (S)</strong> — nur dieser Trail (jeder Screen); ignoriert Crossfade.</span></li>
@@ -1230,8 +1239,8 @@
       <h2>Multi</h2>
       <div class="block-top">
         <div>
-          <p class="en">Big encoder. Turn to open / edit. <strong>Multi push short</strong> steps the list (or Cycle hold + Multi turn). Long Multi push → Home.</p>
-          <p class="de">Großer Encoder. Drehen = öffnen / editieren. <strong>Multi-Push kurz</strong> steppt die Liste (oder Cycle halten + Multi drehen). Langer Multi-Push → Home.</p>
+          <p class="en">Big encoder. Turn to open / edit. <strong>Cycle short</strong> or <strong>Cycle hold + Multi turn</strong> steps the list (Multi push deferred on current hardware). Long Multi push → Home when push works; else Trail push / idle ~7&nbsp;s. Landing on <span class="abbr">SET</span> opens the Settings submenu.</p>
+          <p class="de">Großer Encoder. Drehen = öffnen / editieren. <strong>Cycle kurz</strong> oder <strong>Cycle halten + Multi drehen</strong> stept die Liste (Multi-Push auf aktueller Hardware unzuverlässig). Langer Multi-Push → Home, falls Push geht; sonst Trail-Push / Idle ~7&nbsp;s. Auf <span class="abbr">SET</span> landet man im Settings-Untermenü.</p>
         </div>
         <figure class="oled-fig" aria-hidden="true">
           <div class="oled"><div class="oled-screen">
@@ -1245,10 +1254,10 @@
               <div class="oled-col"><span class="oled-toggle">---</span></div>
             </div>
             <div class="oled-seg">
-              <span class="on">DW</span><span>M1</span><span>M2</span><span>TU</span><span>SET</span>
+              <span class="on">D/W</span><span>M1</span><span>M2</span><span>TU</span><span>SET</span>
             </div>
-          </div></div>
-          <figcaption>DW · M1 · M2 · TU · SET</figcaption>
+            </div></div>
+            <figcaption>D/W · M1 · M2 · TU · SET</figcaption>
         </figure>
       </div>
       <table>
@@ -1256,8 +1265,8 @@
         <tbody>
           <tr>
             <td class="param">Dry / Wet</td>
-            <td class="oled-abbr"><span class="abbr">DW</span></td>
-            <td><span class="en">Dry = clean input. Wet = full cloud.</span><span class="de">Dry = Clean-Input. Wet = volle Wolke.</span></td>
+            <td class="oled-abbr"><span class="abbr">D/W</span></td>
+            <td><span class="en">Dry = clean input. Wet = full cloud. Boot ~55%. Bus trim favors wet (×1.30) over dry (×0.85).</span><span class="de">Dry = Clean-Input. Wet = volle Wolke. Boot ~55 %. Bus-Trim bevorzugt Wet (×1.30) gegenüber Dry (×0.85).</span></td>
           </tr>
           <tr>
             <td class="param">Macro1 / Macro2</td>
@@ -1272,15 +1281,59 @@
           <tr>
             <td class="param">Settings</td>
             <td class="oled-abbr"><span class="abbr">SET</span></td>
-            <td><span class="en">Entry to Settings (also as pot-less row): <span class="abbr">CPU</span> <span class="abbr">RAM</span> <span class="abbr">SCL</span> <span class="abbr">INT</span> — meters + Resonator scale/intonation.</span><span class="de">Eingang zu Settings (auch pot-lose Zeile): <span class="abbr">CPU</span> <span class="abbr">RAM</span> <span class="abbr">SCL</span> <span class="abbr">INT</span> — Meter + Resonator-Skala/Intonation.</span></td>
+            <td><span class="en">Opens the Settings submenu (table below). Cycle short / Cycle-hold+Multi steps; Multi turn edits.</span><span class="de">Öffnet das Settings-Untermenü (Tabelle darunter). Cycle kurz / Cycle halten+Multi stept; Multi drehen editiert.</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin:1.4rem 0 0.55rem;font-size:1rem;letter-spacing:0.04em;text-transform:uppercase;color:var(--ink-soft)"><span class="en">Settings submenu</span><span class="de">Settings-Untermenü</span></h3>
+      <table>
+        <thead><tr><th>Param</th><th>OLED</th><th><span class="en">Expect</span><span class="de">Erwartung</span></th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="param">CPU meter</td>
+            <td class="oled-abbr"><span class="abbr">CPU</span></td>
+            <td><span class="en">On/Off header CPU load. Bench default On (<code>C42%</code>; with RAM: <code>C42 R12</code>). <strong>L!</strong> replaces % while Swarm governor throttles.</span><span class="de">On/Off Header-CPU-Last. Bench-Default An (<code>C42%</code>; mit RAM: <code>C42 R12</code>). <strong>L!</strong> ersetzt % solange der Swarm-Governor drosselt.</span></td>
+          </tr>
+          <tr>
+            <td class="param">RAM meter</td>
+            <td class="oled-abbr"><span class="abbr">RAM</span></td>
+            <td><span class="en">On/Off SDRAM usage figure next to CPU. Default Off.</span><span class="de">On/Off SDRAM-Anzeige neben CPU. Default Aus.</span></td>
+          </tr>
+          <tr>
+            <td class="param">Scale</td>
+            <td class="oled-abbr"><span class="abbr">SCL</span></td>
+            <td><span class="en">0 Major / 1 Minor / 2 Pentatonic — for Resonator Quantized.</span><span class="de">0 Dur / 1 Moll / 2 Pentatonik — für Resonator Quantized.</span></td>
+          </tr>
+          <tr>
+            <td class="param">Intonation</td>
+            <td class="oled-abbr"><span class="abbr">INT</span></td>
+            <td><span class="en">Equal Temperament ↔ Just — with Quantized ON.</span><span class="de">Gleichstufig ↔ Just — bei Quantized EIN.</span></td>
+          </tr>
+          <tr>
+            <td class="param">Rec bar</td>
+            <td class="oled-abbr"><span class="abbr">REC</span></td>
+            <td><span class="en"><span class="abbr">PLR</span> (default) = Perseids embers revealed L→R (denser mid-bar); <span class="abbr">PRS</span> = embers center→out; <span class="abbr">CTR</span> = solid center→both sides. Soft ~200&nbsp;ms out before Fade In (PRS also soft in).</span><span class="de"><span class="abbr">PLR</span> (Default) = Perseiden-Funken L→R freigegeben (Mitte dichter); <span class="abbr">PRS</span> = Funken Mitte→außen; <span class="abbr">CTR</span> = solid Mitte→beide Seiten. Weich ~200&nbsp;ms raus vor Fade-In (PRS auch weich rein).</span></td>
+          </tr>
+          <tr>
+            <td class="param">Trail lvl</td>
+            <td class="oled-abbr"><span class="abbr">LVL</span></td>
+            <td><span class="en">Default Trail Level <strong>0%…100% in 5% steps</strong> (boot <strong>50%</strong>). Applies on boot, delete-all Reset, and when edited (unlocked Trails only).</span><span class="de">Default-Trail-Level <strong>0 %…100 % in 5 %-Schritten</strong> (Boot <strong>50 %</strong>). Gilt bei Boot, Delete-all und beim Ändern (nur ungelockte Trails).</span></td>
+          </tr>
+          <tr>
+            <td class="param">Trail cnt</td>
+            <td class="oled-abbr"><span class="abbr">#T</span></td>
+            <td><span class="en">Default active Trail count <strong>1…5</strong> (boot <strong>3</strong>). Applies on boot, delete-all, and when edited (also sets live Trails <span class="abbr">CNT</span>). Live CNT pot can still override for the session.</span><span class="de">Default aktive Trails <strong>1…5</strong> (Boot <strong>3</strong>). Gilt bei Boot, Delete-all und beim Ändern (setzt auch live Trails-<span class="abbr">CNT</span>). Live-CNT-Pot kann die Session weiter überschreiben.</span></td>
           </tr>
         </tbody>
       </table>
     </section>
 
     <footer class="bilingual">
-      <p class="en">OLED sketches are schematic (128×64 layout). Abbreviations match the segmented row on the module.</p>
-      <p class="de">OLED-Skizzen sind schematisch (128×64-Layout). Abkürzungen entsprechen der Segmentzeile am Modul.</p>
+      <p class="en">OLED sketches are schematic (128×64 layout). Abbreviations match the segmented row on the module. Updated 2026-07-31 (Life-Bar REC styles, Settings LVL/#T, Multi via Cycle, Dry/Wet bus trim).</p>
+      <p class="de">OLED-Skizzen sind schematisch (128×64-Layout). Abkürzungen entsprechen der Segmentzeile am Modul. Stand 2026-07-31 (Life-Bar-REC-Stile, Settings LVL/#T, Multi über Cycle, Dry/Wet-Bus-Trim).</p>
+      <p class="en" style="margin-top:0.85rem;opacity:0.85"><em>P.S.</em> Every Perseids-Rec pixel on the OLED — and each little flight path — was calculated by hand. 😉</p>
+      <p class="de" style="margin-top:0.85rem;opacity:0.85"><em>P.S.</em> Jedes Perseids-Rec-Pixel auf dem OLED — und jede kleine Flugbahn — wurde von Hand berechnet. 😉</p>
     </footer>
   </div>
 

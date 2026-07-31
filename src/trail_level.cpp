@@ -44,9 +44,10 @@ void TrailLevelController::ApplyEncoderSteps()
 
 void TrailLevelController::ResetAll()
 {
+    const float lvl = DefaultLevel();
     for(size_t i = 0; i < kCount; ++i)
     {
-        trails_[i].level  = 0.5f;
+        trails_[i].level  = lvl;
         trails_[i].locked = false;
         trails_[i].solo   = false;
     }
@@ -56,20 +57,49 @@ void TrailLevelController::ResetAll()
         capture_->ClearAll();
 }
 
-void TrailLevelController::Init(daisy::DaisySeed& seed, CaptureEngine* capture)
+float TrailLevelController::DefaultLevel() const
 {
-    (void)seed;
-    capture_             = capture;
-    rec_flash_until_ms_  = 0;
-    last_rec_trig_ms_    = 0;
-    activity_this_frame_ = false;
-    level_edit_activity_ = false;
-    short_push_homes_    = false;
-    home_requested_      = false;
+    float steps = 10.f; // 50%
+    if(default_level_steps_ != nullptr)
+        steps = *default_level_steps_;
+    if(steps < 0.f)
+        steps = 0.f;
+    else if(steps > 20.f)
+        steps = 20.f;
+    steps = static_cast<float>(static_cast<int>(steps + 0.5f));
+    return steps * 0.05f;
+}
 
+void TrailLevelController::ApplyDefaultLevels()
+{
+    const float lvl = DefaultLevel();
     for(size_t i = 0; i < kCount; ++i)
     {
-        trails_[i].level    = 0.5f;
+        if(!trails_[i].locked)
+            trails_[i].level = lvl;
+    }
+    activity_this_frame_ = true;
+    level_edit_activity_ = true;
+}
+
+void TrailLevelController::Init(daisy::DaisySeed& seed,
+                                CaptureEngine*    capture,
+                                const float*      default_level_steps)
+{
+    (void)seed;
+    capture_               = capture;
+    default_level_steps_   = default_level_steps;
+    rec_flash_until_ms_    = 0;
+    last_rec_trig_ms_      = 0;
+    activity_this_frame_   = false;
+    level_edit_activity_   = false;
+    short_push_homes_      = false;
+    home_requested_        = false;
+
+    const float lvl = DefaultLevel();
+    for(size_t i = 0; i < kCount; ++i)
+    {
+        trails_[i].level    = lvl;
         trails_[i].locked   = false;
         trails_[i].solo     = false;
         last_encoder_ms_[i] = 0;

@@ -279,9 +279,21 @@ void DisplayRenderer::FormatValue(const ParameterDef& def,
     }
     case ParamDisplayType::Bipolar:
     {
-        const float signed_v
+        float signed_v
             = (ParameterRegistry::Normalize(def, *def.value_ptr) - 0.5f) * 200.f;
-        snprintf(out, out_len, "%+d%%", static_cast<int>(signed_v + 0.5f));
+        // Engines Pitch Both: expand displayed span ±100% → ±200% with the pot.
+        if(def.bipolar_span_ptr != nullptr)
+        {
+            float s = *def.bipolar_span_ptr;
+            if(s < 0.f)
+                s = 0.f;
+            if(s > 1.f)
+                s = 1.f;
+            signed_v *= (1.f + s);
+        }
+        const int rounded = static_cast<int>(
+            signed_v >= 0.f ? signed_v + 0.5f : signed_v - 0.5f);
+        snprintf(out, out_len, "%+d%%", rounded);
         break;
     }
     case ParamDisplayType::Toggle:
@@ -407,15 +419,58 @@ void DisplayRenderer::DrawValueHeader(const ParameterRegistry& reg,
     char val[12];
     FormatValue(*def, val, sizeof(val));
 
+    // Named-pole side hint (Blend SP/SW, Umbra/Aurora, …): value header,
+    // Font_4x6. Below 50% → low label before the number; above → high label
+    // after; nothing at exact center. Pole name replaces ±; '%' is omitted
+    // while a hint is showing so the right-hand label cannot overwrite it
+    // (Pitch / Velocity and other plain ±% params are unchanged).
+    const char* side_hint   = nullptr;
+    bool        side_before = false;
+    if(def->seg_hint_low != nullptr && def->seg_hint_high != nullptr)
+    {
+        const float n
+            = ParameterRegistry::Normalize(*def, *def->value_ptr);
+        const int pct = static_cast<int>(n * 100.f + 0.5f);
+        if(pct < 50)
+        {
+            side_hint   = def->seg_hint_low;
+            side_before = true;
+        }
+        else if(pct > 50)
+        {
+            side_hint   = def->seg_hint_high;
+            side_before = false;
+        }
+    }
+
+    char num[12];
+    {
+        const char* src = val;
+        if(src[0] == '+' || src[0] == '-')
+            ++src;
+        snprintf(num, sizeof(num), "%s", src);
+        if(side_hint != nullptr)
+        {
+            const size_t nlen = strlen(num);
+            if(nlen > 0 && num[nlen - 1] == '%')
+                num[nlen - 1] = '\0';
+        }
+    }
+
+    const int hint_w
+        = (side_hint != nullptr) ? static_cast<int>(strlen(side_hint)) * kGlyphW
+                                 : 0;
+    const int hint_gap = (hint_w > 0) ? 1 : 0;
+
     // Long block names (Resonator / Crossfade / Pan Drift = 9×6 = 54 px)
     // collide with a centred bipolar "+100%". Draw the sign in Font_4x6 and
     // clamp the value so it never eats into the title or the right chrome.
     const bool small_sign = def->display_type == ParamDisplayType::Bipolar
-                            && (val[0] == '+' || val[0] == '-');
-    const char* body   = small_sign ? val + 1 : val;
-    const int   sign_w = small_sign ? kGlyphW : 0;
-    const int   body_w = static_cast<int>(strlen(body)) * 6;
-    const int   text_w = sign_w + body_w;
+                            && (val[0] == '+' || val[0] == '-')
+                            && side_hint == nullptr;
+    const int sign_w = small_sign ? kGlyphW : 0;
+    const int body_w = static_cast<int>(strlen(num)) * 6;
+    const int text_w = hint_w + hint_gap + sign_w + body_w;
 
     int x = (kWidth - text_w) / 2;
     if(x < name_w + kGap)
@@ -423,18 +478,27 @@ void DisplayRenderer::DrawValueHeader(const ParameterRegistry& reg,
     if(x + text_w > right_edge - kGap)
         x = right_edge - kGap - text_w;
 
+    int cursor = x;
+    if(side_hint != nullptr && side_before)
+    {
+        display_.SetCursor(cursor, kHeaderY + 1);
+        display_.WriteString(side_hint, Font_4x6, true);
+        cursor += hint_w + hint_gap;
+    }
     if(small_sign)
     {
         char sign[2] = {val[0], '\0'};
-        display_.SetCursor(x, kHeaderY + 1);
+        display_.SetCursor(cursor, kHeaderY + 1);
         display_.WriteString(sign, Font_4x6, true);
-        display_.SetCursor(x + sign_w, kHeaderY);
-        display_.WriteString(body, Font_6x8, true);
+        cursor += sign_w;
     }
-    else
+    display_.SetCursor(cursor, kHeaderY);
+    display_.WriteString(num, Font_6x8, true);
+    cursor += body_w;
+    if(side_hint != nullptr && !side_before)
     {
-        display_.SetCursor(x, kHeaderY);
-        display_.WriteString(val, Font_6x8, true);
+        display_.SetCursor(cursor + hint_gap, kHeaderY + 1);
+        display_.WriteString(side_hint, Font_4x6, true);
     }
 }
 
@@ -552,37 +616,8 @@ void DisplayRenderer::DrawSegmentedRow(const ParameterRegistry& reg,
             display_.WriteString(def->abbrev, Font_6x8, true);
         }
 
-        // Dynamic side hint behind the abbrev (e.g. "sp"/"sw" for Blend):
-        // shows which half of the travel the value sits in, nothing at
-        // exactly 50%. Same row height as the abbrev, same inversion as the
-        // cell, clipped if the column is too narrow.
-        if(def->seg_hint_low != nullptr && def->seg_hint_high != nullptr)
-        {
-            const float n
-                = ParameterRegistry::Normalize(*def, *def->value_ptr);
-            const int pct = static_cast<int>(n * 100.f + 0.5f);
-
-            const char* hint = nullptr;
-            if(pct < 50)
-                hint = def->seg_hint_low;
-            else if(pct > 50)
-                hint = def->seg_hint_high;
-
-            if(hint != nullptr)
-            {
-                // Font_4x6 — same understated size as the CPU% figure, offset
-                // like the header pairing (small font sits 1px below 6x8).
-                const int abbrev_w
-                    = static_cast<int>(strlen(def->abbrev)) * 6;
-                const int hint_w = static_cast<int>(strlen(hint)) * 4;
-                const int hx     = col.x + pad + 2 + abbrev_w + 2;
-                if(hx + hint_w <= col.x + col.w - pad - 1)
-                {
-                    display_.SetCursor(hx, kSegRowY + 3);
-                    display_.WriteString(hint, Font_4x6, !sel);
-                }
-            }
-        }
+        // seg_hint_low/high are drawn in DrawValueHeader (Blend SP/SW) — the
+        // fixed 4-wide segment cells cannot fit "BLD"+hint.
     }
 }
 
@@ -674,18 +709,160 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
     }
 }
 
+namespace
+{
+// Cheap deterministic sparkle — no RNG state needed across frames.
+uint32_t SparkleHash(int x, int y, uint32_t seed)
+{
+    uint32_t n = static_cast<uint32_t>(x) * 374761393u
+                 ^ static_cast<uint32_t>(y) * 668265263u ^ seed;
+    n = (n ^ (n >> 13)) * 1274126177u;
+    return n ^ (n >> 16);
+}
+
+// Soft Perseids rec gate (UI-only; audio has no gap).
+constexpr uint32_t kRecSoftMs = 200;
+} // namespace
+
+void DisplayRenderer::DrawRecSparkleFill(int      x0,
+                                         int      y,
+                                         int      w,
+                                         int      h,
+                                         float    grow,
+                                         uint32_t seed,
+                                         bool     left_to_right,
+                                         float    visibility)
+{
+    if(grow <= 0.f || visibility <= 0.f)
+        return;
+    if(grow > 1.f)
+        grow = 1.f;
+    if(visibility > 1.f)
+        visibility = 1.f;
+
+    const int x_lo = x0 + 1;
+    const int x_hi = x0 + w - 2;
+    const int y_lo = y + 1;
+    const int y_hi = y + h - 2;
+    if(x_hi < x_lo || y_hi < y_lo)
+        return;
+
+    const float cx     = 0.5f * static_cast<float>(x_lo + x_hi);
+    const float half_w = 0.5f * static_cast<float>(x_hi - x_lo + 1);
+    const float inner  = static_cast<float>(x_hi - x_lo + 1);
+    const float radius = grow * half_w;
+    if(!left_to_right && radius < 0.5f)
+        return;
+    if(left_to_right && grow * inner < 0.5f)
+        return;
+
+    const int   y_span = y_hi - y_lo + 1;
+    const int   kSparks = 18;
+    const float t_sec
+        = static_cast<float>(daisy::System::GetNow()) * 0.001f;
+    const uint32_t vis_thr
+        = static_cast<uint32_t>(visibility * 255.f);
+    const float edge_x
+        = static_cast<float>(x_lo) + grow * inner; // L→R reveal front
+
+    for(int i = 0; i < kSparks; ++i)
+    {
+        // Soft gate — thins the field in/out without teleporting.
+        if((SparkleHash(i, 3, seed) & 255u) >= vis_thr)
+            continue;
+
+        const uint32_t h   = SparkleHash(i, 7, seed);
+        const float    spd = 0.45f + static_cast<float>((h >> 1) & 255u)
+                                          * (0.70f / 255.f); // trips/sec
+        const float    ph0 = static_cast<float>((h >> 9) & 255u) * (1.f / 255.f);
+        float          u   = ph0 + t_sec * spd;
+        u -= floorf(u);
+        if(u < 0.f)
+            u += 1.f;
+
+        int x;
+        if(left_to_right)
+        {
+            // Full-bar travel, clipped by grow — no compressing into a left blob.
+            const float x_f = static_cast<float>(x_lo) + u * inner;
+            if(x_f > edge_x + 0.5f)
+                continue;
+            x = static_cast<int>(x_f + 0.5f);
+
+            // Density peaks at mid-bar (~+50%), thins toward left and right.
+            const float xn  = (x_f - static_cast<float>(x_lo)) / (inner + 0.01f);
+            const float mid = 1.f - 2.f * fabsf(xn - 0.5f); // 0 at edges, 1 at 50%
+            if(mid < 0.f)
+                continue;
+            const float dens = 0.65f + 0.35f * mid; // edges ~0.65, center 1.0
+            if((SparkleHash(i, 11, seed) & 255u)
+               >= static_cast<uint32_t>(dens * 255.f))
+                continue;
+        }
+        else
+        {
+            const float side = (h & 1u) ? 1.f : -1.f;
+            x = static_cast<int>(cx + side * u * radius + 0.5f);
+        }
+        if(x < x_lo || x > x_hi)
+            continue;
+
+        const int py
+            = y_lo
+              + static_cast<int>((h >> 17) % static_cast<uint32_t>(y_span));
+        display_.DrawPixel(x, py, true);
+    }
+}
+
+void DisplayRenderer::DrawRecCenterSolid(int   x0,
+                                         int   y,
+                                         int   w,
+                                         int   h,
+                                         float grow)
+{
+    if(grow <= 0.f)
+        return;
+    if(grow > 1.f)
+        grow = 1.f;
+
+    const int inner_w = w - 2;
+    const int span
+        = static_cast<int>(grow * static_cast<float>(inner_w) + 0.5f);
+    if(span <= 0)
+        return;
+
+    const int mid   = x0 + 1 + inner_w / 2;
+    int       left  = mid - span / 2;
+    int       right = left + span - 1;
+    if(left < x0 + 1)
+        left = x0 + 1;
+    if(right > x0 + inner_w)
+        right = x0 + inner_w;
+    display_.DrawRect(left, y + 1, right, y + h - 2, true, true);
+}
+
 void DisplayRenderer::DrawTrailLifeBar(int                x0,
                                        int                y,
                                        int                w,
                                        int                h,
-                                       const TrailLifeUi& life)
+                                       size_t             trail_index,
+                                       const TrailLifeUi& life,
+                                       uint8_t            rec_style)
 {
     const int x1 = x0 + w - 1;
     const int y1 = y + h - 1;
     display_.DrawRect(x0, y, x1, y1, true, false);
 
     if(life.phase == TrailLifePhase::Empty)
+    {
+        if(trail_index < kTrailCount)
+        {
+            life_anim_[trail_index].last_phase = TrailLifePhase::Empty;
+            life_anim_[trail_index].soft       = RecSoft::Idle;
+            life_anim_[trail_index].grow_latch = 1.f;
+        }
         return;
+    }
 
     float fill = life.fill;
     if(fill < 0.f)
@@ -693,11 +870,109 @@ void DisplayRenderer::DrawTrailLifeBar(int                x0,
     if(fill > 1.f)
         fill = 1.f;
 
-    // FIN: solid fill L→R. Recording: striped (≠ FadeIn). FOUT: empty L→R.
     const int inner_w = w - 2;
     const int fill_w
         = static_cast<int>(fill * static_cast<float>(inner_w) + 0.5f);
-    if(fill_w > 0)
+
+    const uint32_t seed
+        = 0xA5u + static_cast<uint32_t>(trail_index) * 97u;
+    // 0 PRS center-out, 1 PLR L→R, 2 CTR solid center-out.
+    const bool perseids = (rec_style <= 1);
+    const bool ltr      = (rec_style == 1);
+
+    LifeBarAnim*   anim = (trail_index < kTrailCount) ? &life_anim_[trail_index]
+                                                      : nullptr;
+    const uint32_t now  = daisy::System::GetNow();
+
+    if(anim != nullptr && perseids)
+    {
+        if(life.phase == TrailLifePhase::Recording
+           && anim->last_phase != TrailLifePhase::Recording
+           && anim->soft != RecSoft::FadeOut)
+        {
+            // Soft fade-in only for PRS (center). PLR starts clean L→R —
+            // a soft gate + min-grow looked like grains piling on the left.
+            if(!ltr)
+            {
+                anim->soft      = RecSoft::FadeIn;
+                anim->soft_t0   = now;
+                anim->ltr_latch = false;
+            }
+        }
+
+        if(anim->last_phase == TrailLifePhase::Recording
+           && (life.phase == TrailLifePhase::FadeIn
+               || life.phase == TrailLifePhase::Hold)
+           && anim->soft != RecSoft::FadeOut)
+        {
+            anim->soft       = RecSoft::FadeOut;
+            anim->soft_t0    = now;
+            anim->ltr_latch  = ltr;
+            if(anim->grow_latch < 0.15f)
+                anim->grow_latch = 1.f;
+        }
+
+        if(life.phase == TrailLifePhase::Recording)
+        {
+            if(fill > 0.05f)
+                anim->grow_latch = fill;
+            anim->ltr_latch = ltr;
+        }
+
+        if(anim->soft != RecSoft::Idle)
+        {
+            const uint32_t dt = now - anim->soft_t0;
+            if(dt >= kRecSoftMs)
+            {
+                const RecSoft done = anim->soft;
+                anim->soft         = RecSoft::Idle;
+                if(done == RecSoft::FadeOut)
+                {
+                    // Fall through to solid FIN/Hold this frame.
+                }
+                else if(life.phase == TrailLifePhase::Recording)
+                {
+                    DrawRecSparkleFill(x0, y, w, h, fill, seed, ltr, 1.f);
+                    anim->last_phase = life.phase;
+                    return;
+                }
+            }
+            else
+            {
+                const float t = static_cast<float>(dt)
+                                / static_cast<float>(kRecSoftMs);
+                float vis;
+                float grow_draw;
+                bool  use_ltr = anim->ltr_latch;
+                if(anim->soft == RecSoft::FadeIn)
+                {
+                    vis       = t * (2.f - t); // ease-out appear
+                    grow_draw = fill; // true progress — no left blob floor
+                    use_ltr   = ltr;
+                }
+                else
+                {
+                    const float u = 1.f - t;
+                    vis           = u * u; // ease-in disappear
+                    grow_draw     = anim->grow_latch;
+                }
+                DrawRecSparkleFill(
+                    x0, y, w, h, grow_draw, seed, use_ltr, vis);
+                anim->last_phase = life.phase;
+                return; // hold solid FIN until embers clear
+            }
+        }
+
+        anim->last_phase = life.phase;
+    }
+    else if(anim != nullptr)
+    {
+        anim->soft       = RecSoft::Idle;
+        anim->last_phase = life.phase;
+    }
+
+    // Recording: PRS/PLR embers or CTR solid. FIN L→R, FOUT empty L→R.
+    if(fill_w > 0 || life.phase == TrailLifePhase::Recording)
     {
         if(life.phase == TrailLifePhase::FadeOut)
         {
@@ -706,10 +981,12 @@ void DisplayRenderer::DrawTrailLifeBar(int                x0,
         }
         else if(life.phase == TrailLifePhase::Recording)
         {
-            for(int x = x0 + 1; x <= x0 + fill_w; x += 2)
-                display_.DrawLine(x, y + 1, x, y1 - 1, true);
+            if(rec_style >= 2)
+                DrawRecCenterSolid(x0, y, w, h, fill);
+            else
+                DrawRecSparkleFill(x0, y, w, h, fill, seed, ltr, 1.f);
         }
-        else
+        else if(fill_w > 0)
         {
             display_.DrawRect(x0 + 1, y + 1, x0 + fill_w, y1 - 1, true, true);
         }
@@ -723,17 +1000,14 @@ void DisplayRenderer::DrawTrailLifeBar(int                x0,
         else
             snprintf(label, sizeof(label), "%ds", static_cast<int>(life.hold_sec));
 
-        // Font_4x6 fits inside the bar; Font_6x8 inverted bled past the frame.
         constexpr int kGlyphW = 4;
         const int     text_w  = static_cast<int>(strlen(label)) * kGlyphW;
         int           tx      = x0 + (w - text_w) / 2;
         if(tx < x0 + 1)
             tx = x0 + 1;
-        const int ty = y; // 1px higher so Font_4x6 sits centered in the bar
+        const int ty = y;
         display_.SetCursor(tx, ty);
         display_.WriteString(label, Font_4x6, false);
-
-        // Restore bar outline in case the glyph cell clipped past the frame.
         display_.DrawRect(x0, y, x1, y1, true, false);
     }
 }
@@ -753,7 +1027,8 @@ void DisplayRenderer::DrawDashboard(bool                playing,
                                     float               cpu_load,
                                     float               xfade_focus,
                                     float               xfade_amp,
-                                    bool                governor)
+                                    bool                governor,
+                                    uint8_t             rec_style)
 {
     Clear();
 
@@ -956,7 +1231,7 @@ void DisplayRenderer::DrawDashboard(bool                playing,
             display_.WriteString("S", Font_6x8, true);
         }
 
-        DrawTrailLifeBar(kBarX, y, kBarW, kBarH, life[i]);
+        DrawTrailLifeBar(kBarX, y, kBarW, kBarH, i, life[i], rec_style);
     }
 }
 

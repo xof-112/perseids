@@ -5,7 +5,7 @@
 namespace perseids
 {
 
-// Block 10 — Filter Mix (Phase 8). IDs avoid kAudioRouting (100) / Settings (110+).
+// Block 10 — Filter Mix (Phase 8). IDs 120–123; Settings extras use 130+.
 enum FilterParamId : uint16_t
 {
     kFilterCutoff      = 120,

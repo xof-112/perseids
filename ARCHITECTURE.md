@@ -11,6 +11,9 @@ processes up to 5 simultaneous audio voices ("**Trails**") in a round-robin pool
 processing is deliberately **global and pre-fader**; each Trail only gets a lightweight mixer
 tap (Level/Lock/Solo) — this keeps the UI lean.
 
+**Performance:** all verified CPU / freeze / flash-budget measures are collected in
+**§2a Performance Playbook** (A = transferable Daisy/Cortex-M7 patterns, B = Perseids engines).
+
 ---
 
 ## 0. Cursor IDE Setup
@@ -145,13 +148,64 @@ every request).
 
 ---
 
+## 2a. Performance Playbook (verified — large headroom gain)
+
+> **Find this first when hunting freezes or CPU.** Everything that moved Perseids from
+> “regular overruns / freezes under dense Swarm” to comfortable headroom is collected here.
+> Engine contracts in §4.1 still hold the sonic detail; this section is the *why it runs*
+> catalogue. Split into **A — transferable** (reuse on any Daisy / Cortex-M7 audio firmware)
+> and **B — Perseids-specific** (tied to this module’s engines). Measured outcome on the
+> bench: freezes gone under previously lethal Swarm loads; CPU meter stays well below the
+> governor engage point in normal play.
+
+### A. Transferable (Daisy Seed / STM32H750 / any dense audio callback)
+
+| # | Measure | Effect | Where in Perseids |
+|---|---------|--------|-------------------|
+| A1 | **CPU boost** — `hw.Init(true)` → **480 MHz** (libDaisy Boost; board default is 400 MHz) | ~**+20 %** compute headroom for free | `main.cpp`, `board_build.f_cpu = 480000000L` |
+| A2 | **`-fno-math-errno`** | `sqrtf` / `fabsf` become single FPU ops (`VSQRT.F32`) instead of libm calls; flash-negative | `platformio.ini` `build_flags` |
+| A3 | **`-ffp-contract=fast`** | `a*b+c` → `VFMA`; no audible FP-semantics change for audio | same |
+| A4 | **`-O3` on the hot path, not only on libraries** | PlatformIO stm32cube defaults to **`-Os`**. libDaisy already forces `-O3` via its `library.json` script — so *only application `src/`* was left size-optimised. `build_src_flags = -O3` (after the platform `-Os`) fixed that. Cost ~+32 KB code | `platformio.ini`; DaisySP stays `-Os` |
+| A5 | **Leave internal flash when it blocks `-O3` / features** — Daisy **`BOOT_SRAM`**: bootloader in internal flash, app in QSPI @ `0x90040000` → AXI-SRAM (480 KB code). Override `board_upload.maximum_size` / `maximum_ram_size` or PlatformIO still size-checks 128 KB and aborts | Unlocks `-O3` and Phase 10+; `.data`/`.bss` in **DTCM** (128 KB, zero wait-state — small speed win for globals; DMA cannot reach DTCM) | `STM32H750IB_sram.lds`, `-D BOOT_APP`, custom `dfu-util` upload |
+| A6 | **Larger audio block size** (here **256** @ 48 kHz, was 128) | Cuts ISR / callback overhead so the main UI loop still runs under heavy DSP | `hw.SetAudioBlockSize(256)` |
+| A7 | **Tabulate block-constant transcendental curves** | Per-sample `cos`/`sin`/`pow` in a dense loop will blow the block budget. Build the curve in the main loop into a LUT (double-buffered + dirty/quantize + rebuild rate-limit), callback only interpolates | Swarm window table — see B1 |
+| A8 | **Hoist block-rate invariants out of the sample loop** | Anything constant for the block (gains, lengths, `1/sqrt(n)`, pan norms) computed once; bit-identical audio if done carefully | Swarm — see B2 |
+| A9 | **Rational soft-clip on the bus instead of `tanh`** | Cheap `(27+a²)/(27+9a²)` form; major saving at the final mix. Keep `tanh` only where the *sound* depends on its saturation curve | Final Multi mix in `AudioCallback`; Swarm output keeps `tanh` (B3) |
+| A10 | **Skip silent / open branches** | If a stage’s wet gain ≈ 0 or a filter is wide open, do not enter its Process | Engine blend, Resonator Mix≈0, Filter Dest Off / open LP |
+| A11 | **Two CPU meters if you govern load** | Display average (~1 Hz) is too slow to catch a block overrun. A second meter with fast smoothing (~30 Hz) feeds the governor; the slow one stays for OLED | `g_cpu_meter` + `g_gov_meter` |
+| A12 | **Decimate expensive FX** | Run the heavy core at half rate (hold / interpolate the rest) when the algorithm tolerates it | ReverbSc tank half-rate; Character still full-rate |
+| A13 | **Prefer FPU-native / integer formatting over libm / `%f`** | Same as §2.9; also avoid per-sample `powf` when a closed form or table exists | Display + DSP |
+
+**Rules of thumb that transferred well here:** profile the *sample loop* first (one `pow` × N voices × block size); never trust PlatformIO’s reported “Flash %” after a linker-script change without reading `arm-none-eabi-size -A`; do not enable global `-ffast-math` unless you accept denormal/NaN semantics changes — A2+A3 gave most of the win without that.
+
+### B. Perseids-specific (engines & routing)
+
+| # | Measure | Effect | Notes |
+|---|---------|--------|-------|
+| B1 | **Swarm grain-window LUT** (1024 pts, double-buffered) | **Main freeze cause removed.** Old path: `cos`+`sin`+`pow` per grain per sample × up to 16 grains. `SyncFromUi` rebuilds on Blur change (quantised 1/128, min 16 ms between rebuilds); callback linear-interpolates (~−110 dB vs direct eval) | `swarm_engine.cpp` |
+| B2 | **Swarm per-block hoisting + direct buffer reads** | Trail play length / gain / scan incr / pan×drift `sqrt` norm once per block; grains index `trail_buffer` directly (skip non-inlinable `ReadLooped`); `inv_sqrt_[n]` table; Radiation `ReadInterp` once (was twice) | bit-identical where stated in §4.1 Block 5 |
+| B3 | **Keep `tanh` on Swarm output** | Deliberate: rational soft-clip → `x/9` for large x and changes dense-cloud character; ~2 % CPU left on the table on purpose | do not “optimise away” without A/B listening |
+| B4 | **Swarm load governor** | Second meter @ 30 Hz; above 85 % drop grain *spawn* cap by 1/block (by 2 above 92 %) to floor **5**; below 70 % recover 1 grain / 8 blocks. Running grains finish → no clicks. OLED **`L!`** while active | `UpdateGovernor` / `GovernorActive` |
+| B5 | **Spectra off the audio thread** | FFT only in main loop (`ProcessAnalysis`, ~20 ms cadence); callback = `PushInput` + oscillator bank. Skip synthesis when Blend ≈ full Swarm; still feed the analysis ring so blend-back is not stale | §4.1 Block 4 |
+| B6 | **Spectra: custom FastSin phasor bank**, not N× DaisySP `Oscillator` | Keeps additive synthesis inside budget at 32 partials / block 256 | CMSIS lite RFFT-512 (full archive was +51 KB; optional again after BOOT_SRAM) |
+| B7 | **Engine blend skip** | `run_spectra` / `run_swarm` from equal-power wet gains; silent side not processed | `AudioCallback` |
+| B8 | **Resonator** | Mix≈0 early-out; `UpdateTuning` / `UpdateGains` dirty-checked (sinf/powf only when Pitch/Decay/Damping/Scale/… actually move) | §4.1 Block 7 |
+| B9 | **ReverbSc half-rate tank** | Character Chorus stays full-rate on held wet | §4.1 Block 6 |
+| B10 | **Filter** | Dest Off skips SVF; wide-open LP ≈ dry → skip stereo bank; `SetFreq` block-rate unless Feedback FM (then every 4 samples) | `filter_engine.cpp` |
+
+**What not to do again:** put FFT or LUT rebuilds in the audio callback; gate governor decisions on the 1 Hz display meter; put application DSP under `-Os` while libraries sit at `-O3`; rely on internal 128 KB flash once code approaches ~100 KB with features still pending.
+
+**Cross-refs:** Swarm contract §4.1 Block 5 · Spectra sizes/clock/boot §4.1 Block 4 · Reverb/Filter §4.1 Blocks 6/10 · Upload grace window / `L!` display §4.9.
+
+---
+
 ## 3. Controls — Overview
 
 | Group | Count | Type | Function |
 |---|---|---|---|
 | Block pots (1–10) | 10 | Pot | Access to 2–4 sub-parameters each via cycle button (see 4.6) |
 | Trail Level | 5 | Rotary encoder with push (not a potentiometer — digital quadrature, direct GPIO, not on the ADC mux) | Turn = this Trail's level; short press = Lock; long press = Solo |
-| Mod slots | 4 | Pot | Amplitude (bipolar attenuverter); Destination/Divider via cycle button; source internal or CV in |
+| Mod slots | 4 | Pot | Amplitude (attenuverter) + Offset (bias); Destination/Divider via cycle; source internal or CV |
 | Multi | 1 | Encoder | Dry/Wet, Macro1, Macro2, Settings — via cycle button like the block pots |
 | Cycle button | 1 | Button (next to display) | Hold+turn = cycle (4.6); long alone = delete-all confirm (4.7) |
 | Rec button | 1 | Button (parallel to Trig jack) | Manual record trigger |
@@ -173,7 +227,7 @@ count in Section 2, point 6. The 5 Trail Level encoders and the Multi encoder ar
 |---|---|---|
 | 1 | **Trails** | Count (1–5), Threshold, Cont. Rec, Overwrite, On/Off |
 | 2 | **Time** | Buffer (= ring buffer length/max. recording time per Trail, up to 30s ceiling — see Section 2, point 2), Hold (up to 30s, beyond that = infinite; boot default 15s, see 4.8), Fade In, Fade Out |
-| 3 | **Engines** | Blend (Spectra↔Swarm), Pitch Spectra, Pitch Swarm |
+| 3 | **Engines** | Blend (Spectra↔Swarm), Pitch Spectra, Pitch Swarm, Pitch Both (span ±1…±2 oct for PSP/PSW) |
 | 4 | **Spectra Parameters** | Partials, Waveshape (Sine↔Saw↔Fold), Umbra/Aurora Macro, Ensemble/Drift |
 | 5 | **Swarm Parameters** | Size, Spread, Scan, Direction (Fwd/Rev/Rnd), Atmosphere Macro (Blur↔Radiation) |
 | 6 | **Reverb** | Mix, Decay, Damping, Character Macro (Chorus↔Friction) |
@@ -184,23 +238,33 @@ count in Section 2, point 6. The 5 Trail Level encoders and the Multi encoder ar
 | 11 | **Multi** (Encoder) | Global Dry/Wet, Macro1, Macro2, Time Unit (Clock↔Seconds, see 4.1a), Settings |
 
 **Block 3 (verified Phase 6 — implementation contract):** Engines CycleRow is **Blend**,
-**Pitch Spectra**, **Pitch Swarm** — the Phase 5 A/B toggle is gone (`kEnginesSelect` /
-`engine_swarm` replaced by `kEnginesBlend` / `blend`). Blend is **unipolar** 0% = pure
-Spectra … 100% = pure Swarm (not bipolar — no center detent semantics, no 4% deadzone),
-boot default 0 (Spectra). The Blend column draws a **subtle 50% hint**: one dot per side
-at half bar height, equal gap to the bar (`center_mark` flag in `ParameterDef`, reusable
-for future crossfade-style unipolar params) — deliberately quieter than the bipolar dashed
-zero line, since the middle means "equal mix", not "no effect". The segmented row shows a
-**dynamic side hint** behind the abbrev, on the same text row as "BLD": **"SP"** while the
-value is below 50% (Spectra side), **"SW"** above 50% (Swarm side), **nothing at exactly
-50%** — capitals in the small 4×6 font, same understated size as the CPU% figure
-(`seg_hint_low`/`seg_hint_high` in `ParameterDef`, optional per parameter, reusable for
-future crossfade-style params). The crossfade is **equal-power** (`cos/sin` of `blend·π/2`) on the
-two engine outputs, applied **pre-fader** in the audio callback before the bench
-listen-through mix. Both engines run simultaneously mid-blend; at the extremes
-(gain ≤ 0.001) the silent engine's synthesis is skipped to save audio CPU. Spectra's
-`PushInput` always runs regardless of blend so the FFT analysis ring stays warm; the
-main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥ 0.98).
+**Pitch Spectra**, **Pitch Swarm**, **Pitch Both** — the Phase 5 A/B toggle is gone
+(`kEnginesSelect` / `engine_swarm` replaced by `kEnginesBlend` / `blend`). Blend is
+**unipolar** 0% = pure Spectra … 100% = pure Swarm (not bipolar — no center detent
+semantics, no 4% deadzone), boot default 0 (Spectra). The Blend column draws a **subtle
+50% hint**: one dot per side at half bar height, equal gap to the bar (`center_mark` flag
+in `ParameterDef`, reusable for future crossfade-style unipolar params) — deliberately
+quieter than the bipolar dashed zero line, since the middle means "equal mix", not "no
+effect". The CycleView **value header** shows a **dynamic side hint** beside the value for
+named-pole params (`seg_hint_low` / `seg_hint_high`): Blend **`SP`/`SW`**, Waveshape
+**`SA`/`FO`**, Umbra/Aurora **`UM`/`AU`**, Atmosphere **`BL`/`RD`**, Character **`CH`/`FR`**.
+Below 50% the low label sits before the number; above 50% the high label after; **nothing at
+exact center**. On bipolar macros the pole name **replaces ±**; while a hint is visible the
+trailing **`%` is omitted** (`UM 42` / `42 AU`, `SP 42` / `42 SW`) so the right-hand label
+cannot overwrite the percent glyph. Pitch and Velocity stay plain `±%`. (Hints used to sit
+behind the segment abbrev; that no longer fits with fixed 4-wide columns.) Segment list:
+`BLD · PSP · PSW · PB`.
+**Pitch Both (`PB`):** unipolar 0…100% — does **not** pitch by itself. It expands the
+octave span of **both** Pitch Spectra and Pitch Swarm from **±1 oct (±100%)** at PB=0 to
+**±2 oct (±200%)** at PB=100%. PSP/PSW pots keep their travel; the header ±% and the DSP
+ratio scale with PB (`octaves = bipolar_norm × (1+PB)`). Bench / test control; **up-shifts
+toward ±2 oct can introduce aliasing** (Spectra partials and Swarm grain reads are not
+band-limited for extreme pitch-up). The crossfade is **equal-power**
+(`cos/sin` of `blend·π/2`) on the two engine outputs, applied **pre-fader** in the audio
+callback before the bench listen-through mix. Both engines run simultaneously mid-blend; at
+the extremes (gain ≤ 0.001) the silent engine's synthesis is skipped to save audio CPU.
+Spectra's `PushInput` always runs regardless of blend so the FFT analysis ring stays warm;
+the main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥ 0.98).
 
 **Block 5 / Swarm engine (verified Phase 5 — implementation contract):**
 
@@ -229,6 +293,7 @@ main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥
   flips a double-buffer index; the callback only interpolates. Blur is quantised to 1/128
   before a rebuild is triggered, so an Atmosphere sweep costs a bounded number of rebuilds.
   Interpolation error ≈ −110 dB, i.e. inaudible against the direct evaluation.
+  **Catalogue:** §2a B1 (transferable pattern A7).
 - **Per-block hoisting (bit-identical results):** `SwarmViews()` is written once per block at
   the end of `Capture::Process`, so Trail play length, gain, scan increment and the
   grain-pan × Pan-Drift normalisation (`std::sqrt`) are all computed **block-rate** and cached.
@@ -236,7 +301,7 @@ main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥
   `CaptureEngine::ReadLooped`; `1/sqrt(n_on)` comes from a table. Radiation used to call
   `ReadInterp` **twice** and discard the first result — now once. `tanh` at the Swarm output
   is deliberately **kept**: the cheap rational soft-clip does not saturate (→ `x/9` for large
-  x) and would change the character of dense clouds for ~2% of CPU.
+  x) and would change the character of dense clouds for ~2% of CPU. **Catalogue:** §2a B2–B3.
 - **Load governor** (`UpdateGovernor`, audio thread, block rate): fed by a **second**
   `CpuLoadMeter` smoothed at 30 Hz — the display average (1 Hz, ~160 ms) is far too slow to
   catch a block before it overruns. Above 85% load the grain cap drops by 1 per block (by 2
@@ -248,6 +313,7 @@ main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend ≥
   three-digit CPU reading still fits. The REC header is no longer pinned to x=54: it slides
   left (floor 48, the first column after `PERSEIDS`) whenever the meter block would reach it,
   which also fixes a pre-existing 2px overlap with `PAUSE` + both meters.
+  **Catalogue:** §2a B4 / A11.
 - **Pot map:** Mux A C3 = Swarm, Mux A C4 = Spectra (full bench map: see 4.5a; Settings
   has no pot — Block 11 = Multi encoder).
 
@@ -334,7 +400,8 @@ round-robin replacement, not against the wave.
 **Block 4 detail (Umbra/Aurora Macro, bipolar, 4% deadzone):** 0% = neutral 1:1 resynthesis.
 Negative values (Umbra) cut away fundamental frequencies, bringing quiet ambient noise
 components forward (transparent/airy). Positive values (Aurora) apply a formant/chroma filter
-over the partials for harmonic vocal emphasis (note tracking).
+over the partials for harmonic vocal emphasis (note tracking). Value header: **`UM` / `AU`**
+(see 4.11 pole hints).
 
 **Block 4 detail (Ensemble/Drift):** Slew-limiting on the FFT tracking plus slight detuning of
 odd/even partials against each other — produces an organic chorus natively in the oscillator
@@ -374,6 +441,7 @@ bank, without external delay lines.
   against the 480 KB SRAM budget. `-O3` changes no floating-point semantics.
   Sample rate is fixed at **48 kHz**: libDaisy's `SaiHandle::Config::SampleRate` only offers
   8/16/32/48/96 kHz, so 44.1 kHz is not an option without a custom PLL3 config.
+  **Catalogue:** §2a A1–A5.
 - **Boot: Daisy bootloader, `APP_TYPE = BOOT_SRAM`.** The 128 KB internal flash was 97.1% full
   with Phases 10/11 still unwritten, so the app moved out of it. `dsy_bootloader_v6_4-intdfu-2000ms`
   now owns internal flash; the app lives in QSPI at **0x90040000** and the bootloader copies it to
@@ -387,16 +455,18 @@ bank, without external delay lines.
   `RAM_D2_DMA`. Uploading needs the bootloader's **2 s** window after reset (hold BOOT to extend);
   the ST DFU mode (BOOT + RESET) is only needed to reflash the bootloader itself.
 - **Resynthesis:** custom phasor bank + cheap FastSin (not 32× DaisySP `Oscillator`). Waveshape
-  bipolar: center = sine, left → saw mix, right → wavefold. Peak pick + **frequency-continuity
-  matching** across hops (nearest previous partial within ~2.5 bins / 8% relative). Absolute
-  magnitude→amplitude scaling + silence/relative floor — **never** renormalize so peak sum =
-  constant loudness (that boosted noise floor into “line interference”).
-- **Pitch Spectra:** multiplies all partial target frequencies by `2^(bipolar ±1 octave)`.
-
+  bipolar: center = sine, left → saw mix, right → wavefold. Value header poles **`SA` / `FO`**.
+  Peak pick + **frequency-continuity matching** across hops (nearest previous partial within
+  ~2.5 bins / 8% relative). Absolute magnitude→amplitude scaling + silence/relative floor —
+  **never** renormalize so peak sum = constant loudness (that boosted noise floor into “line
+  interference”).
+- **Pitch Spectra:** multiplies all partial target frequencies by
+  `2^(bipolar_norm × span)` where `span = 1…2` from Engines **Pitch Both** (PB); header ±%
+  scales the same way (±100%…±200%). Plain `±%` — no pole hint.
 **Block 5 detail (Atmosphere Macro, bipolar, 4% deadzone):** 0% = clean grains with a Hann
 window. Negative values (Blur) smooth the grain envelopes heavily for edgeless ambient clouds.
 Positive values (Radiation) reduce the sample rate (lo-fi) and smooth changes via a BBD-style
-slew limiter (tape warble).
+slew limiter (tape warble). Value header: **`BL` / `RD`** (see 4.11 pole hints).
 
 **Block 6 / Reverb (verified Phase 8 — implementation contract):**
 
@@ -420,7 +490,7 @@ shimmering reverb character — shared wet return, so it colors Spectra and Swar
 the tank (not the Multi dry tap). Positive values (Friction) apply non-linear saturation
 (tanh soft clipping) directly into the reverb tank's feedback loop — at high values, a dense
 overdrive wall. Chorus and Friction are deliberately exclusive (one knob, two directions),
-not combinable at the same time.
+not combinable at the same time. Value header: **`CH` / `FR`** (see 4.11 pole hints).
 
 **Block 10 / Filter Mix (verified Phase 8 — implementation contract):**
 
@@ -452,9 +522,21 @@ through **Off → Inp (engine bus) → Spectra → Swarm → Reverb**.
    then a single analysis pass (behaves like a delay/looper)
 3. Scale (C Major, Minor, Pentatonic — extensible)
 4. Intonation (Equal Temperament ↔ Just Intonation, for Block 7 Quantized)
-5. Auto-Mod/Normalling (see 4.10)
-6. **Audio Routing** (Stereo ↔ Sidechain) — see detail description below
-7. **FX → Input (TODO — Phase 11):** how much listen-through is also fed into the wet FX
+5. **Rec bar (PRS / PLR / CTR):** Life-Bar recording style — **PLR** Perseids embers
+   left→right (default), **PRS** same embers center→out, **CTR** solid center-out
+   growth. Perseids styles soft-gate ~200 ms out before Fade In (PRS also soft-gates in).
+   Fade In/Out stay solid L→R regardless.
+6. **Trail lvl (LVL):** default Trail Level **0%…100% in 5% steps** (CountNum 0…20, boot
+   **50%**). Applies on boot, after delete-all Reset, and when edited (unlocked Trails only;
+   Lock keeps the manual level).
+7. **Trail cnt (#T):** default active Trail count **1…5** (boot **3**). Applies on boot, after
+   delete-all Reset, and when edited (also updates live Trails **CNT**). Live CNT pot still
+   overrides for the session without rewriting this default.
+   Multi → Settings opens this CycleRow
+   (CPU / RAM / SCL / INT / REC / LVL / #T); Multi turn edits, Cycle short / Cycle-hold+Multi steps.
+8. Auto-Mod/Normalling (see 4.10)
+9. **Audio Routing** (Stereo ↔ Sidechain) — see detail description below
+10. **FX → Input (TODO — Phase 11):** how much listen-through is also fed into the wet FX
    chain (Reverb send / shared post-engine bus). Default **0** = current behavior (effects on
    processed cloud only; Multi@100% = no input bleed). Amount is an **11-step** control
    **0…1** (0.0 / 0.1 / … / 1.0, or discrete CountNum 0–10 displayed as percent). Accessed via Multi
@@ -487,22 +569,22 @@ so Sidechain mode (Phase 11) is a mode switch later, not a rewire.
 **Multi Dry/Wet (Block 11 encoder — live):** Global equal-power blender between **clean
 input** (capture listen-through, never processed) and the **fully processed wet bus** —
 everything that shapes the sound after capture. Today that includes Spectra/Swarm (with
-Spectral Resonator on Swarm), Filter inserts (Dest Inp = engine bus, Sp/Sw/Rv), and Reverb
-return (engines-only send). **Mandatory for later phases:** Pan Drift (Block 8), Crossfade
-focus wave (Block 9), and any further FX must also live **inside this wet bus, before Multi**
-(Section 2 point 5a) — never feeding listen-through into wet. Local Mix pots (Reverb Mix,
-Resonator Mix, …) still shape their modules *inside* wet — Multi only balances input vs. that
-whole chain. Encoder on D13/D30; push on Mux B C5.
+Spectral Resonator on Swarm), Filter inserts (Dest Inp = engine bus, Sp/Sw/Rv), Reverb
+return (engines-only send), **Pan Drift** (Block 8), and **Crossfade** focus on the Trail
+VCA (Block 9) — all inside the wet bus before Multi (Section 2 point 5a). Local Mix pots
+(Reverb Mix, Resonator Mix, …) still shape their modules *inside* wet — Multi only balances
+input vs. that whole chain. Encoder on D13/D30; push on Mux B C5.
 **Multi menu (interim):** open with Multi turn (default Dry/Wet). Step entries with
-**Multi push short** (Mux B C5, polarity auto-calibrated) or **Cycle held + Multi turn**.
-Edit with Multi turn alone. Long Multi push → Home. Further shorts: Dry/Wet → Macro1* →
-Macro2* → Time Unit* → Settings* → … (`*` = dummy UI only). Cycle short alone does **not**
-step Multi (unused per 4.7).
+**Cycle short** (Multi/Settings open) or **Cycle held + Multi turn** — same idea as
+Cycle-hold + block pot. Multi encoder push is deferred (unreliable on current hardware);
+if it works later, short push still steps / opens Multi, long push → Home. Further steps:
+Dry/Wet → Macro1* → Macro2* → Time Unit* → Settings → … (`*` = dummy UI only).
 Encoder turn edits the bound entry (~0.02/detent). Boot Dry/Wet ~0.55. Reverb send stays
-**pre-fader** (before Multi Dry/Wet). Soft-limit on the final bus. `trail_mix` stays
-**analysis input only** (never mixed to the output). Internal Spectra/Swarm makeup must stay
-conservative: raising MagToAmp / grain amp for loudness reintroduced crackle above ~50% Trail
-Level on both engines.
+**pre-fader** (before Multi Dry/Wet). Soft-limit on the final bus. Bus trims at equal-power
+Multi: dry **×0.85**, wet **×1.30** (engines present over listen-through). `trail_mix`
+stays **analysis input only** (never mixed to the output). Internal Spectra/Swarm makeup
+must stay conservative: raising MagToAmp / grain amp for loudness reintroduced crackle above
+~50% Trail Level on both engines.
 
 ### 4.1a Time Unit (Clock ↔ Seconds) for Buffer and Hold
 
@@ -575,12 +657,36 @@ explicitly on both phase pins.
 
 ### 4.3 Mod Slots (×4)
 
-Cycle list **Amplitude → Destination → Divider**. **Amplitude is bipolar (attenuverter):**
-center = 0 (no modulation, 4% deadzone), turning right increases positive modulation depth,
-turning left inverts the modulation — applied either to the internal source or, with a cable
-plugged in, to the external CV signal. Destination references any parameter from the
-ParameterRegistry (Blocks 1–11 or Trail Level). Divider = clock subdivision for the internal
-source case. Internal sources: see Auto-Mod (4.10).
+Cycle list **Amplitude → Offset → Destination → Divider**.
+
+- **Amplitude is bipolar (attenuverter):** center = 0 (no modulation, 4% deadzone), turning
+  right increases positive modulation depth, turning left inverts the modulation — applied
+  either to the internal source or, with a cable plugged in, to the external CV signal.
+- **Offset is bipolar (bias / shift, 4% deadzone at 0):** a DC shift added **after** the
+  attenuverter so the modulation can sit entirely in the negative half, entirely in the
+  positive half, or anywhere in between — not only swing symmetrically around the destination’s
+  current value. Combined:
+
+  ```
+  contrib = Offset + Amplitude × source     // source normalised ≈ −1…+1 (or 0…1 for unipolar CV)
+  dest    = clamp(base + contrib × span)    // span = destination’s full travel
+  ```
+
+  Examples with a bipolar LFO (`source` −1…+1) and `Amplitude = +0.5`:
+  - `Offset = 0` → contrib −0.5…+0.5 (classic bipolar around the base)
+  - `Offset = −0.5` → contrib −1…0 (**only downward** — e.g. Pitch Both / PSP / PSW only
+    into the negative / lower range)
+  - `Offset = +0.5` → contrib 0…+1 (**only upward**)
+
+  Same idea applies when Amplitude is negative (inverted source): Offset still slides the
+  window up or down. Destinations like Engines **Pitch Both** (PB span), Pitch Spectra/Swarm,
+  or any other bipolar/unipolar registry target must honour this — a slot aimed at PB with
+  Offset hard left must be able to *only shrink* the pitch span (or only deepen negative
+  pitch), never force a symmetric ± wiggle if the user has biased it away.
+- **Destination** references any parameter from the ParameterRegistry (Blocks 1–11 or Trail
+  Level).
+- **Divider** = clock subdivision for the internal source case. Internal sources: see
+  Auto-Mod (4.10).
 
 ### 4.4 I/O Jacks
 
@@ -698,11 +804,9 @@ are dummy slots); further shorts step the list; long push = Home. Turn edits the
 | B | C3 | Crossfade ✔ |
 | B | C4 | Filter ✔ |
 
-*(dummy)* = remaining Blocks 8–9 have full CycleRows with registered dummy parameters
-(`dummy_params.h`) so every pot gives display feedback before its engine phase lands —
-Development Principle 5.1. Blocks 6/7/10 (Reverb / Resonator / Filter) are live.
-Settings CycleRow has **no pot** (Block 11 = Multi encoder, Phase 11) but now includes
-Scale + Intonation for the Resonator; CPU meter stays default-On for the bench. Mux polling covers
+All ten block pots are live (no remaining `dummy_params` CycleRows). Settings CycleRow has
+**no pot** (Block 11 = Multi encoder, Phase 11) but now includes Scale + Intonation for the
+Resonator; CPU meter stays default-On for the bench. Mux polling covers
 C0–C4 per chain via `InitMux` with three select lines (S0–S2, libDaisy-driven); only
 S3 is held low manually. Only map mux channels that physically have a pot:
 unmapped-but-polled floating channels spuriously open Cycle views. `EnterDashboard` must be a **no-op when already on the
@@ -798,7 +902,7 @@ section):**
 
 | Gesture | Action |
 |---|---|
-| Short, alone | *(no Play/Pause — that lives on Imprint, 4.7b)* — unused / reserved. Short during an open Reset confirmation still confirms delete-all |
+| Short, alone | **Interim:** while Multi or Settings is open → step that list (Multi push unreliable). On Dashboard / block CycleView still unused. Short during Reset confirmation still confirms delete-all |
 | Long, alone | **Reset confirmation:** display shows "Delete all Trails?" — a further short press within 3s confirms and deletes all Trails; timeout or moving a control cancels. During the confirmation, a short press counts as confirmation, NOT as anything else |
 | Held + turning a control | Cycle mode (4.6) |
 
@@ -966,10 +1070,10 @@ index is likewise clamped to the range 1…Count.
 
 | Phase | Rendering |
 |---|---|
-| Recording | Progress shown striped (deliberately distinct from Fade In, see the single-write-head note in 4.8) |
+| Recording | Settings **REC**: **PRS** = 1×1 embers drift center→out; **PLR** = same embers travel full-bar, revealed L→R (density peaks near mid-bar, thins toward the right); **CTR** = solid center→both sides. PRS soft-gates ~200 ms in; PRS/PLR soft-gate ~200 ms out before Fade In (UI-only). |
 | Fade In | Solid fill, left → right |
-| Hold | Full bar; countdown (or "INF") shown inverted, 4×6 font, centered, frame redrawn after each update |
-| Fade Out | Empties from the left; remaining fill stays on the right |
+| Hold | Full solid bar; countdown (or "INF") shown inverted, 4×6 font, centered, frame redrawn after each update |
+| Fade Out | Empties left → right; remaining fill stays on the right |
 | Empty | Outline only, no fill |
 
 **VU meter detail:** the Threshold value is drawn as a marker line directly on the VU meter,
@@ -1059,12 +1163,32 @@ line, centered above its column.
    monochrome).
 
 2. **Bipolar (±100%, with a center value)** — e.g. Umbra/Aurora Macro, Atmosphere Macro,
-   Character Macro, Crossfade/Pan Drift Velocity. The bar grows from the column's center
-   either upward (positive) or downward (negative); ceiling line at top = +100%, segmented box
-   at bottom = −100%. A dashed center line serves as the zero reference: **full column width
-   for the active parameter**, **half column width for inactive bipolar parameters** (enough
-   to signal "this is bipolar" without competing with the bar).
+   Character Macro, Waveshape, Pitch, Crossfade/Pan Drift Velocity. The bar grows from the
+   column's center either upward (positive) or downward (negative); ceiling line at top =
+   +100%, segmented box at bottom = −100%. A dashed center line serves as the zero reference:
+   **full column width for the active parameter**, **half column width for inactive bipolar
+   parameters** (enough to signal "this is bipolar" without competing with the bar).
 
+**Value-header pole hints (verified):** named-pole parameters optionally set
+`seg_hint_low` / `seg_hint_high` on `ParameterDef`. The CycleView **value header** (not the
+segmented row — 4-wide cells are too narrow) draws those labels in Font_4x6 beside the %:
+low label **before** the value below 50%, high label **after** above 50%, **nothing at exact
+center** (bipolar deadzone → center). Covered today:
+
+| Param | low (&lt;50%) | high (&gt;50%) |
+|---|---|---|
+| Blend (unipolar) | `SP` | `SW` |
+| Waveshape | `SA` (Saw) | `FO` (Fold) |
+| Umbra/Aurora | `UM` | `AU` |
+| Atmosphere | `BL` (Blur) | `RD` (Radiation) |
+| Character | `CH` (Chorus) | `FR` (Friction) |
+
+On **bipolar** macros the pole name **replaces ±** (`UM 42`, not `UM -42%`). While a pole
+hint is visible the trailing **`%` is omitted** as well — otherwise the right-hand label
+overwrote the percent glyph on the SSD1309. Plain ± pitch / velocity (PSP, PSW, PB span
+display, Pan/Crossfade Velocity, …) and all other params **keep `±%` / `%`**. Blend uses
+`SP 42` / `42 SW` the same way. Center (no hint) still shows a bare number or `0%` /
+`+0%` per type as before when no pole is named.
 3. **Toggle (2 states, e.g. On/Off, Cont. Rec, Overwrite, Quantized, Instant Playback)** — no bar. Both
    states stay visible side by side (left/right, matching the pot's/encoder's turn direction),
    the current one shown inverted. All other parameters in the column row remain visible as
@@ -1148,7 +1272,7 @@ determined yet.
 | 7 | Spectral Resonator ✔ | Mix/Decay/Damping/Spread/Pitch/Quantized active, intonation from Settings effective |
 | 8 | Reverb & Filter Mix ✔ | ReverbSc + Character; SVF LP Filter Mix with Destination |
 | 9 | Pan Drift & Crossfade ✔ | Phase-offset pan LFOs, crossfade slew, focus ticks on Home |
-| 10 | Mod system | 4 slots, jack normalling, registry destination, divider/clock |
+| 10 | Mod system | 4 slots, jack normalling, Amplitude+Offset+Destination+Divider, half-range bias |
 | 11 | Multi & Settings & Calibration | Dry/Wet/Macros, Settings submenu complete, CV calibration |
 
 ---
@@ -1337,8 +1461,12 @@ Implement:
 
 ### Phase 9 — Pan Drift & Crossfade
 
+**✔ Completed (verified against implementation).** See Block 8+9 contract above (Pan Drift LFOs +
+CloudPan, Crossfade focus lobe on VCA, BBD soft-replace, Home focus ticks; Wandering Beams
+removed as redundant with the Life-Bar).
+
 ```
-Prompt for Cursor:
+Prompt for Cursor (historical — already implemented):
 
 Read ARCHITECTURE.md first, especially 4.1 (Block 8+9) and 4.9.
 
@@ -1369,8 +1497,13 @@ per the Auto-Mod setting (4.10): OFF = simple triangle/sine with rate = clock
 period × divider; Age/Pitch/Both see 4.10 (the Age envelope and Pitch tracking
 value get wired to the Settings menu in Phase 11, but set up the source
 abstraction already here). CycleRow per slot: Amplitude (bipolar attenuverter,
-4% deadzone, see 4.3), Destination (from the ParameterRegistry, all Blocks 1–11
-plus Trail Level), Divider.
+4% deadzone), **Offset** (bipolar bias after the attenuverter, 4% deadzone —
+shifts the contrib window fully into the negative half, fully into the positive
+half, or anywhere between; required so destinations like Pitch Both / Pitch
+Spectra/Swarm can be modulated *only downward* or *only upward*, not merely
+scaled symmetrically — see 4.3), Destination (from the ParameterRegistry, all
+Blocks 1–11 plus Trail Level), Divider. Apply
+`contrib = Offset + Amplitude × source` then clamp onto the destination.
 ```
 
 ### Phase 11 — Multi, Settings & Calibration

@@ -18,7 +18,9 @@ class TrailLevelController
   public:
     static constexpr size_t kCount = kTrailCount;
 
-    void Init(daisy::DaisySeed& seed, CaptureEngine* capture);
+    void Init(daisy::DaisySeed& seed,
+              CaptureEngine*    capture,
+              const float*      default_level_steps = nullptr);
 
     void Process();
 
@@ -27,6 +29,10 @@ class TrailLevelController
     void ApplyEncoderSteps();
 
     void ResetAll();
+    // 0..20 steps → 0..1 level (5% each). Falls back to 50% if unset.
+    float DefaultLevel() const;
+    // Push Settings default onto unlocked Trails (locked keep their level).
+    void ApplyDefaultLevels();
 
     bool ActivityThisFrame() const { return activity_this_frame_; }
     // Encoder turn / Lock / Solo only — Rec/Trig must not kick the Cycle view.
@@ -66,6 +72,7 @@ class TrailLevelController
     void OnRecTrig();
 
     CaptureEngine*    capture_;
+    const float*      default_level_steps_; // Settings CountNum 0..20, or nullptr
     QuadratureEncoder encoders_[kCount];
     ButtonGesture     push_[kCount];
     ButtonGesture     rec_btn_;

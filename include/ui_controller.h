@@ -66,8 +66,11 @@ class UiController
     static constexpr float    kMultiPushOnThresh    = 0.35f;
     static constexpr float    kMultiPushOffThresh   = 0.65f;
     // Cycle+Multi scroll: quad encoders emit several ticks per detent.
-    static constexpr int      kMultiScrollTicksPerStep = 4;
-    static constexpr uint32_t kMultiScrollMinIntervalMs = 220;
+    static constexpr int      kMultiScrollTicksPerStep   = 4;
+    static constexpr uint32_t kMultiScrollMinIntervalMs  = 220;
+    static constexpr uint32_t kMultiBootIgnoreMs         = 500;
+    // Discrete Multi edits (CountNum/Toggle): one detent → one step.
+    static constexpr uint32_t kDiscreteEncMinIntervalMs  = 160;
 
     void Init(daisy::DaisySeed&      seed,
               ParameterRegistry&     registry,
@@ -99,8 +102,13 @@ class UiController
     void TouchActivity();
     void EnterDashboard();
     void EnterMultiView();
+    void EnterSettingsView();
     void HandleMultiShortPress();
+    void StepMultiOrSettingsMenu(int direction);
     void ApplyMultiEncoderSteps(int32_t steps);
+    void ApplyEncoderToParam(const ParameterDef& def, int32_t steps);
+    bool InSettingsView() const;
+    bool TryEnterSettingsIfBound();
     bool ReadMultiPushPressed();
     void CalibrateMultiPushIdle();
     void UpdateScreen();
@@ -112,6 +120,7 @@ class UiController
     ParameterRegistry*   registry_;
     CycleRow*            rows_;
     size_t               row_count_;
+    size_t               settings_row_; // pot-less Settings CycleRow index
     const PotMapping*    pot_mappings_;
     size_t               pot_count_;
     CaptureEngine*       capture_;
@@ -152,6 +161,8 @@ class UiController
     float    multi_push_idle_;
     int32_t  multi_scroll_accum_;
     uint32_t last_multi_scroll_ms_;
+    uint32_t multi_boot_ignore_until_ms_;
+    uint32_t last_discrete_enc_ms_;
     float    scroll_anchor_[kMaxCycleRows];
     uint32_t last_scroll_ms_[kMaxCycleRows];
     float    pot_prev_[kMaxCycleRows];

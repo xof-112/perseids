@@ -32,16 +32,21 @@ struct ParameterDef
     // like Blend, where the middle is an equal mix — NOT a bipolar zero).
     // Omitted in aggregate init → false.
     bool             center_mark;
-    // Optional dynamic side hint behind the abbrev in the segmented row
-    // (crossfade-style params): lowercase label of the side the value is
-    // currently on — low label below 50%, high label above, nothing at
-    // exactly 50% ("sp"/"sw" for Blend). Omitted in aggregate init → nullptr.
+    // Optional dynamic side hint for named-pole params (Blend SP/SW, Umbra/
+    // Aurora, Atmosphere Blur/Radiation, Character Chorus/Friction, Waveshape
+    // Saw/Fold). Drawn in the CycleView *value header* (Font_4x6 beside the %),
+    // not in the segmented row. Low label below 50%, high above, nothing at
+    // center. On bipolar macros the pole name replaces the ± sign.
     const char*      seg_hint_low;
     const char*      seg_hint_high;
     // Optional named labels for CountNum / CountBar (e.g. Filter Destination
     // Inp/Sp/Sw/Rv). Indexed as round(value) − round(min). Length must cover
     // the inclusive integer span [min, max]. Omitted → nullptr (numeric).
     const char* const* enum_labels;
+    // Optional 0..1 expander for bipolar Pitch Spectra/Swarm: multiplies the
+    // header ±% (and the engine octave span) from 1× (±100% / ±1 oct) to 2×
+    // (±200% / ±2 oct). Driven by Engines Pitch Both. Omitted → nullptr.
+    float* bipolar_span_ptr;
 };
 
 class ParameterRegistry

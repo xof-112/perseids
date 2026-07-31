@@ -30,7 +30,7 @@ class SpectraEngine
 
     void Init(float sample_rate);
 
-    void SyncFromUi(const SpectraParamValues& params);
+    void SyncFromUi(const SpectraParamValues& params, float pitch_both = 0.f);
 
     // Audio thread — accumulate analysis input; no FFT here.
     void PushInput(const float* samples, size_t size);
@@ -61,6 +61,7 @@ class SpectraEngine
     float bin_hz_;
 
     SpectraParamValues params_;
+    float              pitch_both_; // Engines PB 0..1 → PSP octave span 1×…2×
 
     float window_[kFftSize];
     float fft_time_[kFftSize];
