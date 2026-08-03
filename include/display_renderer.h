@@ -23,8 +23,10 @@ class DisplayRenderer
     static constexpr int kSegRowH     = 12;
     static constexpr int kParamTop    = 12;
     static constexpr int kParamBottom = 51;
-    // CycleView shows at most this many columns; extra params scroll in.
-    static constexpr size_t kCyclePageCols = 4;
+    // CycleView slots: half | full | center | full | half (4 column-widths).
+    // Active is always the center slot (true screen middle). Extra params wrap in.
+    static constexpr size_t kCyclePageCols  = 5;
+    static constexpr size_t kCycleFocusSlot = 2;
 
     void Init(daisy::DaisySeed& seed);
 
@@ -66,30 +68,43 @@ class DisplayRenderer
 
     ColumnGeom ColumnGeometry(size_t index, size_t count) const;
 
-    // Sliding window so ParamCount > kCyclePageCols keeps 4-wide columns.
+    // Circular window: active in kCycleFocusSlot (center); wraps at list ends.
+    // Fills out_indices[0..out_page) with param indices. out_indices needs
+    // at least kCyclePageCols entries. page is 5 when param_count >= 2, else 1.
     static void CycleWindow(size_t  param_count,
                             size_t  active_col,
-                            size_t& out_start,
+                            size_t* out_indices,
                             size_t& out_page);
 
     void Clear();
     void DrawCeilingLine();
     void DrawColumnSides(const ColumnGeom& col, bool active);
-    void DrawDashedCenterLine(const ColumnGeom& col, bool full_width);
-    void DrawCenterMark(const ColumnGeom& col, bool active);
+    void DrawDashedCenterLine(const ColumnGeom& col,
+                              bool              full_width,
+                              float             depth = 1.f);
+    void DrawCenterMark(const ColumnGeom& col,
+                        bool              active,
+                        float             depth = 1.f);
     void DrawUnipolarBar(const ColumnGeom& col,
                          float             norm,
-                         bool              active);
-    void DrawBipolarBar(const ColumnGeom& col, float norm, bool active);
+                         bool              active,
+                         float             depth = 1.f);
+    void DrawBipolarBar(const ColumnGeom& col,
+                        float             norm,
+                        bool              active,
+                        float             depth = 1.f);
     void DrawToggle(const ColumnGeom&   col,
                     const ParameterDef& def,
-                    bool                active);
+                    bool                active,
+                    float               depth = 1.f);
     void DrawCountBar(const ColumnGeom&   col,
                       const ParameterDef& def,
-                      bool                active);
+                      bool                active,
+                      float               depth = 1.f);
     void DrawCountNum(const ColumnGeom&   col,
                       const ParameterDef& def,
-                      bool                active);
+                      bool                active,
+                      float               depth = 1.f);
     void DrawSegmentedRow(const ParameterRegistry& reg,
                           const CycleRow&          row,
                           size_t                   active_col);

@@ -88,6 +88,16 @@ const ParameterDef* CycleRow::ParamAt(const ParameterRegistry& reg,
     return index < param_count_ ? reg.Find(param_ids_[index]) : nullptr;
 }
 
+void CycleRow::SetBoundIndex(size_t index)
+{
+    if(param_count_ == 0)
+        return;
+    if(index >= param_count_)
+        index = param_count_ - 1;
+    bound_index_  = index;
+    scroll_index_ = index;
+}
+
 void CycleRow::Scroll(int direction)
 {
     if(param_count_ == 0)

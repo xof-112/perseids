@@ -63,7 +63,8 @@ void UiController::Init(daisy::DaisySeed&   seed,
     multi_scroll_accum_    = 0;
     last_multi_scroll_ms_  = 0;
     multi_boot_ignore_until_ms_ = 0;
-    last_discrete_enc_ms_  = 0;
+    last_discrete_enc_ms_       = 0;
+    suppress_settings_enter_    = false;
 
     for(size_t i = 0; i < kMaxCycleRows; ++i)
     {
@@ -273,7 +274,9 @@ void UiController::EnterSettingsView()
     if(settings_row_ >= row_count_)
         return;
     active_row_ = settings_row_;
-    screen_     = UiScreen::CycleView;
+    // Land on CPU (index 0), not BCK — encoder turn on BCK leaves Settings.
+    rows_[settings_row_].SetBoundIndex(0);
+    screen_ = UiScreen::CycleView;
     CapturePotBaselines();
     TouchActivity();
 }
@@ -282,17 +285,6 @@ bool UiController::InSettingsView() const
 {
     return screen_ == UiScreen::CycleView && settings_row_ < row_count_
            && active_row_ == settings_row_;
-}
-
-bool UiController::TryEnterSettingsIfBound()
-{
-    if(multi_row_ == nullptr || registry_ == nullptr)
-        return false;
-    const ParameterDef* def = multi_row_->BoundParam(*registry_);
-    if(def == nullptr || def->id != kMultiSettings)
-        return false;
-    EnterSettingsView();
-    return true;
 }
 
 void UiController::HandleMultiShortPress()
@@ -321,13 +313,10 @@ void UiController::StepMultiOrSettingsMenu(int direction)
     if(screen_ != UiScreen::MultiView || multi_row_ == nullptr)
         return;
 
-    // Already on Settings gateway → open submenu; else step, then enter if landed.
-    if(direction > 0 && TryEnterSettingsIfBound())
-        return;
-
+    // Stay on the Settings gateway — enter only via encoder turn after Cycle
+    // release (ApplyMultiEncoderSteps), so "Settings" is visible in the list.
     multi_row_->StepBound(direction);
-    if(direction > 0)
-        TryEnterSettingsIfBound();
+    suppress_settings_enter_ = false;
 }
 
 void UiController::ApplyEncoderToParam(const ParameterDef& def, int32_t steps)
@@ -395,7 +384,33 @@ void UiController::ApplyMultiEncoderSteps(int32_t steps)
     if(InSettingsView())
     {
         if(const ParameterDef* def = rows_[settings_row_].BoundParam(*registry_))
+        {
+            // BCK: leave Settings → Multi on Settings gateway. Suppress the
+            // same/next encoder ticks from immediately re-opening Settings
+            // (would look like a jump back to CPU).
+            if(def->id == kSettingsBack)
+            {
+                if(multi_row_ != nullptr && registry_ != nullptr)
+                {
+                    for(size_t i = 0; i < multi_row_->ParamCount(); ++i)
+                    {
+                        if(const ParameterDef* m
+                           = multi_row_->ParamAt(*registry_, i))
+                        {
+                            if(m->id == kMultiSettings)
+                            {
+                                multi_row_->SetBoundIndex(i);
+                                break;
+                            }
+                        }
+                    }
+                }
+                suppress_settings_enter_ = true;
+                EnterMultiView();
+                return;
+            }
             ApplyEncoderToParam(*def, steps);
+        }
         return;
     }
 
@@ -406,9 +421,16 @@ void UiController::ApplyMultiEncoderSteps(int32_t steps)
     if(def == nullptr || def->value_ptr == nullptr)
         return;
 
-    // Settings gateway is display-only — enter via short press / land.
+    // Settings gateway: Cycle held scrolls onto it (visible); after release,
+    // the next encoder turn opens the submenu. After BCK, stay on the gateway
+    // until the Multi list is stepped (suppress_settings_enter_).
     if(def->id == kMultiSettings)
+    {
+        if(suppress_settings_enter_)
+            return;
+        EnterSettingsView();
         return;
+    }
 
     ApplyEncoderToParam(*def, steps);
 }
@@ -432,7 +454,8 @@ void UiController::EnterDashboard()
     if(screen_ == UiScreen::Dashboard)
         return;
 
-    screen_ = UiScreen::Dashboard;
+    screen_                  = UiScreen::Dashboard;
+    suppress_settings_enter_ = false;
     CapturePotBaselines();
     TouchActivity();
 }
@@ -617,7 +640,11 @@ void UiController::PollControls()
         }
         // Start Multi list from the currently bound entry when Cycle goes down.
         if(multi_row_ != nullptr && screen_ == UiScreen::MultiView)
+        {
             multi_row_->SyncScrollToBound();
+            // Allow Settings re-enter after BCK (Cycle acknowledges intent).
+            suppress_settings_enter_ = false;
+        }
     }
 
     if(cycle_held_prev_ && !cycle_held)

@@ -15,11 +15,70 @@ namespace
 constexpr int kMargin        = 2;
 constexpr int kBarWide       = 14;
 constexpr int kBarNarrow     = 6;
+constexpr int kBarFar        = 3; // carousel rim only
 // Catch-up: horizontal stubs only, 1px gap from the value bar (no vertical ticks).
 constexpr int kPickupOverhang = 5;
 constexpr int kPickupBarGap   = 1;
 constexpr int kModDotOutset   = 2;
+
+// Rim-only shrink (~half height). Neighbors left/right of center stay full size.
+constexpr float kDepthFar = 0.55f;
+// Segment cell for outer peeks — top-aligned with the full row; one pixel
+// taller than the glyph band so the label isn't glued to the bottom edge.
+constexpr int kRimSegH = 9;
+
+float CarouselDepth(size_t slot, size_t page)
+{
+    if(page != DisplayRenderer::kCyclePageCols)
+        return 1.f;
+    if(slot == 0 || slot == page - 1)
+        return kDepthFar;
+    return 1.f; // center + both neighbors: full size
 }
+
+void RimSegGeom(int& out_y, int& out_h)
+{
+    // Top-align with the full segment row so the upper box edge reads as one
+    // continuous horizontal line across the display.
+    out_h = kRimSegH;
+    out_y = DisplayRenderer::kSegRowY;
+}
+
+void ParamBand(float depth, int& out_top, int& out_base)
+{
+    const int full_top  = DisplayRenderer::kCeilingY + 1;
+    const int full_base = DisplayRenderer::kSegRowY - 1;
+
+    // Full columns: bars sit on the segment row (no floating).
+    if(depth >= 0.99f)
+    {
+        out_top  = full_top;
+        out_base = full_base;
+        return;
+    }
+
+    // Rim: shorter bars that rest on the vertically-centered outer box.
+    int rim_y = 0;
+    int rim_h = 0;
+    RimSegGeom(rim_y, rim_h);
+    out_base = rim_y - 1;
+    const int full_span = full_base - full_top;
+    int       span
+        = static_cast<int>(static_cast<float>(full_span) * depth + 0.5f);
+    if(span < 4)
+        span = 4;
+    out_top = out_base - span;
+    if(out_top < full_top)
+        out_top = full_top;
+}
+
+int BarWidthFor(bool active, float depth)
+{
+    if(depth < 0.99f)
+        return kBarFar;
+    return active ? kBarWide : kBarNarrow;
+}
+} // namespace
 
 void DisplayRenderer::Init(daisy::DaisySeed& seed)
 {
@@ -40,34 +99,70 @@ void DisplayRenderer::Init(daisy::DaisySeed& seed)
 DisplayRenderer::ColumnGeom DisplayRenderer::ColumnGeometry(size_t index,
                                                             size_t count) const
 {
-    // Always size columns as if the page held kCyclePageCols entries, so
-    // 2- and 3-param blocks match 4-wide Trails/Swarm column width.
-    const size_t slots
-        = (count > 0 && count < kCyclePageCols) ? kCyclePageCols : count;
     const int total_w = kWidth - 2 * kMargin;
-    const int col_w   = static_cast<int>(total_w / static_cast<int>(slots));
-    const int x       = kMargin + static_cast<int>(index) * col_w;
+
+    // Single param: one standard-width column at screen center.
+    if(count == 1)
+    {
+        const int col_w = total_w / 4;
+        const int x     = (kWidth - col_w) / 2;
+        return {x, col_w, x + col_w / 2};
+    }
+
+    // Five slots: half | full | center | full | half (sum = 4 full widths).
+    // Center of slot 2 lands exactly on kWidth/2.
+    if(count == kCyclePageCols)
+    {
+        constexpr int kUnits[kCyclePageCols] = {1, 2, 2, 2, 1};
+        const int     unit = total_w / 8;
+        const int     used = unit * 8;
+        int           x    = kMargin + (total_w - used) / 2;
+        if(index >= kCyclePageCols)
+            index = kCyclePageCols - 1;
+        for(size_t i = 0; i < index; ++i)
+            x += kUnits[i] * unit;
+        const int w = kUnits[index] * unit;
+        return {x, w, x + w / 2};
+    }
+
+    // Fallback: equal columns sized as a 4-slot page.
+    const size_t slots
+        = (count > 0 && count < 4) ? 4 : count;
+    const int col_w = static_cast<int>(total_w / static_cast<int>(slots));
+    const int x     = kMargin + static_cast<int>(index) * col_w;
     return {x, col_w, x + col_w / 2};
 }
 
 void DisplayRenderer::CycleWindow(size_t  param_count,
                                   size_t  active_col,
-                                  size_t& out_start,
+                                  size_t* out_indices,
                                   size_t& out_page)
 {
-    out_page = param_count < kCyclePageCols ? param_count : kCyclePageCols;
-    if(param_count <= out_page || out_page == 0)
+    if(out_indices == nullptr || param_count == 0)
     {
-        out_start = 0;
+        out_page = 0;
         return;
     }
-    // Keep active visible; left-align until the window must slide right.
-    if(active_col + 1 <= out_page)
-        out_start = 0;
-    else
-        out_start = active_col + 1 - out_page;
-    if(out_start + out_page > param_count)
-        out_start = param_count - out_page;
+
+    const size_t act
+        = (active_col < param_count) ? active_col : (param_count - 1);
+
+    // One entry: single centered column.
+    if(param_count == 1)
+    {
+        out_page       = 1;
+        out_indices[0] = 0;
+        return;
+    }
+
+    // Always 5 visual slots with wrap — active fixed in the true center slot.
+    out_page           = kCyclePageCols;
+    const size_t focus = kCycleFocusSlot;
+    for(size_t v = 0; v < out_page; ++v)
+    {
+        const size_t offset = v + param_count - focus;
+        out_indices[v]      = (act + offset) % param_count;
+    }
 }
 
 void DisplayRenderer::Clear()
@@ -97,9 +192,14 @@ void DisplayRenderer::DrawColumnSides(const ColumnGeom& col, bool active)
                       true);
 }
 
-void DisplayRenderer::DrawDashedCenterLine(const ColumnGeom& col, bool full_width)
+void DisplayRenderer::DrawDashedCenterLine(const ColumnGeom& col,
+                                           bool              full_width,
+                                           float             depth)
 {
-    const int y     = (kParamTop + kParamBottom) / 2;
+    int top = 0;
+    int base = 0;
+    ParamBand(depth, top, base);
+    const int y     = (top + base) / 2;
     const int inset = full_width ? 1 : col.w / 4;
     for(int x = col.x + inset; x < col.x + col.w - inset; x += 2)
         display_.DrawPixel(x, y, true);
@@ -108,12 +208,17 @@ void DisplayRenderer::DrawDashedCenterLine(const ColumnGeom& col, bool full_widt
 // 50% hint for crossfade-style unipolar params (e.g. Blend): one dot per
 // side at half bar height, equal gap to the bar — deliberately subtler than
 // the bipolar dashed zero line (the middle is an equal mix, not "no effect").
-void DisplayRenderer::DrawCenterMark(const ColumnGeom& col, bool active)
+void DisplayRenderer::DrawCenterMark(const ColumnGeom& col,
+                                     bool              active,
+                                     float             depth)
 {
-    const int y        = ((kCeilingY + 1) + (kSegRowY - 1)) / 2;
-    const int bar_w    = active ? kBarWide : kBarNarrow;
-    const int bar_x    = col.cx - bar_w / 2;
-    constexpr int kGap = 3;
+    int top = 0;
+    int base = 0;
+    ParamBand(depth, top, base);
+    const int y     = (top + base) / 2;
+    const int bar_w = BarWidthFor(active, depth);
+    const int bar_x = col.cx - bar_w / 2;
+    constexpr int kGap = 2;
 
     display_.DrawPixel(bar_x - kGap, y, true);
     display_.DrawPixel(bar_x + bar_w - 1 + kGap, y, true);
@@ -121,14 +226,16 @@ void DisplayRenderer::DrawCenterMark(const ColumnGeom& col, bool active)
 
 void DisplayRenderer::DrawUnipolarBar(const ColumnGeom& col,
                                       float             norm,
-                                      bool              active)
+                                      bool              active,
+                                      float             depth)
 {
-    const int bar_w = active ? kBarWide : kBarNarrow;
-    const int bar_x = col.cx - bar_w / 2;
-    const int base_y = kSegRowY - 1;
-    const int top_y  = kCeilingY + 1;
-    const int span   = base_y - top_y;
-    int       h      = static_cast<int>(norm * static_cast<float>(span) + 0.5f);
+    const int bar_w  = BarWidthFor(active, depth);
+    const int bar_x  = col.cx - bar_w / 2;
+    int       top_y  = 0;
+    int       base_y = 0;
+    ParamBand(depth, top_y, base_y);
+    const int span = base_y - top_y;
+    int       h    = static_cast<int>(norm * static_cast<float>(span) + 0.5f);
 
     // Active at 0%: still show a 1px floor so the column doesn't look empty (e.g. ENS).
     if(h <= 0)
@@ -143,13 +250,17 @@ void DisplayRenderer::DrawUnipolarBar(const ColumnGeom& col,
 
 void DisplayRenderer::DrawBipolarBar(const ColumnGeom& col,
                                      float             norm,
-                                     bool              active)
+                                     bool              active,
+                                     float             depth)
 {
-    const int bar_w  = active ? kBarWide : kBarNarrow;
+    const int bar_w  = BarWidthFor(active, depth);
     const int bar_x  = col.cx - bar_w / 2;
-    const int center = (kParamTop + kParamBottom) / 2;
-    const int up_span   = center - (kCeilingY + 1);
-    const int down_span = (kSegRowY - 1) - center;
+    int       top_y  = 0;
+    int       base_y = 0;
+    ParamBand(depth, top_y, base_y);
+    const int center    = (top_y + base_y) / 2;
+    const int up_span   = center - top_y;
+    const int down_span = base_y - center;
 
     const float signed_v = (norm - 0.5f) * 2.f;
 
@@ -170,16 +281,31 @@ void DisplayRenderer::DrawBipolarBar(const ColumnGeom& col,
 
 void DisplayRenderer::DrawToggle(const ColumnGeom&   col,
                                  const ParameterDef& def,
-                                 bool                active)
+                                 bool                active,
+                                 float               depth)
 {
     (void)active;
 
     const bool on = *def.value_ptr >= (def.min_val + def.max_val) * 0.5f;
 
+    int top_y  = 0;
+    int base_y = 0;
+    ParamBand(depth, top_y, base_y);
+
+    // Far rim: tiny O/I peek — full OFF/ON will not fit.
+    if(depth < 0.99f)
+    {
+        const char* mark = on ? "I" : "O";
+        const int   tw   = 4;
+        display_.SetCursor(col.cx - tw / 2, (top_y + base_y) / 2 - 3);
+        display_.WriteString(mark, Font_4x6, true);
+        return;
+    }
+
     const int x0  = col.x + 2;
     const int x1  = col.x + col.w - 3;
-    const int y0  = kParamTop;
-    const int y1  = kSegRowY - 3;
+    const int y0  = top_y;
+    const int y1  = base_y;
     const int mid = (y0 + y1) / 2;
 
     constexpr int kOffW  = 3 * 5; // Font_5x8 "OFF"
@@ -211,31 +337,51 @@ void DisplayRenderer::DrawToggle(const ColumnGeom&   col,
 
 void DisplayRenderer::DrawCountBar(const ColumnGeom&   col,
                                    const ParameterDef& def,
-                                   bool                active)
+                                   bool                active,
+                                   float               depth)
 {
     const float norm = ParameterRegistry::Normalize(def, *def.value_ptr);
-    DrawUnipolarBar(col, norm, active);
+    DrawUnipolarBar(col, norm, active, depth);
 }
 
 void DisplayRenderer::DrawCountNum(const ColumnGeom&   col,
                                    const ParameterDef& def,
-                                   bool                active)
+                                   bool                active,
+                                   float               depth)
 {
     char val[8];
     FormatCountLabel(def, val, sizeof(val));
 
-    const int font_w = active ? 7 : 6;
-    const int text_w = static_cast<int>(strlen(val)) * font_w;
-    const int x      = col.cx - text_w / 2;
+    int top_y  = 0;
+    int base_y = 0;
+    ParamBand(depth, top_y, base_y);
+    const int mid_y = (top_y + base_y) / 2;
+
+    // Outer rim: 1–2 glyphs, small font, centered in the short band.
+    if(depth < 0.99f)
+    {
+        char peek[3] = {0, 0, 0};
+        peek[0]      = val[0];
+        if(val[1] != '\0')
+            peek[1] = val[1];
+        const int tw = static_cast<int>(strlen(peek)) * 4;
+        display_.SetCursor(col.cx - tw / 2, mid_y - 3);
+        display_.WriteString(peek, Font_4x6, true);
+        return;
+    }
 
     if(active)
     {
-        display_.SetCursor(x, (kParamTop + kParamBottom) / 2 - 4);
+        const int font_w = 7;
+        const int text_w = static_cast<int>(strlen(val)) * font_w;
+        display_.SetCursor(col.cx - text_w / 2, mid_y - 5);
         display_.WriteString(val, Font_7x10, true);
     }
     else
     {
-        display_.SetCursor(x, kSegRowY - 9);
+        const int font_w = 6;
+        const int text_w = static_cast<int>(strlen(val)) * font_w;
+        display_.SetCursor(col.cx - text_w / 2, kSegRowY - 9);
         display_.WriteString(val, Font_6x8, true);
     }
 }
@@ -578,46 +724,73 @@ void DisplayRenderer::DrawSegmentedRow(const ParameterRegistry& reg,
                                        const CycleRow&          row,
                                        size_t                   active_col)
 {
-    size_t       start = 0;
-    size_t       page  = 0;
-    CycleWindow(row.ParamCount(), active_col, start, page);
+    size_t indices[kCyclePageCols];
+    size_t page = 0;
+    CycleWindow(row.ParamCount(), active_col, indices, page);
 
     for(size_t v = 0; v < page; ++v)
     {
-        const size_t        i   = start + v;
+        const size_t        i   = indices[v];
         const ColumnGeom    col = ColumnGeometry(v, page);
         const ParameterDef* def = row.ParamAt(reg, i);
         if(def == nullptr)
             continue;
 
-        const bool sel = (i == active_col);
-        const int  pad = 1;
+        const bool sel       = (i == active_col);
+        const int  pad       = 1;
+        const bool half_edge = (page == kCyclePageCols
+                                && (v == 0 || v == page - 1));
 
-        if(sel)
+        // Outer peeks: shorter box, top-aligned; neighbors + center: full size.
+        int seg_y = kSegRowY;
+        int seg_h = kSegRowH;
+        if(half_edge)
+            RimSegGeom(seg_y, seg_h);
+
+        int x0 = col.x + pad;
+        int x1 = col.x + col.w - pad - 1;
+        // Abut outer boxes to their neighbors — no gap between rim and next.
+        if(half_edge && v == 0 && page > 1)
         {
-            display_.DrawRect(col.x + pad,
-                              kSegRowY,
-                              col.x + col.w - pad - 1,
-                              kSegRowY + kSegRowH - 1,
-                              true,
-                              true);
-            display_.SetCursor(col.x + pad + 2, kSegRowY + 2);
-            display_.WriteString(def->abbrev, Font_6x8, false);
+            const ColumnGeom next = ColumnGeometry(1, page);
+            x1 = next.x + pad; // share neighbor's left wall
+        }
+        else if(half_edge && v == page - 1 && page > 1)
+        {
+            const ColumnGeom prev = ColumnGeometry(page - 2, page);
+            x0 = prev.x + prev.w - pad - 1; // share neighbor's right wall
+        }
+
+        char peek[3] = {0, 0, 0};
+        if(half_edge && def->abbrev != nullptr && def->abbrev[0] != '\0')
+        {
+            peek[0] = def->abbrev[0];
+            if(def->abbrev[1] != '\0')
+                peek[1] = def->abbrev[1];
+        }
+
+        display_.DrawRect(x0, seg_y, x1, seg_y + seg_h - 1, true, sel);
+
+        if(half_edge)
+        {
+            if(peek[0] != '\0')
+            {
+                // Center 1–2 glyphs inside the rim box (not sitting on the bottom).
+                const int tw = static_cast<int>(strlen(peek)) * 4;
+                const int cx = (x0 + x1) / 2;
+                int       tx = cx - tw / 2;
+                if(tx < x0 + 1)
+                    tx = x0 + 1;
+                const int ty = seg_y + (seg_h - 6) / 2;
+                display_.SetCursor(tx, ty);
+                display_.WriteString(peek, Font_4x6, !sel);
+            }
         }
         else
         {
-            display_.DrawRect(col.x + pad,
-                              kSegRowY,
-                              col.x + col.w - pad - 1,
-                              kSegRowY + kSegRowH - 1,
-                              true,
-                              false);
-            display_.SetCursor(col.x + pad + 2, kSegRowY + 2);
-            display_.WriteString(def->abbrev, Font_6x8, true);
+            display_.SetCursor(col.x + pad + 2, seg_y + 2);
+            display_.WriteString(def->abbrev, Font_6x8, !sel);
         }
-
-        // seg_hint_low/high are drawn in DrawValueHeader (Blend SP/SW) — the
-        // fixed 4-wide segment cells cannot fit "BLD"+hint.
     }
 }
 
@@ -632,19 +805,24 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
     Clear();
     DrawCeilingLine();
 
-    size_t start = 0;
-    size_t page  = 0;
-    CycleWindow(row.ParamCount(), active_col, start, page);
+    size_t indices[kCyclePageCols];
+    size_t page = 0;
+    CycleWindow(row.ParamCount(), active_col, indices, page);
+    const size_t focus
+        = (page == kCyclePageCols) ? kCycleFocusSlot
+          : (page > 0)             ? (page - 1) / 2
+                                   : 0;
 
     for(size_t v = 0; v < page; ++v)
     {
-        const size_t        i   = start + v;
+        const size_t        i   = indices[v];
         const ColumnGeom    col = ColumnGeometry(v, page);
         const ParameterDef* def = row.ParamAt(reg, i);
         if(def == nullptr)
             continue;
 
         const bool active = (i == active_col);
+        const float depth = CarouselDepth(v, page);
         DrawColumnSides(col, active);
 
         const float norm = ParameterRegistry::Normalize(*def, *def->value_ptr);
@@ -653,25 +831,25 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
         {
         case ParamDisplayType::Unipolar:
             if(def->center_mark)
-                DrawCenterMark(col, active);
-            DrawUnipolarBar(col, norm, active);
+                DrawCenterMark(col, active, depth);
+            DrawUnipolarBar(col, norm, active, depth);
             break;
         case ParamDisplayType::Bipolar:
-            DrawDashedCenterLine(col, active);
-            DrawBipolarBar(col, norm, active);
+            DrawDashedCenterLine(col, active, depth);
+            DrawBipolarBar(col, norm, active, depth);
             break;
         case ParamDisplayType::Toggle:
-            DrawToggle(col, *def, active);
+            DrawToggle(col, *def, active, depth);
             break;
         case ParamDisplayType::CountBar:
-            DrawCountBar(col, *def, active);
+            DrawCountBar(col, *def, active, depth);
             break;
         case ParamDisplayType::CountNum:
-            DrawCountNum(col, *def, active);
+            DrawCountNum(col, *def, active, depth);
             break;
         case ParamDisplayType::Seconds:
         case ParamDisplayType::HoldTime:
-            DrawUnipolarBar(col, norm, active);
+            DrawUnipolarBar(col, norm, active, depth);
             break;
         }
     }
@@ -682,28 +860,24 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
 
     // Catch-up line on the bound column (solid + end ticks), not while scrolling
     // the cycle list — only the physical pot vs. stored value matters (4.6).
-    if(row.PickupActive() && !row.InCycleScroll())
+    // Active is always drawn in the focus slot when not scrolling.
+    if(row.PickupActive() && !row.InCycleScroll() && page > 0)
     {
-        const size_t bound = row.BoundIndex();
-        if(bound >= start && bound < start + page)
+        if(const ParameterDef* def = row.ParamAt(reg, row.BoundIndex()))
         {
-            if(const ParameterDef* def = row.ParamAt(reg, bound))
+            if(def->display_type != ParamDisplayType::Toggle)
             {
-                if(def->display_type != ParamDisplayType::Toggle)
-                {
-                    DrawPickupLine(ColumnGeometry(bound - start, page),
-                                   row.PickupPotNorm(),
-                                   def->display_type);
-                }
+                DrawPickupLine(ColumnGeometry(focus, page),
+                               row.PickupPotNorm(),
+                               def->display_type);
             }
         }
     }
 
-    if(modulated_norm >= 0.f && active_col >= start
-       && active_col < start + page)
+    if(modulated_norm >= 0.f && page > 0)
     {
         if(const ParameterDef* def = row.ParamAt(reg, active_col))
-            DrawModDots(ColumnGeometry(active_col - start, page),
+            DrawModDots(ColumnGeometry(focus, page),
                         modulated_norm,
                         def->display_type);
     }

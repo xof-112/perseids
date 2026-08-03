@@ -108,7 +108,6 @@ class UiController
     void ApplyMultiEncoderSteps(int32_t steps);
     void ApplyEncoderToParam(const ParameterDef& def, int32_t steps);
     bool InSettingsView() const;
-    bool TryEnterSettingsIfBound();
     bool ReadMultiPushPressed();
     void CalibrateMultiPushIdle();
     void UpdateScreen();
@@ -163,6 +162,8 @@ class UiController
     uint32_t last_multi_scroll_ms_;
     uint32_t multi_boot_ignore_until_ms_;
     uint32_t last_discrete_enc_ms_;
+    // After BCK leaves Settings, block gateway re-enter until Multi list moves.
+    bool     suppress_settings_enter_;
     float    scroll_anchor_[kMaxCycleRows];
     uint32_t last_scroll_ms_[kMaxCycleRows];
     float    pot_prev_[kMaxCycleRows];

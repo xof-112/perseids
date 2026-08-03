@@ -78,6 +78,7 @@ const char* const kTimeUnitLabels[]     = {"Sec", "Clk"};
 const char* const kSettingsStubLabels[] = {"---"};
 // Life-Bar recording style (Settings → REC).
 const char* const kRecStyleLabels[] = {"PRS", "PLR", "CTR"};
+const char* const kSettingsBackLabels[] = {"<<"};
 // Settings default Trail Level: CountNum 0..20 → 0%..100% in 5% steps.
 const char* const kDefaultTrailLvlLabels[] = {
     "0%",  "5%",  "10%", "15%", "20%", "25%", "30%", "35%", "40%", "45%",
@@ -121,7 +122,8 @@ const uint16_t kSettingsIds[]
        perseids::kSettingsIntonation,
        perseids::kSettingsRecStyle,
        perseids::kSettingsTrailLevel,
-       perseids::kSettingsTrailCount};
+       perseids::kSettingsTrailCount,
+       perseids::kSettingsBack};
 
 // Cycle lists for Blocks 8–9 (spatial_params.h). Blocks 6+10 live
 // (reverb_params.h / filter_params.h). Block 7 Resonator: reso_params.h.
@@ -664,6 +666,19 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          &g_capture_params.trail_cnt,
          DT::CountNum,
          false},
+        {perseids::kSettingsBack,
+         "Back",
+         "BCK",
+         0.f,
+         0.f,
+         0.f,
+         &g_capture_params.settings_back,
+         DT::CountNum,
+         false,
+         false,
+         nullptr,
+         nullptr,
+         kSettingsBackLabels},
 
         // Phase 11 interim — Multi encoder cycle (Dry/Wet live; rest dummy UI).
         {perseids::kMultiDryWet,
@@ -912,7 +927,7 @@ int main(void)
         perseids::CycleRow("Reverb", kReverbIds, 4),
         perseids::CycleRow("Crossfade", kXfadeIds, 2),
         perseids::CycleRow("Filter", kFilterIds, 4),
-        perseids::CycleRow("Settings", kSettingsIds, 7),
+        perseids::CycleRow("Settings", kSettingsIds, 8),
     };
 
     perseids::CycleRow multi_row("Multi", kMultiIds, 5);

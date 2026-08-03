@@ -31,6 +31,7 @@ enum ParamId : uint16_t
     kSettingsRecStyle   = 130, // 0 PRS center, 1 PLR L→R, 2 CTR solid center
     kSettingsTrailLevel = 131, // default Trail Level, CountNum 0..20 → 0%..100% / 5%
     kSettingsTrailCount = 132, // default active Trail count, CountNum 1..5
+    kSettingsBack       = 133, // leave Settings → Multi on Settings gateway
 
     // Stub — owned by CaptureEngine, not yet on a CycleRow.
     kAudioRouting = 100,
@@ -55,6 +56,7 @@ struct CaptureParamValues
     float rec_style  = 1.f;   // 0 PRS center, 1 PLR L→R (default), 2 CTR solid center
     float trail_lvl  = 10.f;  // Settings default Trail Level: 0..20 → 0%..100% in 5%
     float trail_cnt  = 3.f;   // Settings default active Trails: 1..5 (boot / Reset)
+    float settings_back = 0.f; // display-only gateway; encoder turn leaves Settings
     float routing    = 0.f;   // 0 Stereo, 1 Sidechain
 };
 

@@ -22,6 +22,9 @@ class CycleRow
     size_t ScrollIndex() const { return scroll_index_; }
     size_t ParamCount() const { return param_count_; }
 
+    // Jump bind + scroll cursor (e.g. Settings enter → first real param).
+    void SetBoundIndex(size_t index);
+
     const ParameterDef* BoundParam(const ParameterRegistry& reg) const;
     const ParameterDef* ScrollParam(const ParameterRegistry& reg) const;
     const ParameterDef* ParamAt(const ParameterRegistry& reg, size_t index) const;
