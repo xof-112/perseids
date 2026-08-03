@@ -14,10 +14,12 @@ independently designed, not affiliated.
 
 ---
 
-## Status — Phase 9 · `dev-phase9v003`
+## Status — Phases 1–9 in · bench line `dev-phase4v002`
 
-Phase 9 (**Pan Drift** + **Crossfade**) is complete. This bench line also folds in post-9
-polish on the Home life bar, Multi → Settings defaults, and wet-bus balance.
+Phase 9 (**Pan Drift** + **Crossfade**) is complete, together with post-9 polish on the Home
+life bar, Multi → Settings defaults, and wet-bus balance. The newest bench line is **not** a
+phase-9 tag: it is **Phase 4 follow-up work** on the Spectra analysis stage (see below), which
+is why it carries a phase-4 number.
 
 | What’s in | Notes |
 |-----------|--------|
@@ -37,6 +39,77 @@ polish on the Home life bar, Multi → Settings defaults, and wet-bus balance.
 | **Phase 11** | Multi macros, Time Unit, calibration, FX→Input |
 
 Full roadmap & DSP contracts: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+
+---
+
+## Phase 4 rework — `dev-phase4v002` (2026-08-03)
+
+Phase 4 built the Spectra engine; this session went back and fixed its **analysis** stage,
+plus one input-path bug and the cycle menus.
+
+### Spectra: FFT 512 → 2048
+
+The "flea / siren" character of the resynthesis was **not** the peak logic — it was
+resolution. At 512 points the bins are 93.75 Hz wide, which puts a 100 Hz fundamental on
+bin 1 where it cannot be resolved, shrinks a semitone at 200 Hz to 0.13 bins (so pitch could
+never follow the input proportionally), and turns ±1 bin of peak jitter into a jump of more
+than a fifth.
+
+2048 points give **23.4 Hz** bins, a 42.7 ms window and a ~21 ms hop; the UI loop now polls
+every 10 ms so no hop is missed. The 48 KB of analysis buffers (window, magnitudes,
+magnitude EMA, input ring) moved to **SDRAM**, so DTCM usage is unchanged and only the FFT
+scratch stays there. `link_cmsis_dsp.py` links the matching lite CMSIS table set
+(RFFT 2048 runs a CFFT 1024: `TWIDDLECOEF_F32_1024`, `BITREVIDX_FLT_1024`,
+`TWIDDLECOEF_RFFT_F32_2048`).
+
+On top of the resolution, the tracker was made to hold still — *movement should come from the
+effects and modulation, never from analysis artefacts*:
+
+- **Continuation before ranking.** A partial that is already sounding keeps its peak, so a
+  reshuffle can no longer push the audible fundamental out of the accepted set. That was the
+  cause of the abrupt fundamental drop-outs every few seconds on rich material.
+- **Hysteresis** on the f0 anchor (keep at −15 dB, win at −9 dB) and on the mono/poly
+  decision (3 frames in, 4 frames out). Bare thresholds flipped constantly on dense input.
+- **Musical match window** (≈0.75 bin / 3–4%) instead of a wide one, plus an oscillator that
+  **jumps** rather than glides when its slot is silent or reassigned by more than 25%. Gliding
+  recycled slots were what drew the periodic 200 → 300 Hz sweeps in the spectrogram.
+
+### Perceived-loudness weighting
+
+Partial amplitudes now run through an inverse A-weighting tilt (reference 250 Hz, strength
+0.6, floor 0.35). At equal amplitude the ear hears 1–3 kHz far louder than a low fundamental,
+so a high-pitched Trail used to outshine lower ones set to the same Level. The tilt only
+**attenuates** above the reference — boosting bass would just cost headroom.
+
+### Input routing: the mono-cable grit is gone
+
+A grainy noise faded in with any signal at the input, while the source monitored directly was
+clean. Cause: `RecordSource` decided **per sample** which jack was occupied, using a fixed
+−80 dBFS threshold — right inside the noise floor of an unconnected input. Whenever that noise
+crossed the threshold, the mono gain flipped between 1.0 and 0.5 at audio rate: a random 6 dB
+amplitude modulation riding on the signal.
+
+Jack presence is a routing decision, so it now runs **once per block** on an envelope follower
+with wide hysteresis (on at −60 dBFS, off at −72 dBFS) and slewed weights (~270 ms).
+`CaptureSample` is a plain weighted sum with no branch. A single mono cable still gets full
+level, both jacks occupied still get −6 dB.
+
+### Cycle menus: short carousels
+
+The 5-slot carousel (half | full | center | full | half, active pinned to the true screen
+middle) wrapped short lists onto themselves. With two entries the **active** parameter also
+landed in both rims, so its value visibly moved at the sides while the pot was turned.
+
+A slot is now dropped when its parameter already sits closer to the center. Mirrored slots
+share a depth and are therefore always kept or dropped together, so the row stays symmetric
+and every entry still slides through the middle in both directions — no direction-dependent
+special cases. Dropped slots keep an **empty frame** in the segmented row (same geometry,
+no abbreviation, no bar), so every block has the same outline regardless of list length.
+
+Result: Crossfade (2) shows `other | ACTIVE | other`, Pan Drift (3) shows
+`prev | ACTIVE | next`, four or more entries fill the window as before.
+
+---
 
 **Cheat sheets** (3-page)
 
@@ -66,7 +139,7 @@ See `ARCHITECTURE.md` §2a / Block 4.
 ```bash
 git clone https://github.com/xof-112/perseids.git
 cd perseids
-# optional: git checkout <tag>   # e.g. when a phase9v003 tag is published
+# optional: git checkout <tag>   # e.g. dev-phase4v002
 
 git clone --recurse-submodules https://github.com/electro-smith/libDaisy.git lib/libDaisy
 git clone --recurse-submodules https://github.com/electro-smith/DaisySP.git lib/DaisySP
@@ -81,6 +154,9 @@ pio run
 # Reset Daisy (LED pulses) — hold BOOT if needed — then:
 pio run --target upload
 ```
+
+Current bench build at `-O3`: code **38.2%** of the 480 KB AXI-SRAM, `.data`/`.bss`
+**58.4%** of the 128 KB DTCM (the tighter budget from here on).
 
 ---
 

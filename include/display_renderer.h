@@ -24,7 +24,8 @@ class DisplayRenderer
     static constexpr int kParamTop    = 12;
     static constexpr int kParamBottom = 51;
     // CycleView slots: half | full | center | full | half (4 column-widths).
-    // Active is always the center slot (true screen middle). Extra params wrap in.
+    // Active is always the center slot (true screen middle). Extra params wrap
+    // in; on very short rows the slots a wrap would duplicate stay empty.
     static constexpr size_t kCyclePageCols  = 5;
     static constexpr size_t kCycleFocusSlot = 2;
 
@@ -69,8 +70,10 @@ class DisplayRenderer
     ColumnGeom ColumnGeometry(size_t index, size_t count) const;
 
     // Circular window: active in kCycleFocusSlot (center); wraps at list ends.
-    // Fills out_indices[0..out_page) with param indices. out_indices needs
-    // at least kCyclePageCols entries. page is 5 when param_count >= 2, else 1.
+    // Fills out_indices[0..out_page) with param indices; page is 5 for any
+    // non-empty row. out_indices needs at least kCyclePageCols entries. Short
+    // lists blank a slot whose param already sits closer to the centre — such a
+    // slot carries index == param_count, for which ParamAt() yields nullptr.
     static void CycleWindow(size_t  param_count,
                             size_t  active_col,
                             size_t* out_indices,

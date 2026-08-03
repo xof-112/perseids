@@ -120,36 +120,21 @@ every request).
    must be cloud-only. Local Mix pots stay inside their modules; Multi only balances input vs.
    the finished wet bus.
 6. **Non-blocking ADC mux polling in the main loop**, never in the audio callback. Smooth
-   incoming values with an exponential moving average (EMA) to suppress pot jitter — lightly
-   on mod CV (sluggish modulation is audible), more heavily on pots.
-   **Note:** The Daisy Seed only has 12 native ADC pins, and on this build every one of them
-   is spoken for by encoders, buttons or mux ADC inputs — external mux ICs (CD74HC4067,
-   16-channel) on the carrier PCB are mandatory, not optional. They do NOT sit on the Daisy
-   Seed itself. **Correction (verified against implementation):** the 5 Trail Level controls
-   and the Multi control are digital quadrature encoders, not potentiometers — they do NOT go
-   through the ADC mux at all, they connect directly to GPIO pins (with pull-up, see the note
-   on `perseids::QuadratureEncoder` below) instead, which costs 12 direct GPIO lines
-   (2× CLK/DT per encoder × 6 encoders) that must be planned into the pin budget separately
-   from the mux.
-   **Three mux chains (Phase 10 hardware revision):** libDaisy's `InitMux` drives at most
-   **three** select lines, so each chain is capped at **8 usable channels**. Two chains were
-   not enough for Phase 10 (4 mod pots + 4 mod CV + 5 jack detects, against 5 free channels).
-   A third chain, **Mux C**, was added on **D17**. D17 was freed by moving all five Trail
-   Level pushes onto a single resistor ladder on Mux A C5 (see 4.4b) — which also freed D14
-   and D18–D20 for the Clock, Trig and Imprint trigger jacks plus the Clock jack detect.
-   **The budget is now fully used: 24 of 24 mux channels, and every GPIO on the classic Seed
-   header.** Two expansion valves remain if something has to be added later: (a) S3 is wired
-   to all three 4067s, so any chain can be bank-switched to 16 channels — at the cost of a
-   halved sample rate and a hand-rolled settle/discard window that must cover a full DMA
-   sweep, not just settling time; and (b) the Multi push can join the Trail ladder, which
-   frees Mux B C5.
-7. **Jack detection via hardware normalling**, not a voltage heuristic. Five jacks use
-   switched types (PJ398SM): **Mod CV 1–4** and **Clock**. Plugged in = contact opens;
-   unplugged = contact closed. For the mod jacks this selects internal source vs. external CV
-   (see 4.10, Auto-Mod); for Clock it drives the Time Unit prompt (4.1a) — cable presence
-   only, which stays strictly distinct from the clock-lost signal fallback. Wiring, and the
-   reason the detect network also hands us a free CV zero reference: see 4.4b. Trig and
-   Imprint need no detection and use plain unswitched jacks.
+   incoming values with an exponential moving average (EMA) to suppress pot jitter.
+   **Note:** The Daisy Seed only has 12 native ADC pins (confirmed via Electrosmith
+   documentation) — given our channel count (14 pots — 10 block pots + the 4 mod-amplitude
+   pots, which act as bipolar attenuverters, see 4.3 — plus CV inputs), external mux ICs (e.g.
+   CD74HC4067, 16-channel) on the carrier PCB are mandatory, not optional. They do NOT sit on
+   the Daisy Seed itself. **Correction (verified against implementation):** the 5 Trail Level
+   controls and the Multi control are digital quadrature encoders, not potentiometers — they
+   do NOT go through the ADC mux at all, they connect directly to GPIO pins (with pull-up,
+   see the note on `perseids::QuadratureEncoder` below) instead. This lowers the mux channel
+   count from what earlier drafts of this document assumed, but adds roughly 15 direct GPIO
+   lines (2× CLK/DT + 1 push per encoder × 6 encoders) that need to be planned into the pin
+   budget separately from the mux.
+7. **Jack detection via hardware normalling**, not a voltage heuristic. Switched jacks:
+   plugged in = contact opens = external CV is read; unplugged = contact closed = internal
+   source active (see Section 4.10, Auto-Mod).
 8. **4% center deadzone for ALL bipolar parameters (mandatory, no exceptions):** Waveshape,
    Umbra/Aurora macro, Atmosphere macro, Character macro, Multi macros, the 4 mod amplitudes
    (attenuverters, see 4.3), and Crossfade velocity (Block 9). ADC values between 0.48 and
@@ -219,20 +204,18 @@ every request).
 | Group | Count | Type | Function |
 |---|---|---|---|
 | Block pots (1–10) | 10 | Pot | Access to 2–4 sub-parameters each via cycle button (see 4.6) |
-| Trail Level | 5 | Rotary encoder with push (not a potentiometer — digital quadrature on direct GPIO; the 5 pushes share one resistor ladder on Mux A C5, see 4.4b) | Turn = this Trail's level; short press = Lock; long press = Solo |
+| Trail Level | 5 | Rotary encoder with push (not a potentiometer — digital quadrature, direct GPIO, not on the ADC mux) | Turn = this Trail's level; short press = Lock; long press = Solo |
 | Mod slots | 4 | Pot | Amplitude (attenuverter) + Offset (bias); Destination/Divider via cycle; source internal or CV |
 | Multi | 1 | Encoder | Dry/Wet, Macro1, Macro2, Settings — via cycle button like the block pots |
 | Cycle button | 1 | Button (next to display) | Hold+turn = cycle (4.6); long alone = delete-all confirm (4.7) |
 | Rec button | 1 | Button (parallel to Trig jack) | Manual record trigger |
-| Imprint button | 1 | Button (D6) + trigger jack (D19) | Short = Play/Pause; long = Imprint lock toggle; jack = gate-following lock (4.7b) |
+| Imprint button | 1 | Button (D6) | Short = Play/Pause; long = Imprint lock toggle (4.7b) |
 
 **Total: 14 pots (10 block + 4 mod) + 6 encoders (5 Trail Level + 1 Multi) + 3 buttons
 (Cycle, Rec, Imprint).**
-The 14 pots and the 4 mod CV inputs go through the ADC mux as analog values; the Multi push,
-the Trail-push ladder and the 4 mod jack detects also occupy mux channels, as digital-via-ADC
-signals (full map in 4.5a). The 5 Trail Level encoders and the Multi encoder are digital
-(quadrature) on direct GPIO. The 3 trigger inputs (Clock, Trig, Imprint) and the Clock jack
-detect are plain GPIO — conditioning in 4.4b.
+Only the 14 pots and the mod CV inputs go through the ADC mux — see the corrected channel
+count in Section 2, point 6. The 5 Trail Level encoders and the Multi encoder are digital
+(quadrature) and connect directly to GPIO pins, not the mux/ADC chain.
 
 ---
 
@@ -430,6 +413,10 @@ bank, without external delay lines.
   Peak-picked sine (or waveshaped) partials deliberately omit phase reconstruction and noise
   residual — later engines (Swarm, Resonator, Reverb) complete the cloud. Do not “fix”
   Spectra toward studio-fidelity resynthesis unless this contract is explicitly revised.
+- **Spectra must sound still.** Movement belongs to the effects (Reverb/Character, Atmosphere,
+  Ensemble) and to modulation — never to analysis artefacts. Any partial that flickers, glides
+  or hops on a steady input is a **bug**, not character: that is the "flea/siren" failure mode.
+  When in doubt, prefer a stable partial over a responsive one.
 - **Analysis input:** pre-fader Trail sum × play gain (`trail_mix` from `CaptureEngine`), never
   the dry monitor path. Dry listen-through stays separate (see below).
 - **Threading:** FFT only in the main loop (`ProcessAnalysis`); AudioCallback may only
@@ -438,11 +425,19 @@ bank, without external delay lines.
 - **CMSIS-DSP:** classic in-place `arm_rfft_fast_f32(S, p, pOut, ifftFlag)` — no separate F32
   tmpBuf API in this tree. Hann window via `arm_mult_f32`, magnitudes via `arm_cmplx_mag_f32`.
   Full prebuilt `libarm_cortexM7lfdp_math.a` overflowed the 128 KB flash budget (~+51 KB); the
-  build uses a **lite CMSIS** object set from `link_cmsis_dsp.py` (selective RFFT-512 tables +
-  required transform/basicmath sources). That +51 KB would fit since the BOOT_SRAM move, but the
+  build uses a **lite CMSIS** object set from `link_cmsis_dsp.py` (selective RFFT-2048 tables —
+  RFFT 2048 runs a CFFT 1024, so `TWIDDLECOEF_F32_1024` + `BITREVIDX_FLT_1024` +
+  `TWIDDLECOEF_RFFT_F32_2048` — plus required transform/basicmath sources). That +51 KB would fit since the BOOT_SRAM move, but the
   lite set covers everything in use, so there is no reason to link the full archive.
-- **Sizes (CPU/Flash budget):** FFT **512**, hop **256**, Partials UI/engine **4…32** (default
-  16). Architecture examples that mention 64 partials are aspirational — raise only when audio
+- **Sizes (CPU/Flash budget):** FFT **2048**, hop **1024**, Partials UI/engine **4…32** (default
+  16). **512 was the root cause of the "flea/siren" character**, not the peak logic: 93.75 Hz
+  bins put a 100 Hz fundamental on bin 1 (unresolvable), made a semitone at 200 Hz 0.13 bins
+  (pitch could not track proportionally), and turned ±1 bin of peak jitter into a >fifth jump.
+  2048 → **23.4 Hz** bins, 42.7 ms window, ~21 ms hop; main loop polls every 10 ms. Analysis
+  buffers (window, magnitudes, mag EMA, input ring — 48 KB) live in **SDRAM**
+  (`DSY_SDRAM_BSS`, file scope in `spectra_engine.cpp`, one engine instance); only the FFT
+  scratch stays in DTCM, so DTCM use is unchanged. Absolute magnitude thresholds scale with
+  FFT size via `kMagScale` (peak of a unit sine ≈ N/4). Architecture examples that mention 64 partials are aspirational — raise only when audio
   CPU and flash headroom allow. Audio block size **256** @ 48 kHz (was 128; larger blocks
   cut ISR overhead so the UI loop still runs under heavy DSP). ReverbSc runs at **half rate**
   inside `ReverbEngine`. Filter bypasses when open; `SetFreq` is block-rate unless Feedback
@@ -473,10 +468,25 @@ bank, without external delay lines.
   the ST DFU mode (BOOT + RESET) is only needed to reflash the bootloader itself.
 - **Resynthesis:** custom phasor bank + cheap FastSin (not 32× DaisySP `Oscillator`). Waveshape
   bipolar: center = sine, left → saw mix, right → wavefold. Value header poles **`SA` / `FO`**.
-  Peak pick + **frequency-continuity matching** across hops (nearest previous partial within
-  ~2.5 bins / 8% relative). Absolute magnitude→amplitude scaling + silence/relative floor —
-  **never** renormalize so peak sum = constant loudness (that boosted noise floor into “line
-  interference”).
+  Tide-EB-like peak pick (not Flow / not 1:1): scan from **bin 2** (~47 Hz) with plain
+  parabolic interpolation — the bin-1 special cases needed at FFT 512 are gone.
+  **f0 EMA** across hops; mono: f0 then integer harmonics (inharmonics if Partials > 8);
+  **poly / multi-Trail** (≥2 independent roots): hold roots (+2f/3f) as a stable chord,
+  linger on brief misses — not frame-loudest flip. **Continuation is accepted before any
+  ranking**: a sounding partial keeps its peak, so a reshuffle can never push the audible
+  fundamental out of the top `want`. The f0 anchor and the mono/poly decision both use
+  **hysteresis** (keep at −15 dB, win at −9 dB; poly needs 3 frames in, 4 out) — bare
+  thresholds flipped every few seconds on rich material and dropped the fundamental.
+  Continuity match window stays **musical**
+  (≈0.75 bin / 3–4%): a wide window let a 200 Hz slot claim a 300 Hz peak. A **silent or
+  reassigned oscillator jumps** to its new frequency (`osc_amp_ < 1e-3` or >25% move) instead
+  of slewing — gliding recycled slots drew the periodic 200 → 300 Hz sweeps.
+  Absolute mag→amp — **never** renormalize.
+- **Perceived-loudness weighting:** partial amplitudes are scaled by an inverse A-weighting
+  tilt (`LoudnessWeight`, reference 250 Hz, strength 0.6, floor 0.35). At equal amplitude the
+  ear hears 1–3 kHz far louder than a low fundamental, so a high-pitched Trail outshone lower
+  ones at the same Level. Only **attenuates** above the reference — boosting bass would just
+  cost headroom. Strength/floor are the knobs if it sounds too dull or still too bright.
 - **Pitch Spectra:** multiplies all partial target frequencies by
   `2^(bipolar_norm × span)` where `span = 1…2` from Engines **Pitch Both** (PB); header ±%
   scales the same way (±100%…±200%). Plain `±%` — no pole hint.
@@ -526,7 +536,7 @@ not combinable at the same time. Value header: **`CH` / `FR`** (see 4.11 pole hi
 **Block 10 detail (Destination):** Selects which wet-chain stage the filter acts on — cyclable
 through **Off → Inp (engine bus) → Spectra → Swarm → Reverb**.
 
-**Block 11 Settings submenu** (gateway "Settings" in the Multi list — enter after Cycle release + Multi turn):
+**Block 11 Settings submenu** (own cycle entry point via "Settings" in the Multi cycle list):
 1. CPU/SDRAM meter (On/Off, display on screen). **Bench interim:** CPU meter boots **On**
    while the Settings pot is unwired (`// TODO(release)` markers in `capture_params.h` /
    `main.cpp`) — final firmware must default it back to Off. Display format: CPU-only shows a
@@ -549,11 +559,8 @@ through **Off → Inp (engine bus) → Spectra → Swarm → Reverb**.
 7. **Trail cnt (#T):** default active Trail count **1…5** (boot **3**). Applies on boot, after
    delete-all Reset, and when edited (also updates live Trails **CNT**). Live CNT pot still
    overrides for the session without rewriting this default.
-   Multi → Settings gateway (visible in the Multi list) opens this CycleRow after Cycle
-   is released and the Multi encoder is turned again (CPU / RAM / SCL / INT / REC / LVL / #T).
-   Inside Settings: Multi turn edits; Cycle short / Cycle-hold+Multi steps. Scroll alone does
-   not auto-enter the submenu. Last entry **BCK**: Multi turn returns to the Multi list on
-   the Settings gateway.
+   Multi → Settings opens this CycleRow
+   (CPU / RAM / SCL / INT / REC / LVL / #T); Multi turn edits, Cycle short / Cycle-hold+Multi steps.
 8. Auto-Mod/Normalling (see 4.10)
 9. **Audio Routing** (Stereo ↔ Sidechain) — see detail description below
 10. **FX → Input (TODO — Phase 11):** how much listen-through is also fed into the wet FX
@@ -577,6 +584,14 @@ so Sidechain mode (Phase 11) is a mode switch later, not a rewire.
   averaging it down with a silent channel; otherwise (both channels carry signal) it uses
   (L+R)/2 as before. This avoids a ~6dB level loss for the common case of a single mono cable
   patched into just one input.
+  **Jack presence must be decided at block rate, never per sample.**
+  `RecordSource::UpdateBlock` runs a peak envelope (instant attack, ~0.5 s release) with a wide
+  hysteresis band (on at −60 dBFS, off at −72 dBFS) and slews the normalized L/R weights over
+  ~270 ms; `CaptureSample` is then a plain weighted sum. The original per-sample
+  `if(|x| < 1e-4)` test flipped the mono gain between 1.0 and 0.5 at audio rate whenever the
+  unpatched channel's noise floor straddled −80 dBFS — heard as **grit on the listen-through
+  that fades in with the input signal** and disappears in silence (dry path only; the source
+  itself and buffer playback were clean).
 - **Sidechain mode:** The jacks are logically separated:
   - **In L (main audio):** live instrument, is NOT recorded, runs directly/dry into the
     output mix (VCA/reverb send as usual, but without reaching the capture buffers)
@@ -599,7 +614,6 @@ input vs. that whole chain. Encoder on D13/D30; push on Mux B C5.
 Cycle-hold + block pot. Multi encoder push is deferred (unreliable on current hardware);
 if it works later, short push still steps / opens Multi, long push → Home. Further steps:
 Dry/Wet → Macro1* → Macro2* → Time Unit* → Settings → … (`*` = dummy UI only).
-Land on **Settings** (do not auto-enter); after Cycle release, Multi turn opens the Settings submenu.
 Encoder turn edits the bound entry (~0.02/detent). Boot Dry/Wet ~0.55. Reverb send stays
 **pre-fader** (before Multi Dry/Wet). Soft-limit on the final bus. Bus trims at equal-power
 Multi: dry **×0.85**, wet **×1.30** (engines present over listen-through). `trail_mix`
@@ -678,8 +692,7 @@ explicitly on both phase pins.
 
 ### 4.3 Mod Slots (×4)
 
-Cycle list **Amplitude → Offset → Destination → Divider**. Hardware (pot wiring, CV
-conditioning, jack detect, mux channels): see 4.4b and 4.5a.
+Cycle list **Amplitude → Offset → Destination → Divider**.
 
 - **Amplitude is bipolar (attenuverter):** center = 0 (no modulation, 4% deadzone), turning
   right increases positive modulation depth, turning left inverts the modulation — applied
@@ -716,13 +729,11 @@ conditioning, jack detect, mux channels): see 4.4b and 4.5a.
 |---|---|
 | Mono In L | Mono Out L |
 | Mono In R | Mono Out R |
-| Clock (switched contact/normalling) | |
+| Clock | |
 | Trig (new Trail, parallel to Rec button) | |
-| Imprint (trigger/gate, see 4.7b) | |
 | Mod CV 1–4 (with switched contact/normalling) | |
 
-**9 inputs + 2 outputs = 11 jacks.** The Imprint jack is new in the Phase 10 hardware
-revision — panel layout and both cheat sheets have to follow.
+**8 inputs + 2 outputs = 10 jacks.**
 
 ### 4.4a Audio I/O Level Conditioning (mandatory, hardware safety)
 
@@ -756,109 +767,16 @@ so far has only been powered via USB/the Daisy Seed's own 3.3V/5V rails, the ±1
 to be wired in separately before this stage can work — don't overlook this when moving from
 pure digital/UI prototyping (Phases 0–2) to real audio I/O (Phase 3).
 
-### 4.4b CV, Trigger & Detect Conditioning (Phase 10 hardware, mandatory)
-
-Unlike audio I/O (4.4a), the control inputs run **single-supply from 3V3 only** — no ±12V, no
-TL074. A rail-to-rail op-amp (MCP6004 or TLV9064) powered from the same 3V3 that is also the
-ADC reference physically cannot drive the mux or the ADC beyond their rails, which removes the
-entire overvoltage failure mode a ±12V stage brings with it.
-
-**Mod CV input (×4) — DC-coupled, no blocking capacitor.** Note the contrast with 4.4a: an
-electrolytic in series would filter away exactly the slow modulation this input exists for. A
-passive three-resistor network does scaling and offset in one step; the op-amp is only an
-impedance converter (unity-gain buffer).
-
-| Part | Value (1%) | From → To |
-|---|---|---|
-| Ra | 100k | Tip → summing node N |
-| Rb | 60.4k | 3V3 → N |
-| Rc | 150k | N → GND |
-| D1 | BAT54S | N → 3V3 / GND |
-| Rout | 100 Ω | buffer output → mux channel |
-
-Maps ±5V onto **0.14…3.15V**, centre exactly 1.645V. The headroom to the rails is deliberate:
-both op-amps only reach within ~25 mV of the supply, so full-scale CV does not clip. At ±10V
-the node would want −1.37V / 4.65V — the BAT54S clamps it and Ra limits the current to a few
-tens of µA. Ra = 100k is also the conventional Eurorack input impedance.
-
-**Why this matters for the deadzone:** the offset term derives from the same 3V3 that is the
-ADC reference, so it is **ratiometric** — the zero point does not move when the rail drifts.
-The 4% centre deadzone (Section 2, point 8) depends on exactly that. The gain term remains
-3V3-dependent, which is the harmless half of the error.
-
-**Jack detect (×5: Mod CV 1–4 + Clock):**
-
-| Part | Value | From → To |
-|---|---|---|
-| Rgnd | 10k | switch contact S → GND |
-| Rs | 100k | S → detect node D |
-| Rpu | 1M | 3V3 → D |
-| Cd | 100 nF | D → GND |
-
-Unplugged, S is internally tied to the tip and the 10k pulls both to 0V → D ≈ 0.30V. Plugged,
-the switch opens and D = 3.3V. Over 3V of separation — unambiguous, and no voltage heuristic
-anywhere. Rs additionally protects against the instant during insertion when the plug brushes
-the switch contact. The 4 mod detects sit on mux channels (digital-via-ADC, same pattern as
-`kMultiPush`); the Clock detect is a plain GPIO, since burning an ADC channel on a pure
-digital signal would be wasteful and 0.30V / 3.3V are clean logic levels.
-
-**Free CV zero reference:** because the 10k also holds the *tip* at 0V while unpatched, the
-summing node sits exactly on its designed centre. Every unpatched mod jack therefore
-self-calibrates continuously — read the channel while detect reports "unplugged" and store
-that value as the channel's zero. No trimmers anywhere; the Phase 11 calibration routine only
-has to persist the learned offsets.
-
-Firmware: threshold ≈ 0.6 normalised, with hysteresis and ~20 ms debounce — otherwise a slot
-chatters between internal source and CV while patching.
-
-**Trigger inputs (×3: Clock, Trig, Imprint):** 100k in series from the tip, 1M pull-down to
-GND, BAT54S to 3V3/GND, then into a **74HC14** Schmitt inverter on 3V3. The node sits at
-≈ 0.91 × Vin; with VT+ ≈ 1.8V and VT− ≈ 0.9V the input fires at ≈ 2.0V and releases at
-≈ 1.0V. That swallows 3.3V, 5V and 10V gates alike, and the hysteresis prevents
-double-triggering on slow edges — an LFO abused as a clock, for instance. Negative excursions
-are clamped.
-
-Three channels × two inverters is exactly the six gates of one 74HC14, so use **double
-inversion** and keep the GPIO logic non-inverting; it avoids a silent active-low footgun later.
-100 nF decoupling at the IC. With the Clock cable pulled, the detect network's 10k holds that
-tip at 0V — no phantom clocks, for free.
-
-**Trail-push ladder (Mux A C5):** a **priority ladder**, not binary weighting, because it
-tolerates resistor spread far better. 10k pull-up to 3V3, each push shorting its own resistor
-to GND — 0 Ω, 2.2k, 4.7k, 10k, 22k. Levels 0.00 / 0.59 / 1.05 / 1.65 / 2.27V, idle 3.30V,
-about 0.6V per step. 100 nF at the node for debouncing.
-
-Trade-off: with two Trail pushes held at once, the lower resistance wins. There is no
-documented multi-push gesture — Cycle sits separately on D5, Lock and Solo are single actions
-— so this is acceptable. If a combination gesture is ever needed, binary weighting is the
-rework.
-
-**Sampling:** the **Clock** GPIO is read **once per sample inside the audio callback**. A
-register read at 48 kHz is free and gives edge timestamps at ~21 µs. Block-rate polling (1 ms)
-would put ~7% jitter on a 174 BPM / 24 PPQN period (~14 ms) and feed it straight through the
-Divider into the mod-slot LFOs. Trig and Imprint are fine at block rate. All three set atomic
-flags; evaluation happens in the UI tick.
-
-**Mod pots (×4):** 10k linear with centre detent. CCW → GND, CW → 3V3 — the same 3V3 as the
-ADC reference, a separate rail breaks the ratiometry — wiper → mux channel, 100 nF from wiper
-to GND. The pot is a **cycled** control (Amplitude / Offset / Destination / Divider) and must
-therefore be read as a raw position: it can never be an analog attenuverter sitting in front
-of the CV.
-
-**Termination:** every newly polled mux channel must be terminated by a pot, a buffer output
-or a pull resistor. Floating channels spuriously open Cycle views (see 4.5a).
-
 ### 4.5 Rec Button
 
 Momentary button, electrically parallel to the Trig jack — identical signal, triggers a new
 recording independent of the threshold (same round-robin logic as the automatic trigger).
 
-### 4.5a Pin Assignment (Daisy Seed GPIO — Phase 10 hardware revision)
+### 4.5a Pin Assignment (Daisy Seed GPIO, verified against Phase 2 implementation)
 
 | Pin | Function |
 |---|---|
-| D0–D2 | Mux select S0–S2 (shared by all three mux chains, libDaisy-driven) |
-| D3 | Mux select S3 (wired to all three 4067s, held low — reserve for bank switching) |
+| D0–D3 | Mux select S0–S3 (shared by both mux chains) |
 | D4 | Trail 1 encoder CLK |
 | D5 | Cycle button |
 | D6 | Imprint button (Play/Pause + Imprint lock) |
@@ -868,14 +786,14 @@ recording independent of the threshold (same round-robin logic as the automatic 
 | D10 | OLED MOSI (SPI1 MOSI) |
 | D11 | OLED RST (RES) |
 | D12 | Rec button |
-| D13 | Multi encoder CLK |
-| D14 | **Clock trigger in** (via 74HC14, see 4.4b) |
+| D13 | Multi encoder CLK (Trig jack deferred — not on dedicated GPIO) |
+| D14 | Trail 1 push (Lock/Solo) |
 | D15 | Mux A ADC (A0) |
 | D16 | Mux B ADC (A1) |
-| D17 | **Mux C ADC (A2)** — new |
-| D18 | **Trig in** (new Trail, parallel to Rec — via 74HC14) |
-| D19 | **Imprint trigger in** (via 74HC14) |
-| D20 | **Clock jack detect** (digital, network per 4.4b) |
+| D17 | Trail 2 push |
+| D18 | Trail 3 push |
+| D19 | Trail 4 push |
+| D20 | Trail 5 push |
 | D21 | Trail 1 encoder DT |
 | D22 | Trail 2 encoder CLK |
 | D23 | Trail 2 encoder DT |
@@ -888,19 +806,11 @@ recording independent of the threshold (same round-robin logic as the automatic 
 | D30 | Multi encoder DT (USB-HS D+ on classic Seed — OK if USB-HS unused) |
 | D31–D32 | *not on classic Seed header* (Seed 2 DFM only) |
 
-**D17 = A2 = ADC 2 — verified against the Electrosmith pinout.** The whole Mux C plan rests on
-this one pin; it is confirmed, not assumed.
+Confirms the correction in Section 2, point 6: the two mux chains have **separate** ADC
+inputs (A0/A1, not a shared common line), and the OLED runs on SPI1 in 4-wire mode (no MISO
+needed, display is write-only). **D6 = Imprint button** (Play/Pause short, Imprint lock long).
 
-The three mux chains have **separate** ADC inputs (A0/A1/A2, not a shared common line), and
-the OLED runs on SPI1 in 4-wire mode (no MISO needed, the display is write-only).
-
-**What changed vs. the Phase 2 assignment:** Trail pushes 1–5 no longer sit on D14 and
-D17–D20. They share one priority resistor ladder on Mux A C5 (4.4b), which freed D17 for
-Mux C and D14 / D18–D20 for the three trigger jacks plus the Clock detect. The earlier note
-"if a Trig jack is added later, prefer mux" is therefore **obsolete** — Trig now has a
-dedicated GPIO and can be edge-timed properly.
-
-**Multi encoder wiring:**
+**Multi encoder wiring (implemented — CLK + DT + Push):**
 
 | Multi encoder | Pin / channel | Notes |
 |---|---|---|
@@ -909,40 +819,36 @@ dedicated GPIO and can be edge-timed properly.
 | Push | **Mux B C5** | digital via ADC (`kMultiPush*`); pull-up to 3V3, switch to GND |
 | Common | GND | |
 
-**Mux channel map — 24 of 24 used:**
+Rec remains **D12**. OLED unchanged. **D14** = Trail‑1 Push. Mux poll covers C0–C5.
+If Trig jack is added later, prefer mux (parallel to a button net) — **not** D13 (Multi CLK).
+Interim firmware: short push opens Multi menu (Dry/Wet default; Macro1/2, Time Unit, Settings
+are dummy slots); further shorts step the list; long push = Home. Turn edits the bound entry.
 
-| Mux | Channel | Assignment |
+**Bench pot map, all 10 block pots wired (`hw_pins.h` / `main.cpp`):**
+
+| Mux | Channel | Block row |
 |---|---|---|
-| A | C0 | Trails pot |
-| A | C1 | Time pot |
-| A | C2 | Engines pot |
-| A | C3 | Swarm pot |
-| A | C4 | Spectra pot |
-| A | C5 | Trail-push ladder (Trail 1–5) |
-| A | C6–C7 | Jack detect Mod CV 1–2 |
-| B | C0 | Pan Drift pot |
-| B | C1 | Resonator pot |
-| B | C2 | Reverb pot |
-| B | C3 | Crossfade pot |
-| B | C4 | Filter pot |
-| B | C5 | Multi push |
-| B | C6–C7 | Jack detect Mod CV 3–4 |
-| C | C0–C3 | Mod CV 1–4 (conditioned, analog) |
-| C | C4–C7 | Mod pots 1–4 (attenuverter) |
+| A | C0 | Trails |
+| A | C1 | Time |
+| A | C2 | Engines |
+| A | C3 | Swarm |
+| A | C4 | Spectra |
+| B | C0 | Pan Drift ✔ |
+| B | C1 | Resonator ✔ |
+| B | C2 | Reverb ✔ |
+| B | C3 | Crossfade ✔ |
+| B | C4 | Filter ✔ |
 
-There is **no spare channel and no spare GPIO left** — see Section 2, point 6 for the two
-expansion valves (S3 bank switching, Multi push onto the ladder).
-
-All ten block pots are live (no remaining `dummy_params` CycleRows). The Settings CycleRow has
-**no pot** (Block 11 = Multi encoder, Phase 11) but includes Scale + Intonation for the
-Resonator; the CPU meter stays default-On for the bench. Mux polling uses libDaisy's native
-support (`AdcChannelConfig::InitMux` + `GetMuxFloat`) with three select lines, 8 channels per
-chain; S3 stays low. Only map channels that are physically terminated — unmapped-but-polled
-floating channels spuriously open Cycle views. `EnterDashboard` must be a **no-op when already
-on the Dashboard** — an unconditional version re-armed timers/baselines every frame from
+All ten block pots are live (no remaining `dummy_params` CycleRows). Settings CycleRow has
+**no pot** (Block 11 = Multi encoder, Phase 11) but now includes Scale + Intonation for the
+Resonator; CPU meter stays default-On for the bench. Mux polling covers
+C0–C4 per chain via `InitMux` with three select lines (S0–S2, libDaisy-driven); only
+S3 is held low manually. Only map mux channels that physically have a pot:
+unmapped-but-polled floating channels spuriously open Cycle views. `EnterDashboard` must be a **no-op when already on the
+Dashboard** — an unconditional version re-armed timers/baselines every frame from
 Trail-encoder noise and permanently locked the Block menus (symptom: works right after a
-power-cycle, then sticks on the Dashboard). Trail-encoder/Level activity **no longer forces a
-Dashboard return** at all (removed for the same reason); the idle timeout is the only
+power-cycle, then sticks on the Dashboard). Trail-encoder/Level activity **no longer forces
+a Dashboard return** at all (removed for the same reason); the idle timeout is the only
 automatic return path until the Multi encoder (explicit return, 4.7a) exists.
 
 ### 4.6 Universal Cycle Mechanism (10 block pots + 4 mod pots + 1 Multi encoder)
@@ -1071,36 +977,17 @@ Paths back to the Home Dashboard (4.9), complementary:
    on each Cycle-hold scroll step, and on Cycle press/release. The old gate on `kEditThreshold`
    alone meant careful scrolling through a 6-param row (Resonator) could expire mid-gesture.
 
-### 4.7b Imprint (global button D6 + trigger jack D19)
+### 4.7b Imprint (global button — D6)
 
-**Hardware:** dedicated button on **D6** (momentary, active-low pull-up) *and* an **Imprint
-trigger/gate jack on D19** (conditioned per 4.4b), in addition to Cycle (D5) and Rec/Trig.
+**Hardware:** dedicated button on **D6** (momentary, active-low pull-up), in addition to
+Cycle (D5) and Rec/Trig.
 
-**Button gestures:**
+**Gestures:**
 
 | Gesture | Action |
 |---|---|
 | Short | **Play/Pause** (global, all Trails — Fade In/Out times from Block 2) |
-| Long | **Imprint lock toggle** (~800 ms hold) — see below |
-
-**Jack behaviour — gate-following (default):** gate high = all currently active Trails locked,
-gate low = release. A trigger has no length, so the button's short/long split cannot be
-reproduced one-to-one — and gate-following is the musically stronger reading anyway: a Grids
-or Leo Leo gate freezes the cloud for exactly one bar and releases it, which is precisely the
-gesture Imprint was built for, only clocked instead of hand-played. The button keeps its
-toggle semantics unchanged.
-
-**Shared owner set (required, not optional):** Imprint tracks which Trails it locked itself,
-separately from Trails a Trail Level encoder had already locked manually (selective release,
-below). Button and jack must write to **one shared owner set** — otherwise one of them
-releases what the other is holding. Small extension to the existing logic, but it has to be
-there before the jack is wired.
-
-**Alternative jack modes (Settings, Block 11):** pulse = Play/Pause, or gate-length
-discrimination mirroring the button (< 800 ms = Play/Pause, longer = lock toggle). The latter
-mirrors the button most faithfully but turns every short gate in a set into a transport
-command — risky in a Techno/DnB context. Default stays gate-following; the Settings entry
-lets it be decided at the bench instead of on paper.
+| Long | **Imprint lock toggle** (~800 ms hold) — see below |
 
 **Imprint lock (long press, toggle):** applies Lock (4.2) to all currently active Trails
 simultaneously, freezing the present sound in place — conceptually similar to a "freeze"
@@ -1112,15 +999,13 @@ something different (scan position frozen, not the whole Trail pool).
 pressing 5 encoders in sequence takes long enough that a Trail could already be replaced by
 round-robin before you reach it — the moment you wanted to capture may partly be gone by the
 time you've locked the last one. A dedicated button locks all active Trails in the same
-instant, with no gap between the first and the last. The jack sharpens this further: a gate
-edge has no human reaction time at all.
+instant, with no gap between the first and the last.
 
 **Selective release (long press, second time):** Imprint tracks which Trails it locked
 itself, separately from Trails a Trail Level encoder had already locked manually before
 Imprint was engaged. Releasing Imprint via a second long press only unlocks the Trails
 Imprint itself locked — a Trail you had deliberately locked by hand beforehand stays locked.
-This avoids Imprint silently undoing a manual decision you made earlier. The same rule applies
-to the gate's falling edge.
+This avoids Imprint silently undoing a manual decision you made earlier.
 
 **Unconditional unlock-all:** still available by unlocking each Trail via its Level push
 (short = Lock toggle), or via delete-all Reset (4.7). A dedicated "unlock everything" long
@@ -1128,8 +1013,7 @@ gesture on Imprint is deferred so Short can stay Play/Pause without gesture over
 
 **No new development phase needed:** Imprint doesn't require any new underlying mechanism —
 it's a batch application of Lock, which already exists from Phase 2, plus Play/Pause which
-already existed on Cycle. The jack is wired in Phase 10 together with the rest of the
-control I/O.
+already existed on Cycle.
 
 ### 4.8 Capture Model (Trail Pool)
 
@@ -1288,12 +1172,27 @@ appearance from scratch each time. Applies equally to the block pots (1–10), t
 2. A continuous horizontal **ceiling line** spanning the full width — a shared 100% reference
    for all parameters of the current block at once, so their bar heights can be compared
    directly against each other (not per individual bar)
-3. Parameter area: **5** visual slots (`kCyclePageCols`) spanning the same total width as
-   four equal columns: **half | full | center | full | half**. The active parameter sits in
-   the true screen-center slot (`kCycleFocusSlot = 2`); outer half-slots preview wrap
-   neighbors (abbrev omitted — too narrow). Indices **wrap** at list ends (same as Cycle
-   scroll). Header `n/m` always reflects the full list length (e.g. `5/5`), not the visible
-   page size.
+3. Parameter area: a **carousel of 5 slots** (`kCyclePageCols`), half | full | center |
+   full | half. The active parameter is always pinned to the center slot — the true screen
+   middle — and the list wraps around it; the rim slots are half-height peeks carrying a
+   1–2 glyph abbreviation. Column width is identical for every block, so bar heights stay
+   comparable across blocks; short rows are **not** stretched wider.
+
+   **Short lists blank repeats, but never break the slide:** a list shorter than the window
+   wraps onto itself, and with two entries that put the *active* parameter into both rims —
+   its value then moved at the sides while the pot was turned. A slot is therefore dropped
+   when its parameter already sits **closer to the center**. Mirrored slots share a depth,
+   so they are always kept or dropped together and the row stays symmetric: Crossfade (2)
+   shows `other | ACTIVE | other` with empty rims, Pan Drift (3) shows
+   `prev | ACTIVE | next` with empty rims, four entries keep the full window (the repeat
+   sits in the rim peeks only, which reads as an honest wrap). The active parameter is never
+   drawn outside the center, and turning the pot still pushes the centered entry out to one
+   side and pulls the next one in from the other — no direction-dependent special cases.
+   A dropped slot still gets its **empty frame** in the segmented row (same box geometry as
+   a filled slot, just without abbreviation and without a bar), so every block keeps the
+   identical outline no matter how long its cycle list is.
+
+   Header `n/m` always reflects the full list length (e.g. `5/5`), not the visible page size.
 4. A segmented, framed row with the **visible** parameter abbreviations (3–4 characters),
    the active entry fully inverted (white fill, black text)
 
@@ -1422,8 +1321,8 @@ determined yet.
 | 7 | Spectral Resonator ✔ | Mix/Decay/Damping/Spread/Pitch/Quantized active, intonation from Settings effective |
 | 8 | Reverb & Filter Mix ✔ | ReverbSc + Character; SVF LP Filter Mix with Destination |
 | 9 | Pan Drift & Crossfade ✔ | Phase-offset pan LFOs, crossfade slew, focus ticks on Home |
-| 10 | Mod system & control I/O | 4 slots, 3rd mux chain, Trail-push ladder, jack normalling, Clock/Trig/Imprint jacks, Amplitude+Offset+Destination+Divider, half-range bias |
-| 11 | Multi & Settings & Calibration | Dry/Wet/Macros, Settings submenu complete, Imprint jack mode, persisted CV zero offsets |
+| 10 | Mod system | 4 slots, jack normalling, Amplitude+Offset+Destination+Divider, half-range bias |
+| 11 | Multi & Settings & Calibration | Dry/Wet/Macros, Settings submenu complete, CV calibration |
 
 ---
 
@@ -1634,64 +1533,26 @@ Implement:
 - Display: Crossfade focus ticks beside `T#` on Home; Hold remaining via Life-Bar
 ```
 
-### Phase 10 — Mod System & Control I/O
-
-This phase carries a **hardware revision**, not just firmware: a third mux chain, the
-Trail-push ladder, single-supply CV conditioning and three trigger jacks. Read 4.4b and 4.5a
-before touching `hw_pins.h` — the pin map from Phase 2 is no longer valid.
+### Phase 10 — Mod System
 
 ```
 Prompt for Cursor:
 
-Read ARCHITECTURE.md first, especially Section 2 (points 6 and 7), 4.3, 4.4,
-4.4b, 4.5a and 4.7b.
+Read ARCHITECTURE.md first, especially Section 2 (point 7), 4.3, 4.4.
 
-Hardware layer first — the pin map changed:
-- Add Mux C as a third AdcChannelConfig: InitMux(D17, 8, D0, D1, D2).
-  Mux C C0-C3 = Mod CV 1-4, C4-C7 = Mod pots 1-4.
-- Move Trail pushes 1-5 off D14/D17-D20 onto the priority resistor ladder on
-  Mux A C5. Window decoding at ~0.6V spacing plus debounce; the existing
-  Lock/Solo long-press timers stay untouched, only the source changes.
-- Jack detect: Mod CV 1-4 on Mux A C6-C7 and Mux B C6-C7 (digital via ADC,
-  same pattern as kMultiPush), Clock detect on GPIO D20. Threshold ~0.6
-  normalised, hysteresis, ~20ms debounce.
-- Trigger inputs on GPIO: D14 Clock, D18 Trig, D19 Imprint. Read the Clock pin
-  once per sample inside the audio callback and timestamp it with the sample
-  counter; Trig and Imprint at block rate. All three set atomic flags,
-  evaluation happens in the UI tick.
-- Trig shares the RequestManualTrigger path with the Rec button (4.5); the
-  legacy kTrigInput alias can now point at a real pin.
-- Clock: edge detect, period measurement, feed Buffer/Hold when Time Unit =
-  Clock, drive the mod Dividers (4.3) and Auto-Mod rates (4.10). Jack-detect
-  transitions raise the Time Unit prompt (4.1a); clock loss (no edge for ~4x
-  the last period, or ~3s) is a separate fallback and must not be conflated
-  with cable presence.
-- Imprint jack: gate-following lock per 4.7b, writing to the SAME owner set as
-  the D6 button. Add the Settings entry for the alternative jack modes as a
-  stub; wiring it live is Phase 11.
-- CV zero: while a mod jack reports "unplugged", its ADC channel reads the
-  designed centre - use that as a continuously learned per-channel zero
-  offset. Persisting it is Phase 11.
-
-Then the 4 mod slots: jack detection via switched contact (not a voltage
-heuristic) - plugged cable = external CV is read, otherwise an internal source
+Implement the 4 mod slots: jack detection via switched contact (not a voltage
+heuristic) — plugged cable = external CV is read, otherwise an internal source
 per the Auto-Mod setting (4.10): OFF = simple triangle/sine with rate = clock
-period x divider; Age/Pitch/Both see 4.10 (the Age envelope and Pitch tracking
+period × divider; Age/Pitch/Both see 4.10 (the Age envelope and Pitch tracking
 value get wired to the Settings menu in Phase 11, but set up the source
 abstraction already here). CycleRow per slot: Amplitude (bipolar attenuverter,
-4% deadzone), **Offset** (bipolar bias after the attenuverter, 4% deadzone -
+4% deadzone), **Offset** (bipolar bias after the attenuverter, 4% deadzone —
 shifts the contrib window fully into the negative half, fully into the positive
 half, or anywhere between; required so destinations like Pitch Both / Pitch
 Spectra/Swarm can be modulated *only downward* or *only upward*, not merely
-scaled symmetrically - see 4.3), Destination (from the ParameterRegistry, all
-Blocks 1-11 plus Trail Level), Divider. Apply
-`contrib = Offset + Amplitude x source` then clamp onto the destination.
-
-The 4% deadzone applies to Amplitude and Offset ONLY - never to Destination or
-Divider, even though all four share one physical pot.
-
-EMA smoothing: light on mod CV (sluggish modulation is audible), heavier on
-pots.
+scaled symmetrically — see 4.3), Destination (from the ParameterRegistry, all
+Blocks 1–11 plus Trail Level), Divider. Apply
+`contrib = Offset + Amplitude × source` then clamp onto the destination.
 ```
 
 ### Phase 11 — Multi, Settings & Calibration
@@ -1715,18 +1576,14 @@ Implement:
   Auto-Mod/Normalling selection (OFF/Age/Pitch/Both, see 4.10 — controls what
   unplugged mod CV jacks supply internally as soon as jack detection reports
   "not plugged in"),
-  Imprint jack mode (Gate-follow/Pulse Play-Pause/Gate-length, see 4.7b —
-  default Gate-follow),
   Audio Routing toggle (Stereo/Sidechain, see the 4.1 detail description): in
   Sidechain mode, the buffer signal source prepared in Phase 3 gets switched
   exclusively to In R, In L is mixed directly (dry, bypassing the Trail
   buffers) with the Spectra/Swarm/Reverb output onto Out L/R,
   **FX → Input** amount (11-step 0…1, default 0 — how much listen-through is
   also sent into the wet FX chain; see 4.1 Settings item 7 / Section 8)
-- Calibration: persist the per-channel mod CV zero offsets that Phase 10
-  already learns continuously from unpatched jacks (4.4b) into flash, plus a
-  min/max learning mode for the threshold. No trimmers exist on the carrier,
-  so this routine is the only calibration path there is
+- Calibration routine (min/max learning mode) for the threshold and all CV
+  inputs
 - Review: check all display text for readability at 128×64px
 ```
 
@@ -1734,11 +1591,9 @@ Implement:
 
 ## 8. Open Points
 
-- **~~Exact GPIO pin assignment~~ Resolved (revised for Phase 10):** see 4.5a. **Multi
-  live:** CLK **D13**, DT **D30**, Push **Mux B C5**; Dry/Wet default + Multi menu
-  (Macro1/2/Time Unit/Settings dummies); long push = Home. Full Settings submenu / macros =
-  Phase 11. Rec **D12**. **D14 is now the Clock trigger** — Trail pushes moved to the ladder
-  on Mux A C5.
+- **~~Exact GPIO pin assignment~~ Resolved:** see 4.5a. **Multi live:** CLK **D13**, DT **D30**,
+  Push **Mux B C5**; Dry/Wet default + Multi menu (Macro1/2/Time Unit/Settings dummies);
+  long push = Home. Full Settings submenu / macros = Phase 11. Rec **D12**. D14 = Trail‑1.
 - **~~Spectra Phase 4 engine contract~~ Resolved:** see 4.1 Block 4 / Spectra engine (FFT 512, 32 partials, trail_mix analysis, stylized additive — not 1:1). Partials→64 only if CPU/flash allow later
 - **~~Phase 4 bench pot map~~ Resolved:** see 4.5a (Mux A Trails/Time/Engines, Mux B Spectra/Settings)
 - **~~Pickup arming / pot-end meet-band~~ Resolved:** see 4.6 (one-shot arm + `kEndCatchPot` 0.90)
@@ -1763,20 +1618,25 @@ Implement:
   routing was left alone deliberately.
 - **TODO — Play / Rec illuminated switch LEDs:** panel switches may have built-in LEDs
   (Play = green solid / blink for playing vs paused; Rec = red while armed/recording).
-  Drive from Daisy GPIO if pin budget allows — **it no longer does.** After the Phase 10
-  revision every GPIO and all 24 mux channels are assigned (4.5a), so LEDs need carrier glue
-  (shift register / LED driver on a shared bus), or one of the two expansion valves in
-  Section 2 point 6 has to be spent on them. Confirm polarity/current on the carrier before
-  assigning anything. Not required for V1 audio; UI polish.
+  Drive from Daisy GPIO if pin budget allows — **D30 is Multi DT** now; D31–D32 not on
+  classic Seed header. Prefer mux-driven LEDs or carrier glue if needed. Confirm polarity/
+  current on the carrier before assigning pins. Not required for V1 audio; UI polish.
 - **~~Swarm grain playback direction~~ Resolved:** Block 5 **Direction** (`DIR`) —
   Fwd / Rev / Rnd as CountNum; Rnd = per-grain coin flip at spawn; Scan scrub unchanged.
-- **~~Clock jack + Trig jack~~ Resolved (Phase 10):** both now have dedicated GPIO with
-  74HC14 conditioning (4.4b) and a fixed place in the pin map (4.5a). Clock = **D14** with
-  jack detect on **D20**, Trig = **D18** on the `RequestManualTrigger` path, Imprint trigger
-  = **D19**. Expected levels, thresholds and hysteresis are specified in 4.4b; edge detect,
-  period measurement, the Time Unit prompt and the clock-lost fallback are part of the
-  Phase 10 prompt. Still to nail down at the bench: minimum/maximum usable tempo, behaviour
-  while Time Unit is still a Multi dummy, and the interaction with Cont. Rec / Overwrite.
+- **TODO — Clock jack + Trig jack (incomplete vs. 4.1a / 4.4 / 4.5):** design notes exist for
+  Time Unit (Clock↔Seconds), plug-detect prompt, clock-lost fallback, and Rec∥Trig, but the
+  story is **not implementation-complete** and likely **not fully specified** yet. Missing /
+  open to flesh out before wiring:
+  - **Clock input:** GPIO or conditioned digital input on the carrier; edge detect; period /
+    BPM measurement; feed Buffer/Hold when Time Unit = Clock; subdivision for Mod Dividers
+    (4.3) and Auto-Mod rates (4.10); silent fallback to Seconds on clock loss (4.1a)
+  - **Trig input:** still **deferred** on the bench (D13 = Multi CLK; `kTrigInput` is a
+    legacy alias). Prefer mux / parallel to Rec (4.5a) — same `RequestManualTrigger` path
+    as the Rec button; confirm active level, debounce, and Overwrite/Hold-Lock rules apply
+  - **Docs gap:** expand 4.1a / 4.4 beyond the current sketch (expected Eurorack clock/trig
+    levels, pulse width, min/max tempo, UI when TU is still a Multi dummy, interaction with
+    Cont. Rec / Overwrite). Track with Phase 11 (Time Unit live) and/or a small dedicated
+    I/O phase once the carrier pins are locked
 - **Macro1/Macro2 target assignment:** currently fixed in code (Phase 11), no front-panel UI decided for it yet
 - **~~Multi encoder push function~~ Resolved:** short = step through the Multi cycle list, long = global return to the Home Dashboard (see 4.7a)
 - **Pot/encoder turn direction:** clockwise = which state for toggles (left/right, see 4.11), which direction for bipolar values — depends on the final hardware wiring, not yet determined

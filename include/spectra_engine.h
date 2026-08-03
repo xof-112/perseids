@@ -19,9 +19,12 @@ namespace perseids
 class SpectraEngine
 {
   public:
-    // 512-point RFFT: enough for partial pick, half the CMSIS cost of 1024.
-    static constexpr size_t kFftSize     = 512;
-    static constexpr size_t kHopSize     = 256;
+    // 2048-point RFFT. 512 gave 93.75 Hz bins: a 100 Hz fundamental landed on
+    // bin 1 (unresolvable), a semitone at 200 Hz was 0.13 bins, and ±1 bin of
+    // peak jitter moved a partial by more than a fifth — that bin jitter *was*
+    // the "flea/siren" character. 2048 → 23.4 Hz bins.
+    static constexpr size_t kFftSize     = 2048;
+    static constexpr size_t kHopSize     = 1024;
     static constexpr size_t kBinCount    = kFftSize / 2;
     // Hard cap for audio CPU — registry Partials still 4..64, clamped here.
     static constexpr size_t kMaxPartials = 32;
@@ -63,12 +66,20 @@ class SpectraEngine
     SpectraParamValues params_;
     float              pitch_both_; // Engines PB 0..1 → PSP octave span 1×…2×
 
-    float window_[kFftSize];
+    // FFT scratch stays in DTCM (zero wait states, hot inside arm_rfft).
+    // Window / magnitudes / input ring live in SDRAM — see spectra_engine.cpp.
     float fft_time_[kFftSize];
     float fft_freq_[kFftSize];
-    float magnitudes_[kBinCount];
+    bool  mag_smooth_valid_;
+    // Smoothed f0 across hops — stops multi-Trail sum from flipping the
+    // harmonic grid every frame (that read as mild flea / “eiern”).
+    float f0_smooth_hz_;
+    bool  f0_smooth_valid_;
+    // Mono/poly decision with hysteresis — flipping it reshuffles the whole
+    // accept order, which is audible as the fundamental dropping out.
+    int   poly_score_;
+    bool  polyphonic_;
 
-    float                 input_ring_[kInputRing];
     std::atomic<uint32_t> input_write_;
     std::atomic<uint32_t> input_read_;
 

@@ -1,7 +1,9 @@
 Import("env")
 from os.path import join
 
-# Flash-friendly CMSIS-DSP subset for RFFT-512 + mult + cmplx_mag.
+# Flash-friendly CMSIS-DSP subset for RFFT-2048 + mult + cmplx_mag.
+# RFFT-2048 runs a CFFT of length 1024, so the 1024 twiddle/bitrev tables
+# are required alongside the RFFT-2048 twiddles.
 # Classic F32 RFFT API (no separate tmpBuf): arm_rfft_fast_f32(S, p, pOut, flag).
 
 cmsis = join(env["PROJECT_DIR"], "lib", "libDaisy", "Drivers", "CMSIS-DSP")
@@ -15,9 +17,9 @@ env.Append(
         "ARM_MATH_CM7",
         "ARM_DSP_CONFIG_TABLES",
         "ARM_FFT_ALLOW_TABLES",
-        "ARM_TABLE_TWIDDLECOEF_F32_256",
-        "ARM_TABLE_BITREVIDX_FLT_256",
-        "ARM_TABLE_TWIDDLECOEF_RFFT_F32_512",
+        "ARM_TABLE_TWIDDLECOEF_F32_1024",
+        "ARM_TABLE_BITREVIDX_FLT_1024",
+        "ARM_TABLE_TWIDDLECOEF_RFFT_F32_2048",
     ],
 )
 

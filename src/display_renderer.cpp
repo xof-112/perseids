@@ -100,21 +100,13 @@ DisplayRenderer::ColumnGeom DisplayRenderer::ColumnGeometry(size_t index,
                                                             size_t count) const
 {
     const int total_w = kWidth - 2 * kMargin;
-
-    // Single param: one standard-width column at screen center.
-    if(count == 1)
-    {
-        const int col_w = total_w / 4;
-        const int x     = (kWidth - col_w) / 2;
-        return {x, col_w, x + col_w / 2};
-    }
+    const int unit    = total_w / 8; // half-slot width, shared by both layouts
 
     // Five slots: half | full | center | full | half (sum = 4 full widths).
     // Center of slot 2 lands exactly on kWidth/2.
     if(count == kCyclePageCols)
     {
         constexpr int kUnits[kCyclePageCols] = {1, 2, 2, 2, 1};
-        const int     unit = total_w / 8;
         const int     used = unit * 8;
         int           x    = kMargin + (total_w - used) / 2;
         if(index >= kCyclePageCols)
@@ -125,11 +117,15 @@ DisplayRenderer::ColumnGeom DisplayRenderer::ColumnGeometry(size_t index,
         return {x, w, x + w / 2};
     }
 
-    // Fallback: equal columns sized as a 4-slot page.
-    const size_t slots
-        = (count > 0 && count < 4) ? 4 : count;
-    const int col_w = static_cast<int>(total_w / static_cast<int>(slots));
-    const int x     = kMargin + static_cast<int>(index) * col_w;
+    // Fallback for non-carousel pages: full-size columns on the same grid,
+    // group centered so a lone column sits on the true screen middle.
+    const size_t slots = (count > 0) ? count : 1;
+    const int    col_w = 2 * unit;
+    const int    used  = col_w * static_cast<int>(slots);
+    if(index >= slots)
+        index = slots - 1;
+    const int x
+        = kMargin + (total_w - used) / 2 + static_cast<int>(index) * col_w;
     return {x, col_w, x + col_w / 2};
 }
 
@@ -147,14 +143,6 @@ void DisplayRenderer::CycleWindow(size_t  param_count,
     const size_t act
         = (active_col < param_count) ? active_col : (param_count - 1);
 
-    // One entry: single centered column.
-    if(param_count == 1)
-    {
-        out_page       = 1;
-        out_indices[0] = 0;
-        return;
-    }
-
     // Always 5 visual slots with wrap — active fixed in the true center slot.
     out_page           = kCyclePageCols;
     const size_t focus = kCycleFocusSlot;
@@ -162,6 +150,32 @@ void DisplayRenderer::CycleWindow(size_t  param_count,
     {
         const size_t offset = v + param_count - focus;
         out_indices[v]      = (act + offset) % param_count;
+    }
+
+    // Short lists wrap onto themselves: with two entries the active parameter
+    // also lands in both rims, so its value moved at the sides while the pot
+    // was turned. Drop a slot whose parameter already sits *closer* to the
+    // centre (index == param_count draws nothing). Mirrored slots share a
+    // depth and are therefore kept or dropped together — the row stays
+    // symmetric and every entry still slides through the middle.
+    if(param_count < kCyclePageCols)
+    {
+        // Slot pairs by depth: centre, both neighbours, both rims.
+        constexpr size_t kRings[3][2] = {{2, 2}, {1, 3}, {0, 4}};
+        bool             placed[kCyclePageCols] = {};
+        for(size_t r = 0; r < 3; ++r)
+        {
+            const size_t left  = kRings[r][0];
+            const size_t right = kRings[r][1];
+            const size_t il    = out_indices[left];
+            const size_t ir    = out_indices[right];
+            if(placed[il])
+                out_indices[left] = param_count;
+            if(placed[ir])
+                out_indices[right] = param_count;
+            placed[il] = true;
+            placed[ir] = true;
+        }
     }
 }
 
@@ -733,10 +747,9 @@ void DisplayRenderer::DrawSegmentedRow(const ParameterRegistry& reg,
         const size_t        i   = indices[v];
         const ColumnGeom    col = ColumnGeometry(v, page);
         const ParameterDef* def = row.ParamAt(reg, i);
-        if(def == nullptr)
-            continue;
-
-        const bool sel       = (i == active_col);
+        // Slots a short list left empty still get their frame — an unlabelled
+        // dummy box keeps the row identical in shape to a full window.
+        const bool sel       = (def != nullptr && i == active_col);
         const int  pad       = 1;
         const bool half_edge = (page == kCyclePageCols
                                 && (v == 0 || v == page - 1));
@@ -762,7 +775,8 @@ void DisplayRenderer::DrawSegmentedRow(const ParameterRegistry& reg,
         }
 
         char peek[3] = {0, 0, 0};
-        if(half_edge && def->abbrev != nullptr && def->abbrev[0] != '\0')
+        if(half_edge && def != nullptr && def->abbrev != nullptr
+           && def->abbrev[0] != '\0')
         {
             peek[0] = def->abbrev[0];
             if(def->abbrev[1] != '\0')
@@ -786,7 +800,7 @@ void DisplayRenderer::DrawSegmentedRow(const ParameterRegistry& reg,
                 display_.WriteString(peek, Font_4x6, !sel);
             }
         }
-        else
+        else if(def != nullptr)
         {
             display_.SetCursor(col.x + pad + 2, seg_y + 2);
             display_.WriteString(def->abbrev, Font_6x8, !sel);
@@ -808,10 +822,15 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
     size_t indices[kCyclePageCols];
     size_t page = 0;
     CycleWindow(row.ParamCount(), active_col, indices, page);
-    const size_t focus
-        = (page == kCyclePageCols) ? kCycleFocusSlot
-          : (page > 0)             ? (page - 1) / 2
-                                   : 0;
+    // Short rows keep every parameter in its own fixed slot, so the drawing
+    // slot of a parameter has to be looked up instead of assumed.
+    auto slot_of = [&](size_t param_index) -> size_t
+    {
+        for(size_t v = 0; v < page; ++v)
+            if(indices[v] == param_index)
+                return v;
+        return (page == kCyclePageCols) ? kCycleFocusSlot : 0;
+    };
 
     for(size_t v = 0; v < page; ++v)
     {
@@ -860,14 +879,13 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
 
     // Catch-up line on the bound column (solid + end ticks), not while scrolling
     // the cycle list — only the physical pot vs. stored value matters (4.6).
-    // Active is always drawn in the focus slot when not scrolling.
     if(row.PickupActive() && !row.InCycleScroll() && page > 0)
     {
         if(const ParameterDef* def = row.ParamAt(reg, row.BoundIndex()))
         {
             if(def->display_type != ParamDisplayType::Toggle)
             {
-                DrawPickupLine(ColumnGeometry(focus, page),
+                DrawPickupLine(ColumnGeometry(slot_of(row.BoundIndex()), page),
                                row.PickupPotNorm(),
                                def->display_type);
             }
@@ -877,7 +895,7 @@ void DisplayRenderer::DrawCycleView(const ParameterRegistry& reg,
     if(modulated_norm >= 0.f && page > 0)
     {
         if(const ParameterDef* def = row.ParamAt(reg, active_col))
-            DrawModDots(ColumnGeometry(focus, page),
+            DrawModDots(ColumnGeometry(slot_of(active_col), page),
                         modulated_norm,
                         def->display_type);
     }

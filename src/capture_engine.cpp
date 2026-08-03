@@ -581,6 +581,9 @@ void CaptureEngine::Process(const float* in_l,
     if(manual)
         manual_trig_seen_ = trig_now;
 
+    // Jack presence / mono weights: block rate, never per sample.
+    record_source_.UpdateBlock(in_l, in_r, size);
+
     float peak_block = 0.f;
 
     // BBD replace-slew coefficient (~60 ms τ) — constant for the block.

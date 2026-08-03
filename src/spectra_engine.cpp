@@ -44,7 +44,51 @@ constexpr float MagToAmp()
 {
     return 4.f / static_cast<float>(SpectraEngine::kFftSize);
 }
+
+// Magnitudes scale with N, so absolute thresholds tuned at FFT 512 must too.
+constexpr float kMagScale = static_cast<float>(SpectraEngine::kFftSize) / 512.f;
+
+// A-weighting response (linear). Peaks near 2.5 kHz, drops steeply in the bass
+// — a usable stand-in for the ear's sensitivity at moderate listening levels.
+inline float AWeightLinear(float f_hz)
+{
+    const float f2 = f_hz * f_hz;
+    const float num = 12194.f * 12194.f * f2 * f2;
+    const float den = (f2 + 20.6f * 20.6f)
+                      * std::sqrt((f2 + 107.7f * 107.7f)
+                                  * (f2 + 737.9f * 737.9f))
+                      * (f2 + 12194.f * 12194.f);
+    return (den > 1e-30f) ? (num / den) : 0.f;
+}
+
+// Perceived-loudness weighting for one partial. At equal amplitude a high
+// Trail outshines low ones, so partials above the reference are attenuated —
+// never boosting the bass, which would only eat headroom. Partial strength
+// (kLoudTilt) keeps a bright source bright; the clamp stops the top octaves
+// from being buried.
+inline float LoudnessWeight(float f_hz)
+{
+    constexpr float kLoudRefHz = 250.f;
+    constexpr float kLoudTilt  = 0.6f; // 1.0 = full inverse A-weighting
+    constexpr float kLoudFloor = 0.35f;
+
+    const float ra = AWeightLinear(f_hz);
+    if(ra <= 1e-20f)
+        return 1.f;
+    const float ratio = AWeightLinear(kLoudRefHz) / ra;
+    if(ratio >= 1.f)
+        return 1.f; // at or below the reference: leave as is
+    const float w = std::pow(ratio, kLoudTilt);
+    return w < kLoudFloor ? kLoudFloor : w;
+}
 } // namespace
+
+// SDRAM: at FFT 2048 these four are 48 KB and would push DTCM past 95%.
+// One SpectraEngine instance exists (g_spectra), same pattern as trail_buffer.
+float DSY_SDRAM_BSS g_spec_window[SpectraEngine::kFftSize];
+float DSY_SDRAM_BSS g_spec_mags[SpectraEngine::kBinCount];
+float DSY_SDRAM_BSS g_spec_mag_smooth[SpectraEngine::kBinCount];
+float DSY_SDRAM_BSS g_spec_input_ring[SpectraEngine::kInputRing];
 
 float SpectraEngine::FastSin(float phase01)
 {
@@ -75,10 +119,16 @@ void SpectraEngine::Init(float sample_rate)
     waveshape_morph_   = 0.f;
     fold_gain_         = 1.f;
 
-    std::memset(input_ring_, 0, sizeof(input_ring_));
+    std::memset(g_spec_input_ring, 0, sizeof(g_spec_input_ring));
     std::memset(fft_time_, 0, sizeof(fft_time_));
     std::memset(fft_freq_, 0, sizeof(fft_freq_));
-    std::memset(magnitudes_, 0, sizeof(magnitudes_));
+    std::memset(g_spec_mags, 0, sizeof(g_spec_mags));
+    std::memset(g_spec_mag_smooth, 0, sizeof(g_spec_mag_smooth));
+    mag_smooth_valid_ = false;
+    f0_smooth_hz_     = 110.f;
+    f0_smooth_valid_  = false;
+    poly_score_       = 0;
+    polyphonic_       = false;
     std::memset(analysis_targets_, 0, sizeof(analysis_targets_));
     std::memset(pending_targets_, 0, sizeof(pending_targets_));
     std::memset(prev_targets_, 0, sizeof(prev_targets_));
@@ -106,8 +156,8 @@ void SpectraEngine::BuildWindow()
     const float denom = static_cast<float>(kFftSize - 1);
     for(size_t i = 0; i < kFftSize; ++i)
     {
-        const float t = static_cast<float>(i) / denom;
-        window_[i]    = 0.5f * (1.f - std::cos(kTwoPi * t));
+        const float t    = static_cast<float>(i) / denom;
+        g_spec_window[i] = 0.5f * (1.f - std::cos(kTwoPi * t));
     }
 }
 
@@ -130,7 +180,7 @@ void SpectraEngine::PushInput(const float* samples, size_t size)
     uint32_t w = input_write_.load(std::memory_order_relaxed);
     for(size_t i = 0; i < size; ++i)
     {
-        input_ring_[w & (kInputRing - 1)] = samples[i];
+        g_spec_input_ring[w & (kInputRing - 1)] = samples[i];
         ++w;
     }
     input_write_.store(w, std::memory_order_release);
@@ -201,9 +251,11 @@ void SpectraEngine::PickPartials(const float* mags, size_t bins)
         Clampf(12000.f / bin_hz_, 2.f, static_cast<float>(bins - 2)));
 
     // Absolute silence floor — below this the frame is treated as quiet.
-    // Unit sine ≈ N/4 ≈ 128; keep this low so soft Trails still resynthesize.
-    constexpr float kSilenceMag = 0.08f;
+    // Unit sine ≈ N/4; keep this low so soft Trails still resynthesize.
+    constexpr float kSilenceMag = 0.08f * kMagScale;
 
+    // Bin 2 ≈ 47 Hz at FFT 2048 — below musical Trail content, and low enough
+    // that fundamentals are resolved instead of being read as overtones.
     float max_mag = 0.f;
     for(size_t i = 2; i < max_bin; ++i)
         if(mags[i] > max_mag)
@@ -211,7 +263,9 @@ void SpectraEngine::PickPartials(const float* mags, size_t bins)
 
     if(max_mag < kSilenceMag)
     {
-        analysis_count_ = prev_count_;
+        mag_smooth_valid_ = false;
+        f0_smooth_valid_  = false;
+        analysis_count_   = prev_count_;
         for(size_t i = 0; i < kMaxPartials; ++i)
         {
             analysis_targets_[i].freq_hz
@@ -221,53 +275,322 @@ void SpectraEngine::PickPartials(const float* mags, size_t bins)
         return;
     }
 
-    // Relative floor: ignore tiny side-lobes / noise under the loudest peak.
-    const float floor_mag = max_mag * 0.02f;
+    // Relative floor ≈ −12 dB — above Hann sidelobes, keeps strong body.
+    constexpr float kAbsPeakFloor = 1.f * kMagScale;
+    float           floor_mag     = max_mag * 0.25f;
+    if(floor_mag < kAbsPeakFloor)
+        floor_mag = kAbsPeakFloor;
 
     for(size_t i = 2; i < max_bin; ++i)
     {
-        if(mags[i] >= mags[i - 1] && mags[i] > mags[i + 1]
-           && mags[i] > floor_mag)
+        const float a = mags[i - 1];
+        const float b = mags[i];
+        const float c = mags[i + 1];
+        if(!(b > a && b > c && b > floor_mag))
+            continue;
+
+        const float denom = (a - 2.f * b + c);
+        float       delta = 0.f;
+        if(std::fabs(denom) > 1e-12f)
+            delta = 0.5f * (a - c) / denom;
+        delta = Clampf(delta, -0.5f, 0.5f);
+
+        if(npeaks < 64)
         {
-            const float a     = mags[i - 1];
-            const float b     = mags[i];
-            const float c     = mags[i + 1];
-            const float denom = (a - 2.f * b + c);
-            float       delta = 0.f;
-            if(std::fabs(denom) > 1e-12f)
-                delta = 0.5f * (a - c) / denom;
-            delta = Clampf(delta, -0.5f, 0.5f);
-            if(npeaks < 64)
+            peaks[npeaks].mag  = b;
+            peaks[npeaks].freq = (static_cast<float>(i) + delta) * bin_hz_;
+            ++npeaks;
+        }
+    }
+
+    // Instant f0 = lowest strong peak; EMA across hops for a stable grid.
+    constexpr float kF0Rel = 0.35f;
+    float           f0_raw = 0.f;
+    for(size_t i = 0; i < npeaks; ++i)
+    {
+        if(peaks[i].mag < max_mag * kF0Rel)
+            continue;
+        if(f0_raw <= 0.f || peaks[i].freq < f0_raw)
+            f0_raw = peaks[i].freq;
+    }
+    if(f0_raw <= 0.f && npeaks > 0)
+        f0_raw = peaks[0].freq;
+
+    // Hysteresis: an anchor keeps its job while its peak is merely quieter
+    // (kF0KeepRel), not only while it wins kF0Rel. On rich material the
+    // fundamental drifts across a single threshold every few seconds, and
+    // each crossing reshuffles the accept order below.
+    constexpr float kF0KeepRel = 0.18f;
+    float           f0_target  = f0_raw;
+    if(f0_smooth_valid_)
+    {
+        float keep_d = 0.06f * f0_smooth_hz_;
+        for(size_t i = 0; i < npeaks; ++i)
+        {
+            if(peaks[i].mag < max_mag * kF0KeepRel)
+                continue;
+            const float d = std::fabs(peaks[i].freq - f0_smooth_hz_);
+            if(d < keep_d)
             {
-                peaks[npeaks].mag = b;
-                peaks[npeaks].freq
-                    = (static_cast<float>(i) + delta) * bin_hz_;
-                ++npeaks;
+                keep_d    = d;
+                f0_target = peaks[i].freq;
             }
         }
     }
 
-    // Partial-select top `want` by magnitude (selection sort into front).
-    for(size_t i = 0; i < npeaks && i < want; ++i)
+    float f0_hz = f0_target;
+    if(f0_target > 40.f)
+    {
+        if(!f0_smooth_valid_)
+        {
+            f0_smooth_hz_    = f0_target;
+            f0_smooth_valid_ = true;
+        }
+        else
+        {
+            const float rel = std::fabs(f0_target - f0_smooth_hz_)
+                              / (f0_smooth_hz_ > 1.f ? f0_smooth_hz_ : 1.f);
+            const float a   = (rel > 0.10f) ? 0.55f : 0.12f;
+            f0_smooth_hz_ += a * (f0_target - f0_smooth_hz_);
+        }
+        f0_hz = f0_smooth_hz_;
+    }
+
+    // Multi-Trail roots: strong peaks that are not harmonics of a lower root.
+    // ≥2 roots → true polyphony (hold several pitches), not one flipping f0.
+    constexpr size_t kMaxRoots = 8;
+    size_t           cand_idx[64];
+    size_t           n_cand = 0;
+    for(size_t i = 0; i < npeaks; ++i)
+    {
+        if(peaks[i].mag < max_mag * kF0Rel)
+            continue;
+        cand_idx[n_cand++] = i;
+    }
+    // Low frequency first — each new root is an independent voice.
+    for(size_t i = 0; i < n_cand; ++i)
     {
         size_t best = i;
-        for(size_t j = i + 1; j < npeaks; ++j)
-            if(peaks[j].mag > peaks[best].mag)
+        for(size_t j = i + 1; j < n_cand; ++j)
+            if(peaks[cand_idx[j]].freq < peaks[cand_idx[best]].freq)
                 best = j;
         if(best != i)
         {
-            const Peak tmp = peaks[i];
-            peaks[i]       = peaks[best];
-            peaks[best]    = tmp;
+            const size_t tmp = cand_idx[i];
+            cand_idx[i]      = cand_idx[best];
+            cand_idx[best]   = tmp;
+        }
+    }
+    auto is_harm_of = [](float freq, float root) -> bool {
+        if(root < 40.f)
+            return false;
+        const float n       = freq / root;
+        const float nearest = std::round(n);
+        return nearest >= 1.f && std::fabs(n - nearest) <= 0.08f;
+    };
+    size_t root_idx[kMaxRoots];
+    size_t n_roots = 0;
+    for(size_t i = 0; i < n_cand && n_roots < kMaxRoots; ++i)
+    {
+        const float f     = peaks[cand_idx[i]].freq;
+        bool        child = false;
+        for(size_t r = 0; r < n_roots; ++r)
+        {
+            const float rf = peaks[root_idx[r]].freq;
+            if(is_harm_of(f, rf) || std::fabs(f - rf) < 2.f * bin_hz_)
+            {
+                child = true;
+                break;
+            }
+        }
+        if(!child)
+            root_idx[n_roots++] = cand_idx[i];
+    }
+
+    // Hysteresis on the mono/poly decision. A bare "n_roots >= 2" flipped mid
+    // note on rich material, and every flip reshuffles the whole accept order.
+    poly_score_ += (n_roots >= 2) ? 1 : -1;
+    if(poly_score_ > 4)
+        poly_score_ = 4;
+    if(poly_score_ < 0)
+        poly_score_ = 0;
+    polyphonic_           = polyphonic_ ? (poly_score_ >= 1) : (poly_score_ >= 3);
+    const bool polyphonic = polyphonic_;
+
+    auto harmonic_n = [f0_hz](float freq) -> int {
+        if(f0_hz < 40.f)
+            return 1;
+        const float n       = freq / f0_hz;
+        const float nearest = std::round(n);
+        if(nearest < 1.f || std::fabs(n - nearest) > 0.08f)
+            return 0;
+        return static_cast<int>(nearest);
+    };
+
+    const float pitch = PitchRatio();
+    Peak        accepted[64];
+    size_t      n_acc = 0;
+    bool        used[64];
+    for(size_t i = 0; i < 64; ++i)
+        used[i] = false;
+    // Hann main lobe spans ±2 bins — closer "peaks" are the same lobe.
+    const float min_sep_hz = 2.f * bin_hz_;
+    const float rel_match  = polyphonic ? 0.04f : 0.03f;
+    const float abs_match  = 0.75f * bin_hz_;
+
+    auto too_near_accepted = [&](float freq) -> bool {
+        for(size_t a = 0; a < n_acc; ++a)
+            if(std::fabs(freq - accepted[a].freq) < min_sep_hz)
+                return true;
+        return false;
+    };
+
+    // Continuation outranks every ranking below: a partial that is already
+    // sounding keeps its peak. Otherwise a reshuffle (f0 or mono/poly flip)
+    // can push the fundamental out of the top `want` while it is still
+    // clearly audible — heard as the tone cutting out with a jump.
+    for(size_t s = 0; s < prev_count_ && n_acc < want; ++s)
+    {
+        if(prev_targets_[s].amp < 1e-4f)
+            continue;
+        const float pref = prev_targets_[s].freq_hz;
+        float       best_d
+            = abs_match > rel_match * pref ? abs_match : (rel_match * pref);
+        size_t best_i = npeaks;
+        for(size_t i = 0; i < npeaks; ++i)
+        {
+            if(used[i])
+                continue;
+            const float d = std::fabs(peaks[i].freq * pitch - pref);
+            if(d < best_d)
+            {
+                best_d = d;
+                best_i = i;
+            }
+        }
+        if(best_i < npeaks && !too_near_accepted(peaks[best_i].freq))
+        {
+            used[best_i]      = true;
+            accepted[n_acc++] = peaks[best_i];
         }
     }
 
-    const size_t take = npeaks < want ? npeaks : want;
-    const float  pitch = PitchRatio();
-    const float  scale = MagToAmp();
+    if(polyphonic)
+    {
+        // Stable chord: roots first, then their 2f/3f if present — never
+        // "loudest mover of the frame" (that was mal-dies-mal-das).
+        for(size_t r = 0; r < n_roots && n_acc < want; ++r)
+        {
+            const size_t i = root_idx[r];
+            if(used[i] || too_near_accepted(peaks[i].freq))
+                continue;
+            used[i]           = true;
+            accepted[n_acc++] = peaks[i];
+        }
 
-    // Continuity: assign peaks to previous oscillator slots by nearest freq
-    // so one partial does not teleport between oscillators every hop.
+        for(size_t r = 0; r < n_roots && n_acc < want; ++r)
+        {
+            for(int h = 2; h <= 3; ++h)
+            {
+                if(n_acc >= want)
+                    break;
+                const float target
+                    = peaks[root_idx[r]].freq * static_cast<float>(h);
+                size_t best_i = npeaks;
+                float  best_d = 0.06f * target;
+                if(best_d < min_sep_hz)
+                    best_d = min_sep_hz;
+                for(size_t i = 0; i < npeaks; ++i)
+                {
+                    if(used[i])
+                        continue;
+                    const float d = std::fabs(peaks[i].freq - target);
+                    if(d < best_d)
+                    {
+                        best_d = d;
+                        best_i = i;
+                    }
+                }
+                if(best_i >= npeaks || too_near_accepted(peaks[best_i].freq))
+                    continue;
+                used[best_i]      = true;
+                accepted[n_acc++] = peaks[best_i];
+            }
+        }
+    }
+    else
+    {
+        // Mono: f0 → harmonics → (if Partials>8) inharmonics. The used flags
+        // travel with the peaks through the sort, so continuation survives.
+        for(size_t i = 0; i < npeaks; ++i)
+        {
+            size_t best = i;
+            for(size_t j = i + 1; j < npeaks; ++j)
+            {
+                const int  nj = harmonic_n(peaks[j].freq);
+                const int  nb = harmonic_n(peaks[best].freq);
+                const bool j_f0
+                    = (f0_hz > 0.f && std::fabs(peaks[j].freq - f0_hz) < 3.f);
+                const bool b_f0
+                    = (f0_hz > 0.f
+                       && std::fabs(peaks[best].freq - f0_hz) < 3.f);
+                bool take_j = false;
+                if(j_f0 && !b_f0)
+                    take_j = true;
+                else if(j_f0 == b_f0)
+                {
+                    if(nj > 0 && nb == 0)
+                        take_j = true;
+                    else if((nj == 0) == (nb == 0))
+                    {
+                        if(nj > 0 && nb > 0 && nj < nb)
+                            take_j = true;
+                        else if(nj == nb && peaks[j].mag > peaks[best].mag)
+                            take_j = true;
+                        else if(nj == 0 && nb == 0
+                                && peaks[j].mag > peaks[best].mag)
+                            take_j = true;
+                    }
+                }
+                if(take_j)
+                    best = j;
+            }
+            if(best != i)
+            {
+                const Peak tmp = peaks[i];
+                peaks[i]       = peaks[best];
+                peaks[best]    = tmp;
+                const bool ut  = used[i];
+                used[i]        = used[best];
+                used[best]     = ut;
+            }
+        }
+
+        const bool allow_inharm = (want > 8);
+        for(size_t i = 0; i < npeaks && n_acc < want; ++i)
+        {
+            if(used[i])
+                continue;
+            if(!allow_inharm && harmonic_n(peaks[i].freq) == 0)
+                continue;
+            if(too_near_accepted(peaks[i].freq))
+                continue;
+            used[i]           = true;
+            accepted[n_acc++] = peaks[i];
+        }
+    }
+
+    const size_t take  = n_acc;
+    const float  scale = MagToAmp();
+    auto         peak_amp = [scale, max_mag](float mag, float out_hz) -> float {
+        float rel = mag / max_mag;
+        if(rel < 0.f)
+            rel = 0.f;
+        if(rel > 1.f)
+            rel = 1.f;
+        return mag * scale * (0.35f + 0.65f * rel) * LoudnessWeight(out_hz);
+    };
+
     bool claimed[64];
     for(size_t i = 0; i < 64; ++i)
         claimed[i] = false;
@@ -279,16 +602,14 @@ void SpectraEngine::PickPartials(const float* mags, size_t bins)
         out[i].amp     = 0.f;
     }
 
-    const float max_abs_hz = 2.5f * bin_hz_; // ~2.5 bins
-
     for(size_t s = 0; s < prev_count_ && s < kMaxPartials; ++s)
     {
         if(prev_targets_[s].amp < 1e-4f)
             continue;
 
-        const float pref = prev_targets_[s].freq_hz;
-        const float max_d
-            = max_abs_hz > 0.08f * pref ? max_abs_hz : (0.08f * pref);
+        const float pref  = prev_targets_[s].freq_hz;
+        const float max_d = abs_match > rel_match * pref ? abs_match
+                                                         : (rel_match * pref);
 
         size_t best_p = take;
         float  best_d = max_d;
@@ -296,7 +617,7 @@ void SpectraEngine::PickPartials(const float* mags, size_t bins)
         {
             if(claimed[p])
                 continue;
-            const float f = peaks[p].freq * pitch;
+            const float f = accepted[p].freq * pitch;
             const float d = std::fabs(f - pref);
             if(d < best_d)
             {
@@ -306,22 +627,55 @@ void SpectraEngine::PickPartials(const float* mags, size_t bins)
         }
         if(best_p < take)
         {
-            claimed[best_p]   = true;
-            out[s].freq_hz    = Clampf(peaks[best_p].freq * pitch, 20.f, 16000.f);
-            out[s].amp        = peaks[best_p].mag * scale;
+            claimed[best_p] = true;
+            const float new_f
+                = Clampf(accepted[best_p].freq * pitch, 20.f, 16000.f);
+            // A match is a small move now, so light smoothing is enough —
+            // the heavy stickiness only existed to hide 93.75 Hz bin jitter.
+            const float follow = polyphonic ? 0.35f : 0.5f;
+            out[s].freq_hz     = pref + (new_f - pref) * follow;
+            out[s].amp = peak_amp(accepted[best_p].mag, out[s].freq_hz);
+        }
+        else if(polyphonic)
+        {
+            // Beat null / brief miss: linger — don't kill the voice (flip).
+            out[s].freq_hz = pref;
+            out[s].amp     = prev_targets_[s].amp * 0.85f;
+            if(out[s].amp < 1e-4f)
+                out[s].amp = 0.f;
         }
         else
         {
-            // Keep frequency, fade amp — avoids a chirp into a new peak.
             out[s].freq_hz = pref;
             out[s].amp     = 0.f;
         }
     }
 
-    // Remaining peaks → free slots (quiet or unused).
+    // Births: poly → only unmatched roots; mono → strong/f0.
+    constexpr float kBirthRel = 0.4f;
     for(size_t p = 0; p < take; ++p)
     {
         if(claimed[p])
+            continue;
+        bool ok = false;
+        if(polyphonic)
+        {
+            for(size_t r = 0; r < n_roots; ++r)
+            {
+                if(std::fabs(accepted[p].freq - peaks[root_idx[r]].freq) < 3.f)
+                {
+                    ok = true;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            const bool is_f0
+                = (f0_hz > 0.f && std::fabs(accepted[p].freq - f0_hz) < 3.f);
+            ok = is_f0 || accepted[p].mag >= max_mag * kBirthRel;
+        }
+        if(!ok)
             continue;
         size_t slot = kMaxPartials;
         for(size_t s = 0; s < want; ++s)
@@ -335,11 +689,18 @@ void SpectraEngine::PickPartials(const float* mags, size_t bins)
         if(slot >= kMaxPartials)
             break;
         out[slot].freq_hz
-            = Clampf(peaks[p].freq * pitch, 20.f, 16000.f);
-        out[slot].amp = peaks[p].mag * scale;
+            = Clampf(accepted[p].freq * pitch, 20.f, 16000.f);
+        out[slot].amp = peak_amp(accepted[p].mag, out[slot].freq_hz);
     }
 
-    analysis_count_ = want;
+    // Active count may be << UI Partials (e.g. one sine → one partial).
+    size_t active = 0;
+    for(size_t i = 0; i < kMaxPartials; ++i)
+    {
+        if(out[i].amp > 1e-5f)
+            active = i + 1;
+    }
+    analysis_count_ = active;
     for(size_t i = 0; i < kMaxPartials; ++i)
         analysis_targets_[i] = out[i];
 }
@@ -389,16 +750,17 @@ void SpectraEngine::ProcessAnalysis()
 
     const uint32_t start = r - kFftSize;
     for(size_t i = 0; i < kFftSize; ++i)
-        fft_time_[i] = input_ring_[(start + static_cast<uint32_t>(i))
-                                   & (kInputRing - 1)];
+        fft_time_[i] = g_spec_input_ring[(start + static_cast<uint32_t>(i))
+                                         & (kInputRing - 1)];
     input_read_.store(r, std::memory_order_relaxed);
 
-    arm_mult_f32(fft_time_, window_, fft_time_, static_cast<uint32_t>(kFftSize));
+    arm_mult_f32(
+        fft_time_, g_spec_window, fft_time_, static_cast<uint32_t>(kFftSize));
     arm_rfft_fast_f32(&g_rfft, fft_time_, fft_freq_, 0);
 
-    magnitudes_[0] = std::fabs(fft_freq_[0]);
+    g_spec_mags[0] = std::fabs(fft_freq_[0]);
     arm_cmplx_mag_f32(&fft_freq_[2],
-                      &magnitudes_[1],
+                      &g_spec_mags[1],
                       static_cast<uint32_t>(kBinCount - 1));
 
     float        f0     = 110.f;
@@ -407,15 +769,32 @@ void SpectraEngine::ProcessAnalysis()
         Clampf(1000.f / bin_hz_, 2.f, static_cast<float>(kBinCount - 1)));
     for(size_t i = 2; i < f0_max; ++i)
     {
-        if(magnitudes_[i] > best_m)
+        if(g_spec_mags[i] > best_m)
         {
-            best_m = magnitudes_[i];
+            best_m = g_spec_mags[i];
             f0     = static_cast<float>(i) * bin_hz_;
         }
     }
 
-    ApplyUmbraAurora(magnitudes_, kBinCount, f0);
-    PickPartials(magnitudes_, kBinCount);
+    ApplyUmbraAurora(g_spec_mags, kBinCount, f0);
+
+    // Smooth magnitudes across analysis frames before peak pick — multi-Trail
+    // / Elements spectra hop less between frames (fewer flea births).
+    constexpr float kMagSmooth = 0.28f; // slightly stickier — multi-Trail beat
+    if(!mag_smooth_valid_)
+    {
+        for(size_t i = 0; i < kBinCount; ++i)
+            g_spec_mag_smooth[i] = g_spec_mags[i];
+        mag_smooth_valid_ = true;
+    }
+    else
+    {
+        for(size_t i = 0; i < kBinCount; ++i)
+            g_spec_mag_smooth[i]
+                += kMagSmooth * (g_spec_mags[i] - g_spec_mag_smooth[i]);
+    }
+
+    PickPartials(g_spec_mag_smooth, kBinCount);
     PublishTargets();
 }
 
@@ -435,12 +814,12 @@ void SpectraEngine::ConsumeTargets()
     const float drift        = Clampf(params_.ensemble, 0.f, 1.f);
     const float detune_ratio = 1.f + drift * 0.008f;
 
-    // Continuous exp slew — do NOT restart a ramp each hop (that was the
-    // ~50 Hz crackle). ENS=0 ≈ 100 ms, ENS=1 ≈ 280 ms time constant.
-    const float tau_s = Lerp(0.100f, 0.280f, drift);
+    // Continuous exp slew. Stick against hop jitter; follow real pitch moves
+    // faster so Elements / PSP changes stay roughly proportional.
+    const float tau_s = Lerp(0.180f, 0.320f, drift);
     const float a     = 1.f - std::exp(-sample_rate_inv_ / tau_s);
     slew_amp_  = a;
-    slew_freq_ = a * 0.7f; // freq a bit softer than amp
+    slew_freq_ = a * 0.55f;
 
     for(size_t i = 0; i < kMaxPartials; ++i)
     {
@@ -455,6 +834,20 @@ void SpectraEngine::ConsumeTargets()
         }
         target_freq_[i] = Clampf(freq, 20.f, 16000.f);
         target_amp_[i]  = amp;
+
+        // A silent or reassigned slot must jump, never glide. Sliding a
+        // recycled oscillator from its old partial to its new one is what drew
+        // the periodic 200 → 300 Hz sweeps in the spectrogram. Below ~-60 dB
+        // the jump is inaudible; a >25% move can only be a slot reassignment,
+        // since matched partials are held to a few percent per hop.
+        const float cur = osc_freq_[i];
+        const float rel
+            = (cur > 1.f) ? (std::fabs(target_freq_[i] - cur) / cur) : 1.f;
+        if(osc_amp_[i] < 1e-3f || rel > 0.25f)
+        {
+            osc_freq_[i]  = target_freq_[i];
+            phase_inc_[i] = osc_freq_[i] * sample_rate_inv_;
+        }
     }
 }
 

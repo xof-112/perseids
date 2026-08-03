@@ -962,13 +962,15 @@ int main(void)
                           g_capture_params.intonation);
         g_reverb.SyncFromUi(g_reverb_params);
         g_filter.SyncFromUi(g_filter_params);
-        // FFT after UI so pot/menu response stays snappy; 20 ms is enough tracking.
+        // FFT after UI so pot/menu response stays snappy. Poll at 10 ms so the
+        // 1024-sample hop (21.3 ms) is picked up as soon as it is complete;
+        // ProcessAnalysis returns immediately when no full hop has arrived.
         // Skip only when Blend sits at (essentially) full Swarm — Spectra is
         // silent there and its synthesis is skipped in the callback anyway.
         if(g_swarm_params.blend < 0.98f)
         {
             const uint32_t now = daisy::System::GetNow();
-            if(now - last_fft_ms >= 20)
+            if(now - last_fft_ms >= 10)
             {
                 g_spectra.ProcessAnalysis();
                 last_fft_ms = now;
