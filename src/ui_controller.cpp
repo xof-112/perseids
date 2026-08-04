@@ -828,6 +828,8 @@ void UiController::UpdateScreen()
                                trails_.RecTrigActive(),
                                snaps,
                                capture_->InputLevel(),
+                               capture_->InputLevelR(),
+                               capture_params_->vu_mode >= 0.5f,
                                capture_params_->threshold,
                                life,
                                active,

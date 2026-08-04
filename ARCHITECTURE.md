@@ -145,6 +145,18 @@ every request).
    formatting. All seconds-based display values (Hold, Fade In/Out, Buffer, etc.) must be
    formatted via integer-based formatting instead (e.g. "1.50s", "15s", "INF"), never `%f`
    directly — otherwise the display silently degrades to just printing "s" with no number.
+10. **Routing / gate decisions: block-rate + hysteresis, never sample-rate against a fixed
+    threshold.** Any choice that asks “is this jack / channel / source present?” or “has the
+    signal crossed the record threshold?” is a **state machine**, not a per-sample `if`.
+    Decide once per audio block (or slower) on a smoothed envelope, with a **wide hysteresis
+    band** (distinct on/off levels) and **slewed** gains or arming flags. A fixed absolute
+    floor sitting inside the noise of an unconnected jack will chatter at audio rate and
+    amplitude-modulate the useful signal — heard as grit that fades *in* with level and
+    vanishes in silence. Verified on `RecordSource` mono-cable routing
+    (`dev-phase4v002`, see 4.1 Audio Routing); the same rule applies to **Threshold-Rec**
+    (4.8) and any future jack / gate / mute logic. Hardware jack normalling (point 7) still
+    wins when a switched contact exists — this guardrail covers the soft cases where only
+    the signal itself is available.
 
 ---
 
@@ -182,7 +194,7 @@ every request).
 
 | # | Measure | Effect | Notes |
 |---|---------|--------|-------|
-| B1 | **Swarm grain-window LUT** (1024 pts, double-buffered) | **Main freeze cause removed.** Old path: `cos`+`sin`+`pow` per grain per sample × up to 16 grains. `SyncFromUi` rebuilds on Blur change (quantised 1/128, min 16 ms between rebuilds); callback linear-interpolates (~−110 dB vs direct eval) | `swarm_engine.cpp` |
+| B1 | **Swarm grain-window LUT** (1024 pts, double-buffered) | **Main freeze cause removed.** Old path: `cos`+`sin`+`pow` per grain per sample × up to 24 grains. `SyncFromUi` rebuilds on Blur change (quantised 1/128, min 16 ms between rebuilds); callback linear-interpolates (~−110 dB vs direct eval) | `swarm_engine.cpp` |
 | B2 | **Swarm per-block hoisting + direct buffer reads** | Trail play length / gain / scan incr / pan×drift `sqrt` norm once per block; grains index `trail_buffer` directly (skip non-inlinable `ReadLooped`); `inv_sqrt_[n]` table; Radiation `ReadInterp` once (was twice) | bit-identical where stated in §4.1 Block 5 |
 | B3 | **Keep `tanh` on Swarm output** | Deliberate: rational soft-clip → `x/9` for large x and changes dense-cloud character; ~2 % CPU left on the table on purpose | do not “optimise away” without A/B listening |
 | B4 | **Swarm load governor** | Second meter @ 30 Hz; above 85 % drop grain *spawn* cap by 1/block (by 2 above 92 %) to floor **5**; below 70 % recover 1 grain / 8 blocks. Running grains finish → no clicks. OLED **`L!`** while active | `UpdateGovernor` / `GovernorActive` |
@@ -229,7 +241,7 @@ count in Section 2, point 6. The 5 Trail Level encoders and the Multi encoder ar
 | 2 | **Time** | Buffer (= ring buffer length/max. recording time per Trail, up to 30s ceiling — see Section 2, point 2), Hold (up to 30s, beyond that = infinite; boot default 15s, see 4.8), Fade In, Fade Out |
 | 3 | **Engines** | Blend (Spectra↔Swarm), Pitch Spectra, Pitch Swarm, Pitch Both (span ±1…±2 oct for PSP/PSW) |
 | 4 | **Spectra Parameters** | Partials, Waveshape (Sine↔Saw↔Fold), Umbra/Aurora Macro, Ensemble/Drift |
-| 5 | **Swarm Parameters** | Size, Spread, Scan, Direction (Fwd/Rev/Rnd), Atmosphere Macro (Blur↔Radiation) |
+| 5 | **Swarm Parameters** | Size (grain count), Spread, Scan, Scatter, Direction (Fwd/Rev/Rnd), Atmosphere Macro (Blur↔Radiation) |
 | 6 | **Reverb** | Mix, Decay, Damping, Character Macro (Chorus↔Friction) |
 | 7 | **Spectral Resonator** (acts on Swarm output) | Mix, Decay (ring time 0.08–8 s), Damping (metal↔body), Spread (stereo fan), Pitch, Quantized (On/Off, scale from Settings) |
 | 8 | **Pan Drift** | Phase, Amplitude, Velocity |
@@ -274,20 +286,25 @@ the main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend
 - **Trail access:** `CaptureEngine` publishes per-block `SwarmTrailView` (length + gain =
   level × fade × play_gain) after `Process`; Swarm reads the same callback. Recording /
   empty / solo-muted trails are skipped.
-- **Grains:** up to **16** overlapping grains (load governor may hold this down to 5 — see
-  below), linear-interpolated buffer reads, Hann window
-  at Atmosphere center. Size maps ~8–180 ms. Spawn interval = `grain_length × 0.15`
-  (~6–7 grains steady-state); per-grain amp = `Trail gain × 0.50` (overlap tame). Engine bus
-  soft-limited before the final mix. Spread = stereo pan width. Scan = scrub rate through each
-  trail (0 = freeze). Pitch Swarm = `2^(±1 octave)` on grain playback rate.
+- **Grains:** up to **24** overlapping grains (Size CountNum 4…24, boot 16; load governor
+  may hold the live cap down to 6 — see below). Spawn interval = `grain_length / N` so the
+  dialled count is the steady-state density. Grain length is fixed ~100 ms (Size used to be
+  duration; it now *is* the count). Linear-interpolated buffer reads, Hann window at
+  Atmosphere center. Per-grain amp = Trail gain; engine bus soft-limited. Spread = stereo pan
+  width. Scan = scrub rate through each trail (0 = freeze). **Scatter** (OLED `SCT`, unipolar)
+  sets how wide grains spray around the scan head: 0% = tight (±4% residual jitter), 100% =
+  ±½ loop → full-buffer coverage when wrapped. Quiet regions of a long take no longer mute
+  the whole cloud unless Scatter is left near zero. Pitch Swarm = `2^(±1 octave)` on grain
+  playback rate.
 - **Direction** (OLED `DIR`, CountNum): **Fwd** / **Rev** / **Rnd**. Chosen at grain spawn
   (`incr = ±pitch`); Rnd is a per-grain coin flip. Scan scrub direction is independent
-  (still advances forward through the buffer). Cycle list: SIZ · SPR · SCN · DIR · ATM
-  (5 entries → CycleView 4-column window scrolls).
-- **Atmosphere:** Blur (negative) flattens grain envelopes; Radiation (positive) adds
+  (still advances forward through the buffer). Cycle list: SIZ · SPR · SCN · SCT · DIR · ATM
+  (6 entries → carousel wraps).
+- **Atmosphere:** Blur (negative) flattens grain envelopes (pow floor 0.05, mix eased with
+  blur² so the last third of the pot does the audible wash); Radiation (positive) adds
   sample-hold lo-fi + BBD-style output slew.
 - **Grain envelope is tabulated, not evaluated:** the Hann↔Blur curve used to call
-  `cos` + `sin` + **`pow`** per grain per sample — with 16 grains that alone exceeded the
+  `cos` + `sin` + **`pow`** per grain per sample — with 24 grains that alone exceeded the
   block budget and was the main freeze cause. Atmosphere is block-constant, so `SyncFromUi`
   (main loop) builds the **exact** curve for the current Blur into a 1024-point table and
   flips a double-buffer index; the callback only interpolates. Blur is quantised to 1/128
@@ -304,11 +321,11 @@ the main-loop `ProcessAnalysis` is skipped only at essentially full Swarm (blend
   x) and would change the character of dense clouds for ~2% of CPU. **Catalogue:** §2a B2–B3.
 - **Load governor** (`UpdateGovernor`, audio thread, block rate): fed by a **second**
   `CpuLoadMeter` smoothed at 30 Hz — the display average (1 Hz, ~160 ms) is far too slow to
-  catch a block before it overruns. Above 85% load the grain cap drops by 1 per block (by 2
-  above 92%) down to a floor of **5**; below 70% it recovers 1 grain every 8 blocks. Only
-  *spawning* is capped — grains already running finish their envelope, so throttling never
-  clicks. OLED: **`L!`** appears immediately left of the CPU figure (`L!C42`) and disappears
-  by itself once the cap is back at 16. While it shows, the SDRAM figure is suppressed — it
+  catch a block before it overruns. Above 88% load the grain cap drops by 1 per block (by 2
+  above 94%) down to a floor of **6**; below 72% it recovers 1 grain every 8 blocks, up to 24.
+  Only *spawning* is capped — grains already running finish their envelope, so throttling never
+  clicks. OLED: **`L!`** appears only while the governor holds the cap **below the Size dial**;
+  it disappears once the cap catches up. While it shows, the SDRAM figure is suppressed — it
   is a compile-time constant, and dropping it keeps the meter block narrow enough that a
   three-digit CPU reading still fits. The REC header is no longer pinned to x=54: it slides
   left (floor 48, the first column after `PERSEIDS`) whenever the meter block would reach it,
@@ -584,7 +601,7 @@ so Sidechain mode (Phase 11) is a mode switch later, not a rewire.
   averaging it down with a silent channel; otherwise (both channels carry signal) it uses
   (L+R)/2 as before. This avoids a ~6dB level loss for the common case of a single mono cable
   patched into just one input.
-  **Jack presence must be decided at block rate, never per sample.**
+  **Jack presence must be decided at block rate, never per sample** (§2 point 10).
   `RecordSource::UpdateBlock` runs a peak envelope (instant attack, ~0.5 s release) with a wide
   hysteresis band (on at −60 dBFS, off at −72 dBFS) and slews the normalized L/R weights over
   ~270 ms; `CaptureSample` is then a plain weighted sum. The original per-sample
@@ -1022,7 +1039,9 @@ already existed on Cycle.
   of a single take, up to a fixed ceiling of **30 seconds** (`BUFFER_SIZE`, decided — see
   Section 2, point 2; the code needs updating from its current 5s ceiling to match)
 - **Threshold**: triggers automatic recording into the oldest eligible, non-locked active
-  Trail (round-robin; eligibility depends on **Overwrite**, below)
+  Trail (round-robin; eligibility depends on **Overwrite**, below). Detection must follow
+  §2 point 10 (block-rate envelope + hysteresis) — never a per-sample compare against a
+  fixed floor in the noise
 - **Overwrite** (Block 1 toggle, OLED `OVR`, default **ON**):
   - **ON** — current behaviour: prefer Empty, else steal the oldest unlocked Playing /
     FadingOut Trail (including mid finite Hold), with soft-replace before overwrite
@@ -1035,6 +1054,11 @@ already existed on Cycle.
   Trig) is only accepted if no take is currently active; `StartRecording` must clean up any
   stray leftover `Recording` state from a previous take before starting a new one. Visually,
   `Fade In` is a **distinct** state from `Recording` (see the Life-Bar phase table in 4.9) —
+  see also soft-replace ArmingRecord. **Rec/Trig force-breaks a stuck head:** if
+  `RecordSlotBusy()` is true when Rec is pressed (orphaned ArmingRecord / Recording claim
+  that never finishes), `AbortRecordHeads` clears the claim first so the press can land —
+  otherwise Busy silently ate every later trigger. `SanitizeRecordHeads` runs every block
+  to drop index/state mismatches that left Busy true forever.
   don't conflate them, or Continuous Recording reads on the display as if it were double-
   recording the same take.
 - **Loop-seam crossfade (fixed in Phase 6):** recording writes ~40 ms past the loop end;
@@ -1050,8 +1074,11 @@ already existed on Cycle.
   moment the previous take finished was the click heard only while Play was on (inaudible
   in Pause because `play_gain`=0). Swarm grains follow the live Trail gain so they mute
   with the same fade.
-- **Cont. Rec** (Continuous Recording): keeps re-triggering new recordings for as long as the
-  input signal stays above the threshold, instead of waiting for it to drop below
+- **Cont. Rec** (Continuous Recording): while Empty unlocked slots remain, keeps re-triggering
+  for as long as the input stays above the threshold (fills the pool). Once every unlocked
+  slot is occupied, Cont. Rec switches to **rising-edge** behaviour like normal Threshold —
+  otherwise Overwrite ON would immediately re-arm the just-finished take and Trails would
+  never reach audible playback.
 - **On/Off**: global bypass/enable for the capture system
 - **Manual trigger** (Rec button/Trig): same round-robin logic
 - **Hold** (Block 2): countdown up to max. 30s; any higher value logically snaps to infinite.
@@ -1078,7 +1105,9 @@ already existed on Cycle.
 ### 4.9 Display Concept
 
 SSD1309, 128×64 px. Includes: cycle display (name at bottom, value on top), Home Dashboard
-with Trail status (Level/Lock/Solo), input threshold VU meter with threshold marker,
+with Trail status (Level/Lock/Solo), input threshold VU meter (Settings **VU**: **Mon** =
+single column = max(L,R); **L/R** = two abutting fills inside the same 10×40 frame, no gap —
+threshold marker still spans the full width),
 CPU/SDRAM meter (top right, hideable via Settings, with an `L!` prefix while the Swarm load
 governor throttles), record slot indicator (`R1`…`R5` idle /
 `REC1`…`REC5` while armed/recording — same understated **Font_4x6** as the CPU meter),
@@ -1449,7 +1478,7 @@ Prompt for Cursor (historical — already implemented):
 Read ARCHITECTURE.md first, especially 4.1 (Block 3+5).
 
 Implement granular Swarm on trail_buffer via Capture SwarmTrailView snapshots.
-CycleRow Block 5: Size, Spread, Scan, Direction (Fwd/Rev/Rnd), Atmosphere
+CycleRow Block 5: Size, Spread, Scan, Scatter, Direction (Fwd/Rev/Rnd), Atmosphere
 (Blur↔Radiation + BBD slew).
 Pitch Swarm + temporary Engines A/B toggle (Swarm ON/OFF). Register in
 ParameterRegistry. Audio: dry×0.85 + selected engine wet.

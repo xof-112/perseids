@@ -78,6 +78,7 @@ const char* const kTimeUnitLabels[]     = {"Sec", "Clk"};
 const char* const kSettingsStubLabels[] = {"---"};
 // Life-Bar recording style (Settings → REC).
 const char* const kRecStyleLabels[] = {"PRS", "PLR", "CTR"};
+const char* const kVuModeLabels[]   = {"Mon", "L/R"};
 const char* const kSettingsBackLabels[] = {"<<"};
 // Settings default Trail Level: CountNum 0..20 → 0%..100% in 5% steps.
 const char* const kDefaultTrailLvlLabels[] = {
@@ -112,6 +113,7 @@ const uint16_t kSpectraIds[]
 const uint16_t kSwarmIds[] = {perseids::kSwarmSize,
                               perseids::kSwarmSpread,
                               perseids::kSwarmScan,
+                              perseids::kSwarmScatter,
                               perseids::kSwarmDirection,
                               perseids::kSwarmAtmosphere};
 
@@ -121,6 +123,7 @@ const uint16_t kSettingsIds[]
        perseids::kSettingsScale,
        perseids::kSettingsIntonation,
        perseids::kSettingsRecStyle,
+       perseids::kSettingsVuMode,
        perseids::kSettingsTrailLevel,
        perseids::kSettingsTrailCount,
        perseids::kSettingsBack};
@@ -359,11 +362,11 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
         {perseids::kSwarmSize,
          "Size",
          "SIZ",
-         0.f,
-         1.f,
-         0.45f,
+         4.f,
+         24.f,
+         16.f,
          &g_swarm_params.size,
-         DT::Unipolar,
+         DT::CountNum,
          false},
         {perseids::kSwarmSpread,
          "Spread",
@@ -381,6 +384,15 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          1.f,
          0.2f,
          &g_swarm_params.scan,
+         DT::Unipolar,
+         false},
+        {perseids::kSwarmScatter,
+         "Scatter",
+         "SCT",
+         0.f,
+         1.f,
+         0.75f,
+         &g_swarm_params.scatter,
          DT::Unipolar,
          false},
         {perseids::kSwarmDirection,
@@ -644,6 +656,19 @@ bool RegisterAllParams(perseids::ParameterRegistry& reg)
          nullptr,
          nullptr,
          kRecStyleLabels},
+        {perseids::kSettingsVuMode,
+         "VU meter",
+         "VU",
+         0.f,
+         1.f,
+         1.f, // default L/R
+         &g_capture_params.vu_mode,
+         DT::CountNum,
+         false,
+         false,
+         nullptr,
+         nullptr,
+         kVuModeLabels},
         {perseids::kSettingsTrailLevel,
          "Trail lvl",
          "LVL",
@@ -920,14 +945,14 @@ int main(void)
         perseids::CycleRow("Trails", kTrailsIds, 5),
         perseids::CycleRow("Time", kTimeIds, 4),
         perseids::CycleRow("Engines", kEnginesIds, 4),
-        perseids::CycleRow("Swarm", kSwarmIds, 5),
+        perseids::CycleRow("Swarm", kSwarmIds, 6),
         perseids::CycleRow("Spectra", kSpectraIds, 4),
         perseids::CycleRow("Pan Drift", kPanIds, 3),
         perseids::CycleRow("Resonator", kResoIds, 6),
         perseids::CycleRow("Reverb", kReverbIds, 4),
         perseids::CycleRow("Crossfade", kXfadeIds, 2),
         perseids::CycleRow("Filter", kFilterIds, 4),
-        perseids::CycleRow("Settings", kSettingsIds, 8),
+        perseids::CycleRow("Settings", kSettingsIds, 9),
     };
 
     perseids::CycleRow multi_row("Multi", kMultiIds, 5);

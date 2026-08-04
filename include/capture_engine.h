@@ -79,7 +79,14 @@ class CaptureEngine
     void ClearAll(); // Delete-all confirmed
 
     // Dashboard / Rec indicator (UI-safe snapshots).
-    float    InputLevel() const { return input_level_.load(std::memory_order_relaxed); }
+    float InputLevel() const
+    {
+        return input_level_.load(std::memory_order_relaxed);
+    }
+    float InputLevelR() const
+    {
+        return input_level_r_.load(std::memory_order_relaxed);
+    }
     uint8_t  RecTrailSlot() const
     {
         return static_cast<uint8_t>(rec_slot_display_.load(std::memory_order_relaxed));
@@ -139,6 +146,10 @@ class CaptureEngine
     void   ApplyGlobalPlayFade(bool want_play, size_t size);
     float  FilterInput(float x);
     bool   RecordSlotBusy() const;
+    // Drop a stale / inconsistent write or arming head so RecordSlotBusy cannot
+    // swallow every later Rec / Threshold / Cont.Rec trigger forever.
+    void   AbortRecordHeads();
+    void   SanitizeRecordHeads();
     float  CrossfadeGain(size_t trail, int count, bool soloed) const;
     void   AdvanceSpatial(size_t samples);
     void   ComputeTrailPan(size_t trail, float& pan_l, float& pan_r) const;
@@ -180,6 +191,7 @@ class CaptureEngine
     uint32_t              clear_seen_;
 
     std::atomic<float>   input_level_;
+    std::atomic<float>   input_level_r_;
     std::atomic<uint8_t> rec_slot_display_;
     std::atomic<bool>    rec_active_;
     std::atomic<float>   hold_remaining_norm_[kTrailCount];

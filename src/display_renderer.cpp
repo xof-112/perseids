@@ -1210,7 +1210,9 @@ void DisplayRenderer::DrawDashboard(bool                playing,
                                     uint8_t             rec_trail_slot,
                                     bool                rec_trig_active,
                                     const TrailSnapshot trails[kTrailCount],
-                                    float               input_level,
+                                    float               input_level_l,
+                                    float               input_level_r,
+                                    bool                vu_stereo,
                                     float               threshold,
                                     const TrailLifeUi   life[kTrailCount],
                                     size_t              active_trail_count,
@@ -1343,27 +1345,68 @@ void DisplayRenderer::DrawDashboard(bool                playing,
     display_.SetCursor(right_x, 0);
     display_.WriteString(play_str, Font_6x8, true);
 
-    // Input threshold VU (left)
+    // Input threshold VU (left) — Mono: one fill; L/R: two abutting columns,
+    // shared outer frame, no gap (same 10px footprint as before).
     constexpr int kVuX0 = 0;
     constexpr int kVuX1 = 9;
     constexpr int kVuY0 = 17;
     constexpr int kVuY1 = 56;
     display_.DrawRect(kVuX0, kVuY0, kVuX1, kVuY1, true, false);
 
-    const float lvl
-        = input_level < 0.f ? 0.f : (input_level > 1.f ? 1.f : input_level);
-    const float thr
-        = threshold < 0.f ? 0.f : (threshold > 1.f ? 1.f : threshold);
-    const int span = kVuY1 - kVuY0 - 2;
-    const int fill = static_cast<int>(lvl * static_cast<float>(span) + 0.5f);
-    if(fill > 0)
+    auto clamp01 = [](float x) -> float
     {
-        display_.DrawRect(kVuX0 + 1,
-                          kVuY1 - 1 - fill,
-                          kVuX1 - 1,
-                          kVuY1 - 1,
-                          true,
-                          true);
+        if(x < 0.f)
+            return 0.f;
+        if(x > 1.f)
+            return 1.f;
+        return x;
+    };
+    const float thr = clamp01(threshold);
+    const int   span = kVuY1 - kVuY0 - 2;
+
+    if(vu_stereo)
+    {
+        const int mid = (kVuX0 + kVuX1) / 2; // shared wall between L and R
+        const float lvl_l = clamp01(input_level_l);
+        const float lvl_r = clamp01(input_level_r);
+        const int fill_l
+            = static_cast<int>(lvl_l * static_cast<float>(span) + 0.5f);
+        const int fill_r
+            = static_cast<int>(lvl_r * static_cast<float>(span) + 0.5f);
+        if(fill_l > 0)
+        {
+            display_.DrawRect(kVuX0 + 1,
+                              kVuY1 - 1 - fill_l,
+                              mid,
+                              kVuY1 - 1,
+                              true,
+                              true);
+        }
+        if(fill_r > 0)
+        {
+            display_.DrawRect(mid + 1,
+                              kVuY1 - 1 - fill_r,
+                              kVuX1 - 1,
+                              kVuY1 - 1,
+                              true,
+                              true);
+        }
+    }
+    else
+    {
+        const float lvl = clamp01(
+            input_level_l > input_level_r ? input_level_l : input_level_r);
+        const int fill
+            = static_cast<int>(lvl * static_cast<float>(span) + 0.5f);
+        if(fill > 0)
+        {
+            display_.DrawRect(kVuX0 + 1,
+                              kVuY1 - 1 - fill,
+                              kVuX1 - 1,
+                              kVuY1 - 1,
+                              true,
+                              true);
+        }
     }
     const int thr_y
         = kVuY1 - 1 - static_cast<int>(thr * static_cast<float>(span) + 0.5f);

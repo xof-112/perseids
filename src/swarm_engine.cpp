@@ -30,11 +30,9 @@ inline float BipolarNorm(float v, float min_v, float max_v)
 }
 
 constexpr float kPi = 3.14159265358979323846f;
-// spawn_interval = grain_length × kSpawnDuty → ~1/kSpawnDuty overlapping
-// grains at steady state. Amp uses √duty (energy / uncorrelated sum), not
-// linear ×duty — linear made the cloud so thin that single Hann envelopes
-// poked through as episodic ticks even with continuous Trail audio.
-constexpr float kSpawnDuty = 0.15f;
+// Grain length is no longer on Size (Size = concurrent count). Fixed mid-cloud
+// duration keeps the wash dense when the pool is large.
+constexpr float kGrainDurationSec = 0.100f;
 
 // Blur is quantised to this grid before the envelope table is rebuilt, so a
 // full Atmosphere sweep costs a bounded number of rebuilds instead of one per
@@ -49,9 +47,11 @@ constexpr float kBlurSteps = 128.f;
 constexpr uint32_t kBlurRebuildMs = 16;
 
 // Governor thresholds on the fast CPU average (block rate).
-constexpr float kGovPanic   = 0.92f;
-constexpr float kGovEngage  = 0.85f;
-constexpr float kGovRelease = 0.70f;
+// Raised engage slightly: 32-grain clouds sit near ~50% on the heavy bench, so
+// the old 85% trip was fine — keep panic/release spacing so recovery is smooth.
+constexpr float kGovPanic   = 0.94f;
+constexpr float kGovEngage  = 0.88f;
+constexpr float kGovRelease = 0.72f;
 // Recover one grain every N blocks (~43 ms at 256/48k) so the cloud fills back
 // in smoothly and the indicator does not flicker around the threshold.
 constexpr uint32_t kGovRecoverBlocks = 8;
@@ -94,7 +94,7 @@ void SwarmEngine::BuildWindowTable(float blur)
     const uint32_t back = win_index_.load(std::memory_order_relaxed) ^ 1u;
     float* const   tab  = window_tab_[back];
 
-    const float powv = Lerp(1.f, 0.3f, blur);
+    const float powv = Lerp(1.f, 0.05f, blur);
     const float inv  = 1.f / static_cast<float>(kWindowLut);
     const bool  flat_mix = blur >= 0.001f;
 
@@ -109,9 +109,13 @@ void SwarmEngine::BuildWindowTable(float blur)
             continue;
         }
         // Blur: flatten toward a soft raised-sine plateau (edgeless cloud).
+        // Stronger Blur → lower exponent → longer near-unity plateau, softer
+        // attack/release; the curve is then eased further with blur² so the
+        // last third of the pot does the audible wash.
         const float s    = std::sin(kPi * x);
         const float flat = std::pow(s > 0.f ? s : 0.f, powv);
-        tab[i]           = Lerp(hann, flat, blur);
+        const float t    = blur * blur; // bias travel toward full wash
+        tab[i]           = Lerp(hann, flat, t);
     }
 
     win_index_.store(back, std::memory_order_release);
@@ -165,7 +169,9 @@ void SwarmEngine::UpdateGovernor(float cpu_load)
         gov_recover_ = 0;
     }
 
-    gov_active_.store(grain_cap_ < kMaxGrains, std::memory_order_relaxed);
+    // L! only when the governor is actually below the Size the user dialled.
+    const size_t want = WantedGrains();
+    gov_active_.store(grain_cap_ < want, std::memory_order_relaxed);
 }
 
 float SwarmEngine::PitchRatio() const
@@ -177,9 +183,17 @@ float SwarmEngine::PitchRatio() const
 
 float SwarmEngine::GrainDurationSec() const
 {
-    const float u = Clampf(params_.size, 0.f, 1.f);
-    // ~8 ms … ~180 ms
-    return Lerp(0.008f, 0.180f, u * u);
+    return kGrainDurationSec;
+}
+
+size_t SwarmEngine::WantedGrains() const
+{
+    int n = static_cast<int>(params_.size + 0.5f);
+    if(n < static_cast<int>(kSizeMin))
+        n = static_cast<int>(kSizeMin);
+    if(n > static_cast<int>(kSizeMax))
+        n = static_cast<int>(kSizeMax);
+    return static_cast<size_t>(n);
 }
 
 float SwarmEngine::NextRand()
@@ -220,10 +234,11 @@ float SwarmEngine::ReadInterp(size_t trail, float pos, float play_f) const
 void SwarmEngine::SpawnGrain(size_t trail,
                              float  play_f,
                              float  dur_n,
-                             float  pitch)
+                             float  pitch,
+                             size_t cap)
 {
-    size_t slot = grain_cap_;
-    for(size_t i = 0; i < grain_cap_; ++i)
+    size_t slot = cap;
+    for(size_t i = 0; i < cap; ++i)
     {
         if(!grains_[i].active)
         {
@@ -231,12 +246,16 @@ void SwarmEngine::SpawnGrain(size_t trail,
             break;
         }
     }
-    if(slot >= grain_cap_)
+    if(slot >= cap)
         return;
 
-    const float spread = Clampf(params_.spread, 0.f, 1.f);
-    const float jitter = (NextRand() - 0.5f) * 0.04f * play_f;
-    float       start  = scan_pos_[trail] + jitter;
+    const float spread  = Clampf(params_.spread, 0.f, 1.f);
+    const float scatter = Clampf(params_.scatter, 0.f, 1.f);
+    // Scatter 0: tight on the scan head (±4% residual so grains don't phase-lock).
+    // Scatter 1: ±½ loop around the scan head → wraps to full-buffer coverage.
+    // Scan still moves the centre of the spray; Scatter sets how wide it is.
+    const float width = Lerp(0.04f, 1.f, scatter) * play_f;
+    float       start = scan_pos_[trail] + (NextRand() - 0.5f) * width;
     while(start < 0.f)
         start += play_f;
     while(start >= play_f)
@@ -304,9 +323,13 @@ void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
     const bool  do_rad      = rad > 0.001f;
     const float rad_q       = 1.f + rad * 7.f;
 
-    const float dur_n          = GrainDurationSec() * sample_rate_;
-    const float spawn_interval = dur_n * kSpawnDuty;
-    const float pitch          = PitchRatio();
+    const float dur_n = GrainDurationSec() * sample_rate_;
+    // Fill the UI Size count (governor may hold grain_cap_ lower).
+    const size_t want = WantedGrains();
+    const size_t cap  = grain_cap_ < want ? grain_cap_ : want;
+    const float spawn_interval
+        = dur_n / static_cast<float>(cap > 0 ? cap : 1);
+    const float pitch = PitchRatio();
 
     // Per-Trail block constants. SwarmViews() is written once per block at the
     // end of Capture::Process, so none of this can change inside the loop.
@@ -366,7 +389,7 @@ void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
                 const size_t t = (rr + tries) % kTrailCount;
                 if(play_f[t] >= 32.f && tgain[t] > 1e-4f)
                 {
-                    SpawnGrain(t, play_f[t], dur_n, pitch);
+                    SpawnGrain(t, play_f[t], dur_n, pitch, cap);
                     rr = (t + 1) % kTrailCount;
                     break;
                 }

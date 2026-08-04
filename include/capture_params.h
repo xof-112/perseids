@@ -32,6 +32,7 @@ enum ParamId : uint16_t
     kSettingsTrailLevel = 131, // default Trail Level, CountNum 0..20 → 0%..100% / 5%
     kSettingsTrailCount = 132, // default active Trail count, CountNum 1..5
     kSettingsBack       = 133, // leave Settings → Multi on Settings gateway
+    kSettingsVuMode     = 134, // 0 Mono · 1 L/R stereo input meter
 
     // Stub — owned by CaptureEngine, not yet on a CycleRow.
     kAudioRouting = 100,
@@ -57,6 +58,7 @@ struct CaptureParamValues
     float trail_lvl  = 10.f;  // Settings default Trail Level: 0..20 → 0%..100% in 5%
     float trail_cnt  = 3.f;   // Settings default active Trails: 1..5 (boot / Reset)
     float settings_back = 0.f; // display-only gateway; encoder turn leaves Settings
+    float vu_mode    = 1.f;   // 0 Mono · 1 L/R (dashboard input meter)
     float routing    = 0.f;   // 0 Stereo, 1 Sidechain
 };
 

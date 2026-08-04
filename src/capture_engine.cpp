@@ -61,6 +61,7 @@ void CaptureEngine::Init(float sample_rate)
     clear_count_.store(0, std::memory_order_relaxed);
     clear_seen_ = 0;
     input_level_.store(0.f, std::memory_order_relaxed);
+    input_level_r_.store(0.f, std::memory_order_relaxed);
     rec_slot_display_.store(1, std::memory_order_relaxed);
     rec_active_.store(false, std::memory_order_relaxed);
 
@@ -199,6 +200,131 @@ bool CaptureEngine::RecordSlotBusy() const
 {
     return active_record_index_ < kTrailCount
            || arming_record_index_ < kTrailCount;
+}
+
+void CaptureEngine::AbortRecordHeads()
+{
+    if(active_record_index_ < kTrailCount)
+    {
+        TrailVoice& v = voices_[active_record_index_];
+        if(v.state == TrailState::Recording)
+        {
+            // Keep a partial take if it is already long enough to play.
+            if(v.write_pos >= 64)
+            {
+                v.length = v.write_pos < v.length ? v.write_pos : v.length;
+                if(v.length >= 64)
+                {
+                    v.read_pos  = 0;
+                    v.state     = TrailState::Playing;
+                    v.fade_gain = 1.f;
+                    v.fade_inc  = 0.f;
+                    BeginHold(active_record_index_);
+                }
+                else
+                {
+                    v.state  = TrailState::Empty;
+                    v.length = 0;
+                }
+            }
+            else
+            {
+                v.state  = TrailState::Empty;
+                v.length = 0;
+            }
+        }
+        active_record_index_ = kTrailCount;
+    }
+
+    if(arming_record_index_ < kTrailCount)
+    {
+        TrailVoice& v = voices_[arming_record_index_];
+        if(v.state == TrailState::ArmingRecord)
+        {
+            // Soft-replace was interrupted — restore playback if the buffer
+            // is still intact, otherwise drop the slot.
+            if(v.length >= 2)
+            {
+                v.state     = TrailState::Playing;
+                v.fade_inc  = 0.f;
+                if(v.fade_gain < 0.05f)
+                    v.fade_gain = 1.f;
+            }
+            else
+            {
+                v.state     = TrailState::Empty;
+                v.length    = 0;
+                v.fade_gain = 0.f;
+                v.fade_inc  = 0.f;
+            }
+        }
+        arming_record_index_ = kTrailCount;
+    }
+
+    rec_active_.store(false, std::memory_order_relaxed);
+}
+
+void CaptureEngine::SanitizeRecordHeads()
+{
+    // Claimed index without matching state → drop the claim (busy forever).
+    if(active_record_index_ < kTrailCount
+       && voices_[active_record_index_].state != TrailState::Recording)
+    {
+        active_record_index_ = kTrailCount;
+    }
+    if(arming_record_index_ < kTrailCount
+       && voices_[arming_record_index_].state != TrailState::ArmingRecord)
+    {
+        arming_record_index_ = kTrailCount;
+    }
+
+    // Orphan ArmingRecord (state set, claim lost) — reclaim or demote.
+    for(size_t i = 0; i < kTrailCount; ++i)
+    {
+        if(voices_[i].state != TrailState::ArmingRecord)
+            continue;
+        if(arming_record_index_ == i)
+            continue;
+        if(arming_record_index_ >= kTrailCount)
+            arming_record_index_ = i;
+        else if(voices_[i].length >= 2)
+        {
+            voices_[i].state    = TrailState::Playing;
+            voices_[i].fade_inc = 0.f;
+            if(voices_[i].fade_gain < 0.05f)
+                voices_[i].fade_gain = 1.f;
+        }
+        else
+        {
+            voices_[i].state     = TrailState::Empty;
+            voices_[i].length    = 0;
+            voices_[i].fade_gain = 0.f;
+            voices_[i].fade_inc  = 0.f;
+        }
+    }
+
+    // Orphan Recording without write-head claim — finish or drop.
+    for(size_t i = 0; i < kTrailCount; ++i)
+    {
+        if(voices_[i].state != TrailState::Recording)
+            continue;
+        if(active_record_index_ == i)
+            continue;
+        if(active_record_index_ >= kTrailCount)
+            active_record_index_ = i;
+        else
+        {
+            // Second write head is illegal — demote the orphan.
+            voices_[i].state  = TrailState::Empty;
+            voices_[i].length = 0;
+        }
+    }
+
+    if(active_record_index_ >= kTrailCount
+       && arming_record_index_ >= kTrailCount)
+    {
+        rec_active_.store(false, std::memory_order_relaxed);
+    }
 }
 
 void CaptureEngine::BeginRecordWrites(size_t index)
@@ -575,16 +701,19 @@ void CaptureEngine::Process(const float* in_l,
     const bool cont_rec   = ToggleOn(params_.cont_rec);
     const float thresh    = Clampf(params_.threshold, 0.f, 1.f);
 
-    // Manual Rec/Trig
+    // Heal inconsistent write/arming claims before anything can see Busy.
+    SanitizeRecordHeads();
+
+    // Manual Rec/Trig — consume after a successful arm attempt (below), so a
+    // stuck Busy head cannot silently eat the press forever.
     const uint32_t trig_now = manual_trig_count_.load(std::memory_order_relaxed);
-    const bool     manual   = (trig_now != manual_trig_seen_);
-    if(manual)
-        manual_trig_seen_ = trig_now;
+    const bool     manual_pending = (trig_now != manual_trig_seen_);
 
     // Jack presence / mono weights: block rate, never per sample.
     record_source_.UpdateBlock(in_l, in_r, size);
 
-    float peak_block = 0.f;
+    float peak_block_l = 0.f;
+    float peak_block_r = 0.f;
 
     // BBD replace-slew coefficient (~60 ms τ) — constant for the block.
     const float replace_coeff
@@ -603,6 +732,30 @@ void CaptureEngine::Process(const float* in_l,
         }
     }
     const int count = ActiveCount();
+
+    // Cont. Rec fill-mode: any unlocked Empty inside Count?
+    bool any_empty_unlocked = false;
+    for(int i = 0; i < count; ++i)
+    {
+        const size_t idx = static_cast<size_t>(i);
+        if(mixer_[idx].locked)
+            continue;
+        if(voices_[idx].state == TrailState::Empty)
+        {
+            any_empty_unlocked = true;
+            break;
+        }
+    }
+
+    // Rec button: always break a stuck/busy head so a press can land.
+    bool manual = false;
+    if(manual_pending)
+    {
+        if(RecordSlotBusy())
+            AbortRecordHeads();
+        manual = true;
+        manual_trig_seen_ = trig_now;
+    }
 
     // Cache Crossfade + Pan gains for this block (same VCA stage as Trail Level).
     float xfade_g[kTrailCount];
@@ -633,23 +786,36 @@ void CaptureEngine::Process(const float* in_l,
         else
             envelope_follower_ += kRel * (abs_in - envelope_follower_);
 
-        if(abs_in > peak_block)
-            peak_block = abs_in;
+        const float abs_l = in_l[n] >= 0.f ? in_l[n] : -in_l[n];
+        const float abs_r = in_r[n] >= 0.f ? in_r[n] : -in_r[n];
+        if(abs_l > peak_block_l)
+            peak_block_l = abs_l;
+        if(abs_r > peak_block_r)
+            peak_block_r = abs_r;
 
         const bool above = envelope_follower_ >= thresh;
         bool       trigger = false;
 
         if(capture_on)
         {
-            // Never arm a new take while one is writing or soft-replacing.
+            // Never arm a new take while one is writing or soft-replacing —
+            // unless this block's Rec press already cleared the head above.
             if(!RecordSlotBusy())
             {
                 if(manual && n == 0)
                     trigger = true;
                 else if(cont_rec)
                 {
-                    // Re-trigger while above without waiting to drop below.
-                    if(above)
+                    // Fill Empty slots while above threshold. Once every unlocked
+                    // slot is occupied, Cont. Rec waits for a rising edge —
+                    // otherwise Overwrite ON immediately re-arms the just-
+                    // finished take and Trails never reach audible playback.
+                    if(any_empty_unlocked)
+                    {
+                        if(above)
+                            trigger = true;
+                    }
+                    else if(above && !was_above_)
                         trigger = true;
                 }
                 else
@@ -840,8 +1006,11 @@ void CaptureEngine::Process(const float* in_l,
     }
 
     // Mild display boost — avoid noise floor filling the VU on a quiet bench.
-    const float vu = Clampf(peak_block * 1.5f, 0.f, 1.f);
-    input_level_.store(vu, std::memory_order_relaxed);
+    // L/R peaks feed the stereo meter; Mono mode draws max(L,R) at the UI.
+    input_level_.store(Clampf(peak_block_l * 1.5f, 0.f, 1.f),
+                       std::memory_order_relaxed);
+    input_level_r_.store(Clampf(peak_block_r * 1.5f, 0.f, 1.f),
+                         std::memory_order_relaxed);
 
     // Publish per-trail life bars for the dashboard (FIN / Hold / FOUT).
     for(size_t i = 0; i < kTrailCount; ++i)

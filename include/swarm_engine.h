@@ -16,9 +16,12 @@ namespace perseids
 class SwarmEngine
 {
   public:
-    static constexpr size_t kMaxGrains = 16;
+    static constexpr size_t kMaxGrains = 24;
     // Load-governor floor — below this the cloud thins out audibly.
-    static constexpr size_t kMinGrains = 5;
+    static constexpr size_t kMinGrains = 6;
+    // Size CountNum range (UI) — governor may hold the live cap lower.
+    static constexpr size_t kSizeMin = 4;
+    static constexpr size_t kSizeMax = kMaxGrains;
     static constexpr size_t kTrailCount = CaptureEngine::kTrailCount;
     // Grain-envelope table. Linear interpolation over 1024 points keeps the
     // error near -110 dB, so the tabulated window is inaudible vs. the direct
@@ -62,8 +65,13 @@ class SwarmEngine
 
     float PitchRatio() const;
     float GrainDurationSec() const;
+    size_t WantedGrains() const;
     float ReadInterp(size_t trail, float pos, float play_f) const;
-    void  SpawnGrain(size_t trail, float play_f, float dur_n, float pitch);
+    void  SpawnGrain(size_t trail,
+                     float  play_f,
+                     float  dur_n,
+                     float  pitch,
+                     size_t cap);
     float NextRand();
     void  BuildWindowTable(float blur);
 
