@@ -14,22 +14,22 @@ independently designed, not affiliated.
 
 ---
 
-## Status — Phases 1–9 in · bench line `dev-phase4v002`
+## Status — Phases 1–9 in · bench line `dev-phase5v004`
 
 Phase 9 (**Pan Drift** + **Crossfade**) is complete, together with post-9 polish on the Home
-life bar, Multi → Settings defaults, and wet-bus balance. The newest bench line is **not** a
-phase-9 tag: it is **Phase 4 follow-up work** on the Spectra analysis stage (see below), which
-is why it carries a phase-4 number.
+life bar, Multi → Settings defaults, and wet-bus balance. The newest bench line is **Phase 5
+follow-up** on the Swarm engine (`dev-phase5v004`); the Spectra analysis rework sits one tag
+earlier as `dev-phase4v002`.
 
 | What’s in | Notes |
 |-----------|--------|
 | Capture (SDRAM rings, THR / CRE / OVR, Hold · FIN · FOUT) | Working |
-| Home dashboard (VU, life bars, REC header, CPU / `L!`) | Working |
+| Home dashboard (VU Mono or L/R, life bars, REC header, CPU / `L!`) | Working |
 | Life-Bar **REC** styles | **PLR** (default) · **PRS** · **CTR** — Settings |
 | Spectra · Swarm · Blend · Resonator · Reverb · Filter | Working |
 | Pan Drift · Crossfade (focus ticks on Home) | Working |
 | Multi (D/W · M1 · M2 · TU · SET) | Cycle short / Cycle-hold+Multi steps the list |
-| Settings | CPU · RAM · SCL · INT · **REC** · **LVL** · **#T** |
+| Settings | CPU · RAM · SCL · INT · **REC** · **VU** · **LVL** · **#T** |
 | Default Trail level / count | LVL 0…100% @ 5% · #T 1…5 (boot 3 / 50%) |
 | Daisy **BOOT_SRAM** | App in QSPI → AXI-SRAM; room for `-O3` |
 
@@ -42,10 +42,47 @@ Full roadmap & DSP contracts: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 
 ---
 
+## Phase 5 rework — `dev-phase5v004` (2026-08-04)
+
+Phase 5 built the Swarm engine; this session went back for density, spray control, Blur
+character, plus a stuck record-head fix and a stereo input meter.
+
+### Swarm: Size = grain count, Scatter, stronger Blur
+
+- **Size** is now CountNum **4…24** (boot 16) — the concurrent grain pool, not a %-duration.
+  Grain length is fixed ~100 ms; spawn rate = length / N so the dialled count is the steady
+  density. Cap stays at 24: above that the CPU went critical on the heavy bench. Governor
+  floor **6**, engage/panic **88% / 94%**; `L!` only while the live cap sits below Size.
+- **Scatter** (`SCT`) is new: 0% = tight on the scan head (±4% jitter), 100% = ±½ loop around
+  Scan → full-buffer coverage when wrapped. The old ±2% jitter had parked every grain on the
+  same spot, so a quiet region (or a long take’s fade-out tail) could silence the whole cloud.
+- **Blur** (Atmosphere left) only softens grain envelopes — no reverb, no pitch shift. The
+  plateau is stronger now (pow floor 0.05, mix eased with blur²) so the last third of the pot
+  does an audible wash. For “washed out” also raise Scatter / Size; Reverb is a different block.
+
+Cycle list: SIZ · SPR · SCN · SCT · DIR · ATM.
+
+### Cont. Rec + stuck record head
+
+Cont. Rec still fills **Empty** unlocked slots while the signal is above threshold; once the
+pool is full it switches to rising-edge behaviour so Overwrite ON cannot immediately re-arm
+the take that just finished.
+
+Separately: if `RecordSlotBusy()` stayed true (orphaned Arming/Recording claim), every later
+Rec / Threshold / Cont. Rec press was eaten with no feedback. Rec now **force-aborts** a stuck
+head before arming; `SanitizeRecordHeads` runs each block to drop index/state mismatches.
+
+### Stereo input VU
+
+Settings → **VU**: **Mon** (single column = max L/R) or **L/R** (two abutting fills in the
+same 10×40 frame, no gap; threshold marker still spans the full width). Default **L/R**.
+
+---
+
 ## Phase 4 rework — `dev-phase4v002` (2026-08-03)
 
-Phase 4 built the Spectra engine; this session went back and fixed its **analysis** stage,
-plus one input-path bug and the cycle menus.
+Phase 4 built the Spectra engine; that session fixed its **analysis** stage, plus one
+input-path bug and the cycle menus.
 
 ### Spectra: FFT 512 → 2048
 
@@ -139,7 +176,7 @@ See `ARCHITECTURE.md` §2a / Block 4.
 ```bash
 git clone https://github.com/xof-112/perseids.git
 cd perseids
-# optional: git checkout <tag>   # e.g. dev-phase4v002
+# optional: git checkout <tag>   # e.g. dev-phase5v004
 
 git clone --recurse-submodules https://github.com/electro-smith/libDaisy.git lib/libDaisy
 git clone --recurse-submodules https://github.com/electro-smith/DaisySP.git lib/DaisySP
@@ -155,8 +192,8 @@ pio run
 pio run --target upload
 ```
 
-Current bench build at `-O3`: code **38.2%** of the 480 KB AXI-SRAM, `.data`/`.bss`
-**58.4%** of the 128 KB DTCM (the tighter budget from here on).
+Current bench build at `-O3`: code **38.7%** of the 480 KB AXI-SRAM, `.data`/`.bss`
+**58.7%** of the 128 KB DTCM (the tighter budget from here on).
 
 ---
 
