@@ -1,0 +1,10 @@
+---
+description: Perseids Firmware Architecture
+alwaysApply: true
+---
+Read ARCHITECTURE.md in the project root before every code suggestion. Respect the hardware
+constraints of the Electrosmith Daisy Seed and the C++/DSP guardrails in Section 2.
+Firmware platform code (main.cpp, drivers, the Daisy platform layer) is embedded ARM
+Cortex-M7 code (libDaisy/DaisySP). Shared core code must additionally compile as portable
+standard C++ for the desktop build — see vcv-port.md. Code under vcv/ and tools/host/ is
+desktop C++ by design.
