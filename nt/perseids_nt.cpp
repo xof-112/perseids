@@ -224,7 +224,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.17"
+#define PERSEIDS_NT_VERSION "0.18"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -374,8 +374,9 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     P_MOD_SLOT_SYNC("5") P_MOD_SLOT_SYNC("6") P_MOD_SLOT_SYNC("7") P_MOD_SLOT_SYNC("8")
     P_MOD_SLOT_SYNC("9") P_MOD_SLOT_SYNC("10") P_MOD_SLOT_SYNC("11") P_MOD_SLOT_SYNC("12")
 
-    // Mod overview: one confirm resets every slot (dest Off, amount and
-    // offset 0, sync Free, mode Around base).
+    // Mod overview: one confirm resets every slot to its defaults (input
+    // None, dest None, amount and offset 0, LFO rate 0.25 Hz, sync Free,
+    // mode Around base).
     {.name = "Reset all mods", .min = 0, .max = 1, .def = 0, .unit = kNT_unitConfirm, .scaling = 0, .enumStrings = nullptr},
     // Around base: the stored value is the centre, the slot swings around it
     // (dest = base + contrib × travel). Override: the slot ignores the stored
@@ -612,6 +613,7 @@ struct PerseidsAlgorithm : public _NT_algorithm
     int16_t  mod_armed[kNumModSlots][kArmFields];
     uint64_t mod_pending_since[kNumModSlots]; // 0 = nothing pending
     volatile bool mod_arm_now;                // own screen used: arm at once
+    volatile bool mod_reset_ui;               // after Reset all mods
 
     // Clock in: edge detector and period (samples), for synced mod LFOs.
     bool     clock_gate;
@@ -940,6 +942,7 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     }
     a->mod_active  = 0;
     a->mod_arm_now = true; // the stored settings count from the start
+    a->mod_reset_ui = false;
     a->mod_applied = false;
     return a;
 }
@@ -1196,6 +1199,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
     {
         for(int m = 0; m < kNumModSlots; ++m)
         {
+            // Everything back to its default: input, destination, amount,
+            // offset, LFO rate, sync, mode.
+            SetParamAudio(a, ModParam(m, kModIn), 0);
+            SetParamAudio(a, ModParam(m, kModRate), kParameterDefs[ModParam(m, kModRate)].def);
             SetParamAudio(a, ModParam(m, kModDest), 0);
             SetParamAudio(a, ModParam(m, kModAmount), 0);
             SetParamAudio(a, ModParam(m, kModOffset), 0);
@@ -1203,7 +1210,8 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
             SetParamAudio(a, ModModeParam(m), 0);
         }
         SetParamAudio(a, kParamModReset, 0);
-        a->mod_arm_now = true; // a reset acts at once
+        a->mod_arm_now   = true; // a reset acts at once
+        a->mod_reset_ui  = true; // draw(): rebuild pages, host redraws the menus
     }
 
     Engines&  e         = *a->eng;
@@ -2029,7 +2037,11 @@ bool draw(_NT_algorithm* self)
     if(!a->v)
         return false;
     UpdateModMarks(a);
-    if(BuildModOverview(a))
+    const bool reset = a->mod_reset_ui;
+    a->mod_reset_ui  = false;
+    // After a reset the host is told even if the page looks the same, so
+    // the menus show the cleared slots (nt_emu redraws on this).
+    if(BuildModOverview(a) || reset)
         NT_updateParameterPages(NT_algorithmIndex(a));
     const Engines& e = *a->eng;
     char           buff[24];

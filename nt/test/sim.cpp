@@ -489,6 +489,28 @@ std::string g_out = "test/out";
 int main(int argc, char** argv)
 {
     mkdir(g_out.c_str(), 0755);
+    // --list: parameter pages and mod destinations as tab-separated lines,
+    // for the appendix of the guide (docs/appendix.py).
+    if(argc > 1 && !std::strcmp(argv[1], "--list"))
+    {
+        Inst L = Make(10, g_params);
+        g_alg  = L.a;
+        const _NT_parameterPages* pp = L.a->parameterPages;
+        for(uint32_t i = 0; i < pp->numPages; ++i)
+        {
+            const _NT_parameterPage& pg = pp->pages[i];
+            if(i == static_cast<uint32_t>(kModOverviewPage))
+            {
+                printf("P\t%s\t(Reset all mods, dann je aktivem Slot: Mod n dest, Mod n amount)\n", pg.name);
+                continue;
+            }
+            for(int k = 0; k < pg.numParams; ++k)
+                printf("P\t%s\t%s\n", pg.name, L.a->parameters[pg.params[k]].name);
+        }
+        for(int k = 0; k < kNumModTargets; ++k)
+            printf("T\t%d\t%s\n", k, kModTargetNames[k]);
+        return 0;
+    }
 
 
 
@@ -1212,16 +1234,19 @@ int main(int argc, char** argv)
         SetP(I, ModParam(5, kModDest), Dest(kParamScan));
         SetP(I, ModParam(5, kModAmount), 30);
         SetP(I, ModSyncParam(5), 3);
+        SetP(I, ModParam(5, kModIn), 4);
+        SetP(I, ModParam(5, kModRate), 900);
         SetP(I, kParamModReset, 1);
         Run(I, s, 24);
         bool clean = I.v[kParamModReset] == 0;
         for(int m = 0; m < kNumModSlots; ++m)
             clean = clean && I.v[ModParam(m, kModDest)] == 0 && I.v[ModParam(m, kModAmount)] == 0
+                    && I.v[ModParam(m, kModIn)] == 0 && I.v[ModParam(m, kModRate)] == 25
                     && I.v[ModParam(m, kModOffset)] == 0 && I.v[ModSyncParam(m)] == 0 && I.v[ModModeParam(m)] == 0;
         draw(I.a);
         CHECK(clean && I.a->mod_active == 0 && std::fabs(I.a->blend - 0.8f) < 0.01f
                   && !std::strcmp(I.a->parameters[kParamBlend].name, "Blend"),
-              "Reset all mods: every slot off, Blend back to its 80 %%, name '%s'", I.a->parameters[kParamBlend].name);
+              "Reset all mods: every slot back to defaults (input, dest, amount, offset, rate, sync, mode), Blend 80 %%, name '%s'", I.a->parameters[kParamBlend].name);
         // Free rate, restarted by the clock: Rst x1 and Rst x2 at a 2 Hz clock,
         // own rate 0.5 Hz (phase grows 1/16 per quarter pulse).
         SetP(I, ModSyncParam(0), kModSyncLocked + 6); // Rst x1
