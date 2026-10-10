@@ -1239,12 +1239,13 @@ int main(int argc, char** argv)
         // Menu marks: the modulated parameter's name gets " ~", back after a reset.
         g_paramDefUpdates = 0;
         draw(I.a);
-        CHECK(!std::strcmp(I.a->parameters[kParamBlend].name, "Blend ~") && g_paramDefUpdates == 2
-                  && !std::strcmp(I.a->parameters[ModParam(0, kModAmount)].name, "Mod 1 Blend"),
-              "menu mark: '%s' while modulated, slot amount named '%s' (%d updates)", I.a->parameters[kParamBlend].name,
-              I.a->parameters[ModParam(0, kModAmount)].name, g_paramDefUpdates);
-        draw(I.a);
-        CHECK(g_paramDefUpdates == 2, "menu mark: no further updates while nothing changes");
+        char mk[64], am[64];
+        parameterString(I.a, kParamBlend, I.v[kParamBlend], mk);
+        parameterString(I.a, ModParam(0, kModAmount), I.v[ModParam(0, kModAmount)], am);
+        CHECK(!std::strcmp(mk, "80% ~") && I.a->params[kParamBlend].unit == kNT_unitHasStrings
+                  && !std::strcmp(I.a->parameters[ModParam(0, kModAmount)].name, "Mod 1") && !std::strncmp(am, "Blend 0 %", 9),
+              "menu mark in the value: Blend '%s', slot line 'Mod 1  %s'", mk, am);
+        CHECK(g_paramDefUpdates == 0, "no parameter renames needed (%d)", g_paramDefUpdates);
         SetP(I, ModParam(5, kModDest), Dest(kParamScan));
         SetP(I, ModParam(5, kModAmount), 30);
         SetP(I, ModSyncParam(5), 3);
@@ -1258,9 +1259,9 @@ int main(int argc, char** argv)
                     && I.v[ModParam(m, kModIn)] == 0 && I.v[ModParam(m, kModRate)] == 25
                     && I.v[ModParam(m, kModOffset)] == 0 && I.v[ModSyncParam(m)] == 0 && I.v[ModModeParam(m)] == 0;
         draw(I.a);
-        CHECK(clean && I.a->mod_active == 0 && std::fabs(I.a->blend - 0.8f) < 0.01f
-                  && !std::strcmp(I.a->parameters[kParamBlend].name, "Blend"),
-              "Reset all mods: every slot back to defaults (input, dest, amount, offset, rate, sync, mode), Blend 80 %%, name '%s'", I.a->parameters[kParamBlend].name);
+        parameterString(I.a, kParamBlend, I.v[kParamBlend], mk);
+        CHECK(clean && I.a->mod_active == 0 && std::fabs(I.a->blend - 0.8f) < 0.01f && !std::strcmp(mk, "80%"),
+              "Reset all mods: every slot back to defaults (input, dest, amount, offset, rate, sync, mode), Blend reads '%s'", mk);
         // Free rate, restarted by the clock: Rst x1 and Rst x2 at a 2 Hz clock,
         // own rate 0.5 Hz (phase grows 1/16 per quarter pulse).
         SetP(I, ModSyncParam(0), kModSyncLocked + 6); // Rst x1
@@ -1310,14 +1311,37 @@ int main(int argc, char** argv)
         const bool ok = pg.numParams == 3 && pg.params[1] == ModParam(0, kModAmount) && pg.params[2] == ModParam(3, kModAmount);
         char line[64];
         parameterString(I.a, ModParam(3, kModAmount), 0, line);
-        Run(I, Signal{std::vector<float>(2048, 0.f), std::vector<float>(2048, 0.f)}, 24); // names follow in step()
         const std::string nm = I.a->parameters[ModParam(3, kModAmount)].name;
-        CHECK(ok && g_pageUpdates == 2 && nm == std::string("Mod 4 ") + kModTargetNames[12] && !std::strcmp(line, "0 %"),
+        CHECK(ok && g_pageUpdates == 2 && nm == "Mod 4" && !std::strcmp(line, (std::string(kModTargetNames[12]) + " 0 %").c_str()),
               "Mod overview: one line per active slot ('%s  %s'), follows the menu at once (%d updates)", nm.c_str(), line,
               g_pageUpdates);
         draw(I.a);
         draw(I.a);
         CHECK(g_pageUpdates == 2, "Mod overview: no host update while nothing changes");
+        g_alg = A.a;
+    }
+
+    // --- value texts of the mod targets (they all go through parameterString) --------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        struct C { int p, v; const char* want; };
+        const C cs[] = {{kParamBlend, 37, "37%"},        {kParamPitchSpectra, 0, "+0 st"}, {kParamPitchSwarm, -5, "-5 st"},
+                        {kParamOutLevel, 12, "+12 dB"},   {kParamBuffer, 20, "2.0 s"},      {kParamDirection, 2, "Rnd"},
+                        {kParamCount, 3, "3"},            {kParamHold, kHoldInf, "INF"},    {ModParam(0, kModRate), 25, "0.25 Hz"},
+                        {kParamContRec, 1, "On"}};
+        bool ok = true;
+        char b[64];
+        for(const C& c : cs)
+        {
+            parameterString(I.a, c.p, c.v, b);
+            if(std::strcmp(b, c.want))
+            {
+                printf("     %s: '%s' (want '%s')\n", kParameterDefs[c.p].name, b, c.want);
+                ok = false;
+            }
+        }
+        CHECK(ok, "mod targets show their usual value texts (%%, st, dB, s, Hz, enums)");
         g_alg = A.a;
     }
 
@@ -1339,7 +1363,7 @@ int main(int argc, char** argv)
         Run(I, s, 24);
         Run(I, s, 24);
         parameterString(I.a, ModParam(2, kModAmount), 40, b2);
-        CHECK(!std::strncmp(b1, "40 % > ", 7)
+        CHECK(!std::strncmp(b1, "Blend 40 % > ", 13)
                   && std::strcmp(b1, b2) != 0,
               "amount of a working slot shows its output live: '%s' … '%s'", b1, b2);
         g_alg = A.a;
@@ -1465,9 +1489,10 @@ int main(int argc, char** argv)
             Run(I, s, 24); // 2 s
         CHECK(I.a->mod_armed[0][kArmDest] == 11 && I.a->mod_armed[0][kArmSync] == 3 && I.a->mod_active == 1,
               "slot settings take effect without parameterChanged() too (after the pause)");
-        CHECK(I.a->parameterPages->pages[OverviewPageIndex(I.a)].numParams == 2
-                  && !std::strcmp(I.a->parameters[kModTargets[11]].name, (std::string(kModTargetNames[11]) + " ~").c_str()),
-              "… and the Mod overview and the menu mark follow (%s)", I.a->parameters[kModTargets[11]].name);
+        char mk2[64];
+        parameterString(I.a, kModTargets[11], I.v[kModTargets[11]], mk2);
+        CHECK(I.a->parameterPages->pages[OverviewPageIndex(I.a)].numParams == 2 && std::strstr(mk2, " ~"),
+              "… and the Mod overview and the menu mark follow (%s %s)", kModTargetNames[11], mk2);
         // Random steps at /4 on a 4 Hz clock: one new value every 4 pulses (1 s).
         const size_t       len = 48000 * 5;
         std::vector<float> ck(len, 0.f);
@@ -1609,7 +1634,12 @@ int main(int argc, char** argv)
         // Destination list: every entry is a real parameter with a name.
         bool names_ok = true;
         for(int k = 1; k < kNumModTargets; ++k)
-            names_ok = names_ok && !std::strcmp(kModTargetNames[k], kParameterDefs[kModTargets[k]].name);
+        {
+            bool amount = false; // "Mod n amount" in the list, the parameter itself is just "Mod n"
+            for(int m = 0; m < kNumModSlots; ++m)
+                amount = amount || kModTargets[k] == ModParam(m, kModAmount);
+            names_ok = names_ok && (amount || !std::strcmp(kModTargetNames[k], kParameterDefs[kModTargets[k]].name));
+        }
         CHECK(names_ok, "mod destination names match the parameter names (%d targets)", kNumModTargets - 1);
 
         // Display with MOD indicator.

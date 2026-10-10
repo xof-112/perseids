@@ -246,7 +246,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.27"
+#define PERSEIDS_NT_VERSION "0.28"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -355,7 +355,7 @@ const _NT_parameter kParameterDefs[kNumParams] = {
 #define P_MOD_SLOT(n)                                                  \
     NT_PARAMETER_CV_INPUT("Mod " n " in", 0, 0)                        \
     P_ENUM("Mod " n " dest", kNumModTargets - 1, 0, kModTargetNames)   \
-    P_NUM("Mod " n " amount", -100, 100, 0, kNT_unitHasStrings, 0)     \
+    P_NUM("Mod " n, -100, 100, 0, kNT_unitHasStrings, 0) /* amount */  \
     P_NUM("Mod " n " offset", -100, 100, 0, kNT_unitPercent, 0)        \
     P_NUM("Mod " n " LFO rate", 1, 2000, 25, kNT_unitHz, kNT_scaling100)
     P_MOD_SLOT("1") P_MOD_SLOT("2") P_MOD_SLOT("3") P_MOD_SLOT("4")
@@ -908,6 +908,15 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->params[kParamBuffer].max = static_cast<int16_t>(seconds * 10);
     if(a->params[kParamBuffer].def > a->params[kParamBuffer].max)
         a->params[kParamBuffer].def = a->params[kParamBuffer].max;
+    // Every mod target shows its value through parameterString(), so a
+    // modulated parameter can carry " ~" right in its value (all hosts draw
+    // that; renamed parameters are not shown by nt_emu).
+    for(int k = 1; k < kNumModTargets; ++k)
+    {
+        _NT_parameter& d = a->params[kModTargets[k]];
+        if(d.unit != kNT_unitHasStrings && d.unit != kNT_unitConfirm)
+            d.unit = kNT_unitHasStrings;
+    }
     a->parameters     = a->params;
     a->pages_desc.numPages = kNumPages;
     a->pages_desc.pages    = a->pages;
@@ -1850,18 +1859,85 @@ void setupUi(_NT_algorithm* self, _NT_float3& pots)
         pots[k] = PotNorm(a, k);
 }
 
+// The value in the parameter's own unit, as the host would show it.
+int FormatParam(const _NT_parameter& d, int v, char* buff)
+{
+    const int div = d.scaling == kNT_scaling10 ? 10 : (d.scaling == kNT_scaling100 ? 100 : (d.scaling == kNT_scaling1000 ? 1000 : 1));
+    int       n   = 0;
+    if(d.unit == kNT_unitEnum && d.enumStrings)
+    {
+        std::strcpy(buff, d.enumStrings[v]);
+        return static_cast<int>(std::strlen(buff));
+    }
+    const bool sign = d.unit == kNT_unitSemitones || d.unit == kNT_unitDb || d.unit == kNT_unitCents;
+    int        iv   = v;
+    if(iv < 0)
+    {
+        buff[n++] = '-';
+        iv        = -iv;
+    }
+    else if(sign)
+        buff[n++] = '+';
+    n += NT_intToString(buff + n, iv / div);
+    if(div > 1)
+    {
+        buff[n++] = '.';
+        int frac = iv % div;
+        for(int k = div / 10; k > 0; k /= 10)
+        {
+            buff[n++] = static_cast<char>('0' + frac / k);
+            frac %= k;
+        }
+    }
+    const char* u = "";
+    switch(d.unit)
+    {
+        case kNT_unitPercent: u = "%"; break;
+        case kNT_unitSemitones: u = " st"; break;
+        case kNT_unitDb: u = " dB"; break;
+        case kNT_unitHz: u = " Hz"; break;
+        case kNT_unitSeconds: u = " s"; break;
+        case kNT_unitCents: u = " c"; break;
+        default: break;
+    }
+    std::strcpy(buff + n, u);
+    return n + static_cast<int>(std::strlen(u));
+}
+
+// Is a working slot aimed at parameter p? (armed destination, amount or offset set)
+bool ParamModulated(const PerseidsAlgorithm* a, int p)
+{
+    if(!a || !a->v)
+        return false;
+    for(int m = 0; m < kNumModSlots; ++m)
+    {
+        const int d = a->mod_armed[m][kArmDest];
+        if(d > 0 && kModTargets[d] == p
+           && (a->v[ModParam(m, kModAmount)] != 0 || a->v[ModParam(m, kModOffset)] != 0))
+            return true;
+    }
+    return false;
+}
+
 int parameterString(_NT_algorithm* self, int p, int v, char* buff)
 {
-    // Mod amount: the setting, and while the slot works what it puts out now
-    // ("40 % > +23 %"), so the movement shows in the Mod overview and pages.
-    for(int m = 0; m < kNumModSlots; ++m)
+    const PerseidsAlgorithm* a = static_cast<const PerseidsAlgorithm*>(self);
+    int                      n = -1;
+    // Mod amount: destination, setting, and while the slot works what it puts
+    // out now ("Blend 40 % > +23 %") — one line in the Mod overview.
+    for(int m = 0; m < kNumModSlots && n < 0; ++m)
     {
         if(p != ModParam(m, kModAmount))
             continue;
-        const PerseidsAlgorithm* a = static_cast<const PerseidsAlgorithm*>(self);
-        // "40 %", while working "40 % > +12 %" (the destination is in the
-        // parameter's name then, "Mod 1 Blend", see UpdateModMarks).
-        int n = NT_intToString(buff, v);
+        n = 0;
+        if(a && a->v && a->v[ModParam(m, kModDest)] != 0)
+        {
+            const char* d = kModTargetNames[a->v[ModParam(m, kModDest)]];
+            std::strcpy(buff, d);
+            n = static_cast<int>(std::strlen(d));
+            buff[n++] = ' ';
+        }
+        n += NT_intToString(buff + n, v);
         std::strcpy(buff + n, " %");
         n += 2;
         if(a && a->v && a->mod_armed[m][kArmDest] != 0 && (v != 0 || a->v[ModParam(m, kModOffset)] != 0))
@@ -1876,18 +1952,38 @@ int parameterString(_NT_algorithm* self, int p, int v, char* buff)
             std::strcpy(buff + n, " %");
             n += 2;
         }
-        return n;
     }
-    if(p != kParamHold)
-        return 0;
-    if(v >= kHoldInf)
+    if(n < 0 && p == kParamHold)
     {
-        std::strcpy(buff, "INF");
-        return 3;
+        if(v >= kHoldInf)
+        {
+            std::strcpy(buff, "INF");
+            n = 3;
+        }
+        else
+        {
+            n = NT_intToString(buff, v);
+            std::strcpy(buff + n, " s");
+            n += 2;
+        }
     }
-    int n = NT_intToString(buff, v);
-    std::strcpy(buff + n, " s");
-    return n + 2;
+    if(n < 0)
+    {
+        // Every other mod target: its usual value text (see construct()).
+        bool target = false;
+        for(int k = 1; k < kNumModTargets && !target; ++k)
+            target = kModTargets[k] == p;
+        if(!target)
+            return 0;
+        n = FormatParam(kParameterDefs[p], v, buff);
+    }
+    // Modulated right now: " ~" after the value, in every menu.
+    if(ParamModulated(a, p))
+    {
+        std::strcpy(buff + n, " ~");
+        n += 2;
+    }
+    return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -2365,44 +2461,10 @@ bool BuildModOverview(PerseidsAlgorithm* a)
 
 // Marks modulated parameters in the menus: their name gets " ~" while a slot
 // is aimed at them (and back when it stops). Display thread, only on change.
-void UpdateModMarks(PerseidsAlgorithm* a)
-{
-    // Amount names: "Mod 3 Blend" while slot 3 has a destination.
-    for(int m = 0; m < kNumModSlots && a->v; ++m)
-    {
-        const int16_t d = a->v[ModParam(m, kModDest)];
-        if(d == a->amount_name_dest[m])
-            continue;
-        a->amount_name_dest[m] = d;
-        const int p            = ModParam(m, kModAmount);
-        if(d > 0 && d < kNumModTargets)
-        {
-            char* b = a->amount_name[m];
-            std::strcpy(b, "Mod ");
-            int n = 4 + NT_intToString(b + 4, m + 1);
-            b[n++] = ' ';
-            std::strncpy(b + n, kModTargetNames[d], sizeof(a->amount_name[m]) - 1 - n);
-            b[sizeof(a->amount_name[m]) - 1] = 0;
-            a->params[p].name = b;
-        }
-        else
-            a->params[p].name = kParameterDefs[p].name;
-        NT_updateParameterDefinition(NT_algorithmIndex(a), p + NT_parameterOffset());
-    }
-    for(int k = 1; k < kNumModTargets; ++k)
-    {
-        const int p = kModTargets[k];
-        bool      on = false;
-        for(int m = 0; m < kNumModSlots && !on; ++m)
-            on = a->mod_armed[m][kArmDest] == k
-                 && (ParamValue(a, ModParam(m, kModAmount)) != 0 || ParamValue(a, ModParam(m, kModOffset)) != 0);
-        if(on == (a->mod_marked[p] != 0))
-            continue;
-        a->mod_marked[p]   = on ? 1 : 0;
-        a->params[p].name  = on ? kModTargetMarked[k] : kParameterDefs[p].name;
-        NT_updateParameterDefinition(NT_algorithmIndex(a), p + NT_parameterOffset());
-    }
-}
+// Marks and destination names live in the value strings now (parameterString):
+// renaming parameters needs the host to take NT_updateParameterDefinition,
+// and nt_emu does not show renamed parameters. Kept as a hook.
+void UpdateModMarks(PerseidsAlgorithm* /*a*/) {}
 
 bool draw(_NT_algorithm* self)
 {
