@@ -88,6 +88,10 @@ class CaptureEngine
                     const SpatialParamValues& spatial);
 
     void RequestManualTrigger();
+    // Overwrite OFF and INF Hold: true = automatic triggers (Threshold,
+    // Cont. Rec) leave INF Trails alone too; only Rec/Trig replaces the
+    // oldest one. false (default, ARCHITECTURE 4.8) = INF stays stealable.
+    void SetProtectInfiniteHold(bool on) { protect_inf_hold_ = on; }
     void ClearAll(); // Delete-all confirmed
 
     // Dashboard / Rec indicator (UI-safe snapshots).
@@ -147,6 +151,7 @@ class CaptureEngine
         size_t     generation     = 0; // age for round-robin (higher = newer)
         float      hold_samples_left = 0.f;
         float      hold_samples_total = 0.f;
+        float      hold_elapsed   = 0.f; // samples of Hold already played
         float      fade_gain      = 0.f;
         float      fade_inc       = 0.f; // linear fades (Fade In/Out); Arming uses slew
         bool       infinite_hold  = false;
@@ -155,11 +160,13 @@ class CaptureEngine
 
     size_t BufferLengthSamples() const;
     int    ActiveCount() const;
-    size_t PickRoundRobinTarget() const;
+    size_t PickRoundRobinTarget(bool manual) const;
     void   StartRecording(size_t index);
     void   BeginRecordWrites(size_t index);
     void   FinishRecording(size_t index);
     void   BeginHold(size_t index);
+    // Re-derive Hold of every playing Trail from a changed Hold value.
+    void   ApplyHoldChange();
     void   StartFadeOut(size_t index);
     void   ApplyGlobalPlayFade(bool want_play, size_t size);
     float  FilterInput(float x);
@@ -176,6 +183,8 @@ class CaptureEngine
     // BBD-style one-pole slew τ before round-robin overwrite (~60 ms).
     static constexpr float kReplaceSlewSec = 0.060f;
     static constexpr float kReplaceDoneEps = 0.002f;
+    // Elapsed Hold stops counting past the longest finite Hold (no float creep).
+    static constexpr float kHoldElapsedCap = (kHoldInfiniteAbove + 1.f) * 192000.f;
 
     float sample_rate_;
     float sample_rate_inv_;
@@ -194,6 +203,8 @@ class CaptureEngine
     bool       gate_open_;           // above threshold
     bool       was_above_;
     float      envelope_follower_;
+    float      applied_hold_s_;   // Hold value the voices were last set up with
+    bool       protect_inf_hold_;
 
     // Global Play/Pause crossfade (ARCHITECTURE: over Fade In / Fade Out times).
     float play_gain_;
