@@ -18,7 +18,7 @@ Gebaut gegen distingNT_API v14 (Submodul `distingNT_API`, Stand 6975a63). GPL-3.
 | Element | Funktion |
 |---|---|
 | Poti L | **Blend** Spectra ↔ Swarm; Poti L drücken schaltet auf **Dry/Wet** und zurück |
-| Poti C | **Scan** (0 = Freeze) |
+| Poti C | **Scan** (0 = Freeze); Poti C drücken schaltet auf **Reso mix** und zurück |
 | Poti R | **Size** (Grain-Anzahl 4–24); Poti R drücken schaltet auf **Atmosphere** (Blur ← 0 → Radiation) und zurück |
 | Encoder L drehen / klicken | Trail wählen / **Solo** für den gewählten Trail |
 | Encoder R drehen / klicken | **Level** des gewählten Trails (2 % pro Raste) / **Lock** |
@@ -27,7 +27,7 @@ Gebaut gegen distingNT_API v14 (Submodul `distingNT_API`, Stand 6975a63). GPL-3.
 
 Tasten 1/2 bleiben beim NT. Ein Encoder-Klick zählt nur ohne Drehen.
 
-**In nt_emu (VCV Rack)** kommen bei Plug-ins mit eigener Oberfläche nur Poti- und Encoder-Drehungen und die Tasten 1–4 an, kein Druck auf Potis oder Encoder (so ist nt_emu gebaut, Stand ad2aa4b). Die Windows-DLL legt deshalb das Umschalten auf die freien Tasten: **Taste 1** = Poti L Blend ↔ Dry/Wet, **Taste 2** = Poti R Size ↔ Atmosphere. Solo und Lock gehen in nt_emu nur über die Parameterseite *Mixer*. Tasten wirken in nt_emu beim Loslassen.
+**In nt_emu (VCV Rack)** kommen bei Plug-ins mit eigener Oberfläche nur Poti- und Encoder-Drehungen und die Tasten 1–4 an, kein Druck auf Potis oder Encoder (so ist nt_emu gebaut, Stand ad2aa4b). Die Windows-DLL legt deshalb das Umschalten auf die freien Tasten: **Taste 1** = Poti L Blend ↔ Dry/Wet, **Taste 2** = Poti C und Poti R gemeinsam (Scan/Size ↔ Reso mix/Atmosphere). Solo und Lock gehen in nt_emu nur über die Parameterseite *Mixer*. Tasten wirken in nt_emu beim Loslassen.
 
 Display: Kopfzeile mit REC-Anzeige (bzw. dem nächsten Ziel-Trail), Eingangspegel L/R mit Threshold-Marke und Blend-Stellung. Darunter fünf Spalten: Trail-Nummer, Zustand (`REC`, `IN`, Sekunden bis zum Ausblenden, `INF`, `OUT`), Lebensbalken, Level-Balken, `L`/`S` und Level in %. Der gewählte Trail ist umrahmt, Trails über *Count* sind dunkel. Fußzeile: was die drei Potis gerade tun, `HOLD` bei unendlichem Hold, `CPU`, wenn der Swarm-Governor Grains spart, `MOD n`, wenn n Mod-Slots arbeiten.
 
@@ -47,6 +47,7 @@ Alle Regler sind normale NT-Parameter, also per CV oder MIDI steuerbar.
 | Spectra | Partials 4–32 · Waveshape (Saw ← 0 → Fold) · Umbra/Aurora · Ensemble |
 | Swarm | Size · Spread · Scan · Scatter · Atmosphere · Direction (Fwd/Rev/Rnd) |
 | Mixer | Level 1–5 · Lock 1–5 · Solo 1–5 |
+| Resonator | Reso mix (25 %) · Reso decay · Reso damping · Reso spread · Reso pitch ±12 HT · Reso quantize · Reso scale (Major/Minor/Pentatonic) · Reso tuning (Equal/Just) · Reso V/Oct in |
 | Mod 1–4 | Mod in (CV-Eingang, leer = internes LFO) · Mod dest · Mod amount ±100 % · Mod offset ±100 % · Mod LFO rate 0,01–20 Hz |
 | Display | Rec style PLR / PRS / CTR |
 | Routing | In L · In R (optional) · Rec trig in (Flanke über 1 V) · Out L/R mit Add/Replace |
@@ -64,10 +65,18 @@ Unterschiede zur Firmware, alle durch den NT bedingt:
 
 Zwei Wege, die sich ergänzen:
 
-- **Mod-Slots im Plug-in** (Seiten *Mod 1* bis *Mod 4*), wie die vier Mod-Slots des Moduls (ARCHITECTURE 4.3): *Mod in* wählt einen CV-Eingang oder Bus; bleibt er leer, arbeitet das interne LFO (Dreieck/Sinus wie am Modul, *LFO rate* 0,01–20 Hz) – das ist die Normalisierung der Mod-Buchsen. *Mod dest* ist jeder Klang- und Trail-Parameter (39 Ziele: Trails, Time, Engines, Spectra, Swarm, Level/Lock/Solo je Trail). Gerechnet wird wie am Modul: `Beitrag = Offset + Amount × Quelle`, `Ziel = Grundwert + Beitrag × voller Regelweg`, begrenzt. ±5 V = ±100 % Quelle. Mehrere Slots auf dasselbe Ziel addieren sich. Der gespeicherte Wert bleibt stehen, nur der wirksame Wert bewegt sich; Schalter und Zahlen (Lock, Count, Size, Direction …) werden gerundet. Ausgenommen sind Routing, *Clear trails* und *Rec style*.
+- **Mod-Slots im Plug-in** (Seiten *Mod 1* bis *Mod 4*), wie die vier Mod-Slots des Moduls (ARCHITECTURE 4.3): *Mod in* wählt einen CV-Eingang oder Bus; bleibt er leer, arbeitet das interne LFO (Dreieck/Sinus wie am Modul, *LFO rate* 0,01–20 Hz) – das ist die Normalisierung der Mod-Buchsen. *Mod dest* ist jeder Klang- und Trail-Parameter (48 Ziele: Trails, Time, Engines inkl. Dry/Wet, Spectra, Swarm, Resonator, Level/Lock/Solo je Trail). Gerechnet wird wie am Modul: `Beitrag = Offset + Amount × Quelle`, `Ziel = Grundwert + Beitrag × voller Regelweg`, begrenzt. ±5 V = ±100 % Quelle. Mehrere Slots auf dasselbe Ziel addieren sich. Der gespeicherte Wert bleibt stehen, nur der wirksame Wert bewegt sich; Schalter und Zahlen (Lock, Count, Size, Direction …) werden gerundet. Ausgenommen sind Routing, *Clear trails* und *Rec style*.
 - **CV-/MIDI-Mapping des NT:** Jeder Parameter, auch die Mod-Slots selbst, lässt sich zusätzlich im NT auf CV oder MIDI legen. Das verstellt den gespeicherten Wert direkt.
 
 Typisch: Slot ohne Kabel, Amount 30 %, LFO 0,05 Hz auf *Scan* – die Wolke wandert von selbst. Oder ein Hüllkurvenfolger auf *Mod 1 in*, Ziel *Blend*: laute Stellen schieben zu Swarm.
+
+## Resonator
+
+Die spektrale Resonanzbank aus Block 7 der Firmware, unverändert derselbe Code: acht Bandpässe auf den Harmonischen von C2 (bzw. auf Skalenstufen mit *Reso quantize*), parallel auf den Swarm-Ausgang. *Reso decay* ist die Ausklingzeit (0,08–8 s), *Reso damping* macht obere Moden kürzer (links metallisch, rechts Holz/Körper), *Reso spread* fächert die Moden im Stereobild auf. *Reso mix* ab Werk 25 % wie im Modul. Wie in der Firmware liegt der Resonator nur auf Swarm: bei Blend 0 % (nur Spectra) ist er nicht zu hören.
+
+NT-Zusätze: *Reso pitch* in Halbtönen (±12 = ±1 Oktave der Firmware) und **Reso V/Oct in**: 1 V pro Oktave auf den Grundton (0 V = C2), auf ganze Cent gerastet. Damit klingt die Resonanz in der Tonart einer Sequenz mit. *Reso scale* und *Reso tuning* sind am Modul Settings, hier eigene Parameter. Alle Reso-Parameter außer dem V/Oct-Eingang sind Mod-Ziele.
+
+Im Firmware-Code kam dafür nur `SetRootOffset()` dazu (auf dem Daisy nie aufgerufen, Golden-Test bitgleich).
 
 ## Bewusst nicht im Kern
 
@@ -79,7 +88,6 @@ Typisch: Slot ohne Kabel, Amount 30 %, LFO 0,05 Hz auf *Scan* – die Wolke wand
 | Multi-Makros, Settings | – (Dry/Wet selbst ist drin: Parameter *Dry/Wet*, Poti L drücken) |
 | Mod-System: Auto-Mod Age/Pitch (4.10) | noch offen; die vier Mod-Slots selbst sind drin (siehe Modulation) |
 | VU, Life-Bars, Settings-Seiten | stark vereinfacht im Display |
-| Resonator | noch offen, siehe unten |
 
 ## Wie es auf dem NT läuft
 
@@ -106,7 +114,7 @@ make render     # render/perseids-screens.png
 
 ## Tests
 
-`test/sim.cpp` läuft ohne Hardware und prüft 94 Punkte (NT-Fassung) bzw. 98 (nt_emu-Fassung, `test/sim_emu`), u. a.:
+`test/sim.cpp` läuft ohne Hardware und prüft 101 Punkte (NT-Fassung) bzw. 106 (nt_emu-Fassung, `test/sim_emu`), u. a.:
 
 - Speicherbedarf je *Trail seconds*, Stille rein = Stille raus
 - Spectra trifft 220 Hz, *Pitch Spectra* +12 → 440 Hz; Swarm mit *Pitch Swarm* +12 → 440 Hz und stereo
@@ -123,13 +131,12 @@ Der Klick-Detektor hat in der Firmware-Engine einen echten Fehler gefunden: Spec
 
 ## Stand
 
-- Nativ getestet (94 + 98 Prüfungen, NT- und nt_emu-Fassung), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
+- Nativ getestet (101 + 106 Prüfungen, NT- und nt_emu-Fassung), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
 - Läuft in nt_emu (VCV Rack, Windows), bestätigt am 10.10.2026. **Am NT selbst noch nicht getestet.**
 - Firmware: Umbau der Engines bitgleich (Golden-Test vor/nach, 40 s Audio), Firmware-Link mit libDaisy geprüft.
 
 ## Offene Fragen
 
-- **Resonator:** gehört er zum Klang von Perseids? Er ist der nächste Kandidat für den Kern (braucht nur DaisySP).
 - **DRAM-Grenze des NT** für Plug-ins ist nicht dokumentiert; 5 × 30 s (14,5 MB) erst am Gerät ausprobieren.
 - **Taste 4:** Hold für neue Aufnahmen (jetzt) oder „alles festhalten“ wie Imprint in der Firmware (alle aktiven Trails locken)?
 - **CPU-Budget** des Governors (Hälfte des NT) ist geschätzt, am Gerät nachmessen.

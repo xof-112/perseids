@@ -15,6 +15,7 @@
 
 #include "capture_engine.h"
 #include "spectra_engine.h"
+#include "reso_engine.h"
 #include "swarm_engine.h"
 
 #include <cmath>
@@ -89,6 +90,17 @@ enum
     // Added after the mod slots so their indices stay put.
     kParamDryWet = kParamMod1 + 4 * 5,
 
+    // Resonator (Block 7), on the Swarm output like in the firmware
+    kParamResoMix,
+    kParamResoDecay,
+    kParamResoDamping,
+    kParamResoSpread,
+    kParamResoPitch,
+    kParamResoQuant,
+    kParamResoScale,
+    kParamResoTuning,
+    kParamResoVoct,
+
     kNumParams,
 };
 
@@ -120,6 +132,8 @@ const uint8_t kModTargets[] = {
     kParamLock1, kParamLock1 + 1, kParamLock1 + 2, kParamLock1 + 3, kParamLock1 + 4,
     kParamSolo1, kParamSolo1 + 1, kParamSolo1 + 2, kParamSolo1 + 3, kParamSolo1 + 4,
     kParamDryWet,
+    kParamResoMix, kParamResoDecay, kParamResoDamping, kParamResoSpread, kParamResoPitch,
+    kParamResoQuant, kParamResoScale, kParamResoTuning,
 };
 const char* const kModTargetNames[] = {
     "Off",
@@ -132,6 +146,8 @@ const char* const kModTargetNames[] = {
     "Lock 1", "Lock 2", "Lock 3", "Lock 4", "Lock 5",
     "Solo 1", "Solo 2", "Solo 3", "Solo 4", "Solo 5",
     "Dry/Wet",
+    "Reso mix", "Reso decay", "Reso damping", "Reso spread", "Reso pitch",
+    "Reso quantize", "Reso scale", "Reso tuning",
     nullptr,
 };
 constexpr int kNumModTargets = static_cast<int>(sizeof(kModTargets));
@@ -146,6 +162,8 @@ const char* const kDirection[] = {"Fwd", "Rev", "Rnd", nullptr};
 // Recording graphic, as in the firmware's Settings → REC (same order there:
 // 0 PRS centre-out embers, 1 PLR left→right embers, 2 CTR solid centre-out).
 const char* const kRecStyle[] = {"PRS", "PLR", "CTR", nullptr};
+const char* const kResoScales[]  = {"Major", "Minor", "Pentatonic", nullptr};
+const char* const kResoTunings[] = {"Equal", "Just", nullptr};
 
 #define P_NUM(n, lo, hi, d, u, sc) \
     {.name = n, .min = lo, .max = hi, .def = d, .unit = u, .scaling = sc, .enumStrings = nullptr},
@@ -213,6 +231,19 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     // Like the firmware's Multi Dry/Wet: clean input ↔ cloud, equal power.
     // 100 % = cloud only, which is what the plug-in did before this existed.
     P_NUM("Dry/Wet", 0, 100, 100, kNT_unitPercent, 0)
+
+    // Resonator: same ranges and defaults as Block 7 / Settings in the firmware.
+    // Pitch ±12 semitones = the firmware's ±1 octave; V/Oct adds 1 V per octave
+    // to the bank root (C2 at 0 V), so the resonance can follow a melody.
+    P_NUM("Reso mix", 0, 100, 25, kNT_unitPercent, 0)
+    P_NUM("Reso decay", 0, 100, 50, kNT_unitPercent, 0)
+    P_NUM("Reso damping", 0, 100, 50, kNT_unitPercent, 0)
+    P_NUM("Reso spread", 0, 100, 35, kNT_unitPercent, 0)
+    P_NUM("Reso pitch", -12, 12, 0, kNT_unitSemitones, 0)
+    P_ENUM("Reso quantize", 1, 0, kOffOn)
+    P_ENUM("Reso scale", 2, 0, kResoScales)
+    P_ENUM("Reso tuning", 1, 0, kResoTunings)
+    NT_PARAMETER_CV_INPUT("Reso V/Oct in", 0, 0)
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
@@ -231,6 +262,9 @@ const uint8_t kPageMixer[]   = {
     kParamLock1, kParamLock1 + 1, kParamLock1 + 2, kParamLock1 + 3, kParamLock1 + 4,
     kParamSolo1, kParamSolo1 + 1, kParamSolo1 + 2, kParamSolo1 + 3, kParamSolo1 + 4};
 const uint8_t kPageDisplay[] = {kParamRecStyle};
+const uint8_t kPageReso[]    = {kParamResoMix,   kParamResoDecay, kParamResoDamping,
+                                kParamResoSpread, kParamResoPitch, kParamResoQuant,
+                                kParamResoScale,  kParamResoTuning, kParamResoVoct};
 #define MOD_PAGE(s) {kParamMod1 + (s) * kModParams, kParamMod1 + (s) * kModParams + 1,      \
                      kParamMod1 + (s) * kModParams + 2, kParamMod1 + (s) * kModParams + 3, \
                      kParamMod1 + (s) * kModParams + 4}
@@ -253,6 +287,7 @@ const _NT_parameterPage kPages[] = {
     {.name = "Mod 2", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod2},
     {.name = "Mod 3", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod3},
     {.name = "Mod 4", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod4},
+    {.name = "Resonator", .numParams = ARRAY_SIZE(kPageReso), .group = 10, .unused = {0, 0}, .params = kPageReso},
     {.name = "Display", .numParams = ARRAY_SIZE(kPageDisplay), .group = 8, .unused = {0, 0}, .params = kPageDisplay},
     {.name = "Routing", .numParams = ARRAY_SIZE(kPageRouting), .group = 7, .unused = {0, 0}, .params = kPageRouting},
 };
@@ -295,7 +330,8 @@ struct Engines
 {
     CaptureEngine capture;
     SpectraEngine spectra;
-    SwarmEngine   swarm;
+    SwarmEngine     swarm;
+    ResonatorEngine reso;
 
     float in_l[kChunk];
     float in_r[kChunk];
@@ -356,6 +392,9 @@ struct PerseidsAlgorithm : public _NT_algorithm
     SpatialParamValues spatial_p;
     TrailMixerState    mixer[kTrailCount];
     SpectraParamValues spectra_p;
+    ResoParamValues    reso_p;
+    float              reso_scale;
+    float              reso_tuning;
     SwarmParamValues   swarm_p;
 
     // Rec trig input (Schmitt trigger, in volts).
@@ -370,6 +409,7 @@ struct PerseidsAlgorithm : public _NT_algorithm
     // Controls
     int   selected;    // Trail 0…4
     bool  pot_l_mix;   // Pot L: false = Blend, true = Dry/Wet
+    bool  pot_c_reso;  // Pot C: false = Scan, true = Reso mix
     bool  pot_r_atmo;  // Pot R: false = Size, true = Atmosphere
     int   hold_before; // Hold value to restore when Hold is toggled off
     Click click_l;
@@ -506,6 +546,16 @@ void ReadParams(PerseidsAlgorithm* a)
 
     a->out_gain = std::pow(10.f, Pv(a, kParamOutLevel) / 20.f);
     a->dry_wet  = Pv(a, kParamDryWet) * 0.01f;
+
+    ResoParamValues& r = a->reso_p;
+    r.mix              = Pv(a, kParamResoMix) * 0.01f;
+    r.decay            = Pv(a, kParamResoDecay) * 0.01f;
+    r.damping          = Pv(a, kParamResoDamping) * 0.01f;
+    r.spread           = Pv(a, kParamResoSpread) * 0.01f;
+    r.pitch            = Pv(a, kParamResoPitch) / 12.f;
+    r.quantized        = static_cast<float>(PvI(a, kParamResoQuant));
+    a->reso_scale      = static_cast<float>(PvI(a, kParamResoScale));
+    a->reso_tuning     = static_cast<float>(PvI(a, kParamResoTuning));
 }
 
 // ---------------------------------------------------------------------------
@@ -609,6 +659,7 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
                                                 reinterpret_cast<float*>(base + l.smooth),
                                                 reinterpret_cast<float*>(base + l.ring)});
     a->eng->swarm.Init(sr, &a->eng->capture);
+    a->eng->reso.Init(sr);
 
     a->dirty        = true;
     a->blend        = 0.5f;
@@ -621,6 +672,7 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->gov_cycles   = 0;
     a->selected     = 0;
     a->pot_l_mix    = false;
+    a->pot_c_reso   = false;
     a->pot_r_atmo   = false;
     a->dry_wet      = 1.f;
     a->hold_before  = 15;
@@ -729,6 +781,7 @@ void ApplyParams(PerseidsAlgorithm* a)
     e.capture.SyncFromUi(a->capture_p, a->mixer, a->playing, a->spatial_p);
     e.spectra.SyncFromUi(a->spectra_p, a->swarm_p.pitch_both);
     e.swarm.SetParams(a->swarm_p);
+    e.reso.SyncFromUi(a->reso_p, a->reso_scale, a->reso_tuning);
 }
 
 void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
@@ -774,6 +827,24 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
         // Mod slots: re-read every parameter while any slot is active, and
         // once more after the last one stops (back to the stored values).
         const bool modulating = UpdateMod(a, busFrames, numFrames, done, n);
+
+        // Resonator V/Oct: chunk average, held to whole cents so CV noise does
+        // not retune the bank every chunk. No cable = no offset.
+        {
+            const int voct_bus = ParamValue(a, kParamResoVoct);
+            float     oct      = 0.f;
+            if(voct_bus > 0)
+            {
+                const float* cv  = busFrames + (voct_bus - 1) * numFrames + done;
+                float        sum = 0.f;
+                for(int i = 0; i < n; ++i)
+                    sum += cv[i];
+                const float cents = Clampf(sum / static_cast<float>(n), -5.f, 5.f) * 1200.f;
+                oct = static_cast<float>(static_cast<int>(cents >= 0.f ? cents + 0.5f : cents - 0.5f))
+                      / 1200.f;
+            }
+            e.reso.SetRootOffset(oct);
+        }
         if(modulating || a->mod_applied || a->dirty)
         {
             if(!modulating)
@@ -827,7 +898,12 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
             }
         }
         if(run_swarm)
+        {
             e.swarm.Process(e.sw_l, e.sw_r, n);
+            // Spectral Resonator sits on the Swarm output (ARCHITECTURE 4.1
+            // Block 7), so at Blend 0 % (Spectra only) it is not heard.
+            e.reso.Process(e.sw_l, e.sw_r, n);
+        }
 
         // Dry/Wet as in the firmware's Multi stage: equal power, dry trimmed
         // to 0.85 so the clean signal does not dominate at the middle. The
@@ -910,23 +986,26 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
 // ---------------------------------------------------------------------------
 // Controls
 //
-// Pot L Blend (press: Dry/Wet) · Pot C Scan · Pot R Size (press: Atmosphere)
+// Pot L Blend (press: Dry/Wet) · Pot C Scan (press: Reso mix) · Pot R Size (press: Atmosphere)
 // Encoder L: choose Trail, click: Solo · Encoder R: Trail level, click: Lock
 // Button 3: Rec · Button 4: Hold (infinite on/off)
 //
 // nt_emu (NT_EMU_WIN) hands a custom-UI plug-in only pot turns, encoder turns
 // and buttons 1–4 — pot and encoder presses never arrive. There buttons 1 and
 // 2 (which stay with the NT on the hardware) switch the pot targets instead:
-// Button 1 = Pot L Blend ↔ Dry/Wet, Button 2 = Pot R Size ↔ Atmosphere.
+// Button 1 = Pot L Blend ↔ Dry/Wet, Button 2 = Pots C and R together
+// (Scan/Size ↔ Reso mix/Atmosphere).
 #ifdef NT_EMU_WIN
 constexpr uint32_t kPotLSwitch = kNT_potButtonL | kNT_button1;
+constexpr uint32_t kPotCSwitch = kNT_potButtonC;
 constexpr uint32_t kPotRSwitch = kNT_potButtonR | kNT_button2;
 #else
 constexpr uint32_t kPotLSwitch = kNT_potButtonL;
+constexpr uint32_t kPotCSwitch = kNT_potButtonC;
 constexpr uint32_t kPotRSwitch = kNT_potButtonR;
 #endif
 
-constexpr uint32_t kCustomControls = kNT_potL | kNT_potC | kNT_potR | kPotLSwitch | kPotRSwitch
+constexpr uint32_t kCustomControls = kNT_potL | kNT_potC | kNT_potR | kPotLSwitch | kPotCSwitch | kPotRSwitch
                                      | kNT_encoderL | kNT_encoderR | kNT_encoderButtonL
                                      | kNT_encoderButtonR | kNT_button3 | kNT_button4;
 
@@ -982,7 +1061,13 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data)
         NT_requestSetupUi(); // re-sync soft takeover for the new target
     }
     if(data.controls & kNT_potC)
-        SetParamUi(a, kParamScan, static_cast<int>(data.pots[1] * 100.f + 0.5f));
+        SetParamUi(a, a->pot_c_reso ? kParamResoMix : kParamScan,
+                   static_cast<int>(data.pots[1] * 100.f + 0.5f));
+    if(Pressed(data, kPotCSwitch))
+    {
+        a->pot_c_reso = !a->pot_c_reso;
+        NT_requestSetupUi();
+    }
     if(data.controls & kNT_potR)
     {
         if(a->pot_r_atmo)
@@ -993,6 +1078,11 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data)
     if(Pressed(data, kPotRSwitch))
     {
         a->pot_r_atmo = !a->pot_r_atmo;
+#ifdef NT_EMU_WIN
+        // nt_emu has no pot presses: button 2 switches Pot C along with Pot R.
+        if(Pressed(data, kNT_button2))
+            a->pot_c_reso = a->pot_r_atmo;
+#endif
         NT_requestSetupUi(); // re-sync soft takeover for the new target
     }
 
@@ -1044,7 +1134,7 @@ void setupUi(_NT_algorithm* self, _NT_float3& pots)
     if(!a->v)
         return;
     pots[0] = ParamValue(a, a->pot_l_mix ? kParamDryWet : kParamBlend) * 0.01f;
-    pots[1] = ParamValue(a, kParamScan) * 0.01f;
+    pots[1] = ParamValue(a, a->pot_c_reso ? kParamResoMix : kParamScan) * 0.01f;
     pots[2] = a->pot_r_atmo ? (ParamValue(a, kParamAtmosphere) + 100) * 0.005f
                             : (ParamValue(a, kParamSize) - 4) * 0.05f;
 }
@@ -1446,8 +1536,8 @@ bool draw(_NT_algorithm* self)
         NT_drawText(26, 61, buff, 15, kNT_textLeft, kNT_textTiny);
     }
 
-    FormatPercent(buff, ParamValue(a, kParamScan), false);
-    NT_drawText(100, 61, "SCAN", 6, kNT_textLeft, kNT_textTiny);
+    FormatPercent(buff, ParamValue(a, a->pot_c_reso ? kParamResoMix : kParamScan), false);
+    NT_drawText(100, 61, a->pot_c_reso ? "RESO" : "SCAN", 6, kNT_textLeft, kNT_textTiny);
     NT_drawText(120, 61, buff, 15, kNT_textLeft, kNT_textTiny);
 
     if(a->pot_r_atmo)

@@ -668,6 +668,79 @@ int main(int argc, char** argv)
         g_alg = A.a;
     }
 
+    // --- Resonator -------------------------------------------------------------------
+    {
+        // Noise Trail, Swarm only, Resonator fully wet: the bank's root rings.
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        SetP(I, kParamCount, 1);
+        SetP(I, kParamBuffer, 10);
+        SetP(I, kParamHold, kHoldInf);
+        SetP(I, kParamFadeIn, 1);
+        SetP(I, kParamBlend, 100);
+        SetP(I, kParamResoMix, 100);
+        SetP(I, kParamResoDecay, 80);
+        Rng    rng;
+        Signal n;
+        n.l.resize(48000 * 4);
+        for(auto& x : n.l)
+            x = rng.Next() * 3.f;
+        n.r = n.l;
+        const float c2 = 65.406f;
+        // Energy on the bank's harmonics vs. halfway between them.
+        auto OnGrid = [&](const std::vector<float>& x, float f0) {
+            float on = 0.f, off = 0.f;
+            for(int k = 1; k <= 6; ++k)
+            {
+                on += Goertzel(x, 3 * 48000, 48000, f0 * k);
+                off += Goertzel(x, 3 * 48000, 48000, f0 * (k + 0.5f));
+            }
+            return on / (off + 1e-9f);
+        };
+        Signal      o  = Run(I, n, 24);
+        const float g1 = OnGrid(o.l, c2);
+        CHECK(g1 > 4.f, "Resonator rings on the harmonics of C2 (on/off grid %.1f)", g1);
+
+        SetP(I, kParamResoPitch, 12);
+        o              = Run(I, n, 24);
+        const float g2 = OnGrid(o.l, 2.f * c2);
+        CHECK(g2 > 4.f && OnGrid(o.l, c2) < 0.6f * g2,
+              "Reso pitch +12 → grid on C3 (%.1f, C2 grid %.1f)", g2, OnGrid(o.l, c2));
+
+        SetP(I, kParamResoPitch, 0);
+        SetP(I, kParamResoVoct, 4);
+        std::vector<float> one(n.l.size(), 1.f); // 1 V on bus 4
+        // Run() puts rec on bus 3; build the V/Oct bus by hand.
+        std::vector<float> bus(64 * 24);
+        Signal             ov;
+        ov.l.resize(n.l.size());
+        for(size_t pos = 0; pos + 24 <= n.l.size(); pos += 24)
+        {
+            std::fill(bus.begin(), bus.end(), 0.f);
+            for(int i = 0; i < 24; ++i)
+            {
+                bus[0 * 24 + i] = n.l[pos + i];
+                bus[1 * 24 + i] = n.r[pos + i];
+                bus[3 * 24 + i] = 1.f;
+            }
+            step(I.a, bus.data(), 6);
+            for(int i = 0; i < 24; ++i)
+                ov.l[pos + i] = bus[12 * 24 + i];
+        }
+        const float g3 = OnGrid(ov.l, 2.f * c2);
+        CHECK(g3 > 4.f && OnGrid(ov.l, c2) < 0.6f * g3,
+              "Reso V/Oct +1 V → grid on C3 (%.1f, C2 grid %.1f)", g3, OnGrid(ov.l, c2));
+        CHECK(Finite(ov.l) && Peak(ov.l) <= 5.5f, "Resonator output finite, peak %.2f V", Peak(ov.l));
+
+        // Spectra only: the Resonator is not in its path (as in the firmware).
+        SetP(I, kParamResoVoct, 0);
+        SetP(I, kParamBlend, 0);
+        o              = Run(I, n, 24);
+        const float g4 = OnGrid(o.l, c2);
+        CHECK(g4 < 2.f, "Blend 0 %%: no Resonator ring (C2 grid %.1f)", g4);
+        g_alg = A.a;
+    }
+
     // --- Dry/Wet ---------------------------------------------------------------------
     {
         Inst I = Make(4, g_params);
@@ -832,6 +905,13 @@ int main(int argc, char** argv)
         customUi(I.a, d);
         CHECK(I.v[kParamAtmosphere] == -100 && I.v[kParamSize] == 24,
               "%s: Pot R press switches to Atmosphere (%d)", host, I.v[kParamAtmosphere]);
+        Press(I, kNT_potButtonC, emu);
+        d.controls = kNT_potC;
+        d.pots[1]  = 0.4f;
+        customUi(I.a, d);
+        CHECK(I.v[kParamResoMix] == 40 && I.v[kParamScan] == 75,
+              "%s: Pot C press switches to Reso mix (%d %%)", host, I.v[kParamResoMix]);
+        Press(I, kNT_potButtonC, emu);
         Press(I, kNT_potButtonL, emu);
         d.controls = kNT_potL;
         d.pots[0]  = 0.6f;
@@ -934,9 +1014,14 @@ int main(int argc, char** argv)
         customUi(I.a, d);
         CHECK(I.a->pot_r_atmo && I.v[kParamAtmosphere] == 100,
               "nt_emu: button 2 → Pot R sets Atmosphere (%d %%)", I.v[kParamAtmosphere]);
+        d.controls = kNT_potC;
+        d.pots[1]  = 0.9f;
+        customUi(I.a, d);
+        CHECK(I.a->pot_c_reso && I.v[kParamResoMix] == 90,
+              "nt_emu: button 2 also puts Pot C on Reso mix (%d %%)", I.v[kParamResoMix]);
         EmuButton(kNT_button1);
         EmuButton(kNT_button2);
-        CHECK(!I.a->pot_l_mix && !I.a->pot_r_atmo, "nt_emu: buttons 1/2 switch back");
+        CHECK(!I.a->pot_l_mix && !I.a->pot_r_atmo && !I.a->pot_c_reso, "nt_emu: buttons 1/2 switch back");
         EmuButton(kNT_button3);
         Signal s = Tone(200.f, 0.2f, 2.f);
         SetP(I, kParamThreshold, 100);

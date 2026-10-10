@@ -96,7 +96,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <p class="eyebrow">disting NT · Plug-in · Perseids-core</p>
   <h1>Perseids – Anleitung</h1>
   <p class="lede">Perseids-core ist der Kern des Perseids-Moduls als Algorithmus für den Expert Sleepers disting NT: Audio in fünf Trails aufnehmen und daraus mit Spectra (additive Resynthese) und Swarm (Granular) eine Stereo-Wolke formen. Diese Anleitung erklärt Installation, den ersten Patch, Bedienung, Display und alle Parameter.</p>
-  <div class="facts"><span>In L/R · Out L/R</span><span>5 Trails, 1–30 s</span><span>Spectra ↔ Swarm</span><span>Rec trig per CV</span><span>4 Mod-Slots</span><span>Dry/Wet auf Poti L</span><span>69 Parameter</span><span>Bedienung wie am Modul</span></div>
+  <div class="facts"><span>In L/R · Out L/R</span><span>5 Trails, 1–30 s</span><span>Spectra ↔ Swarm</span><span>Rec trig per CV</span><span>4 Mod-Slots</span><span>Dry/Wet auf Poti L</span><span>Resonator mit V/Oct</span><span>78 Parameter</span><span>Bedienung wie am Modul</span></div>
   <span class="chip chip-now">Stand 10.10.2026 · läuft in nt_emu, am NT noch nicht getestet</span>
 </header>
 
@@ -110,7 +110,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
 <li><a class="tl" href="#bedienung"><span class="tn">04</span><span class="tt">Bedienung</span></a></li>
 <li><a class="tl" href="#display"><span class="tn">05</span><span class="tt">Display lesen</span></a><div class="ts"><a class="sl" href="#lebensbalken">Lebensbalken</a> · <a class="sl" href="#rec-style">Rec style</a></div></li>
 <li><a class="tl" href="#trails"><span class="tn">06</span><span class="tt">Wie Trails entstehen und vergehen</span></a></li>
-<li><a class="tl" href="#engines"><span class="tn">07</span><span class="tt">Spectra und Swarm</span></a></li>
+<li><a class="tl" href="#engines"><span class="tn">07</span><span class="tt">Spectra, Swarm und Resonator</span></a></li>
 <li><a class="tl" href="#modulation"><span class="tn">08</span><span class="tt">Modulation</span></a><div class="ts"><a class="sl" href="#mod-slots">Mod-Slots</a> · <a class="sl" href="#nt-mapping">CV-Mapping des NT</a></div></li>
 </ol>
 <p class="toc-grp">Nachschlagen</p><ol>
@@ -132,6 +132,8 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
     <li><b>Spectra:</b> Partials, Waveshape (Saw ← Sinus → Fold), Umbra/Aurora, Ensemble, Pitch.</li>
     <li><b>Swarm:</b> Size, Spread, Scan, Scatter, Atmosphere (Blur ← 0 → Radiation), Direction, Pitch.</li>
     <li><b>Blend</b> zwischen beiden, gleichlaut (equal-power).</li>
+    <li><b>Resonator:</b> Resonanzbank auf dem Swarm-Ausgang, mit V/Oct-Eingang für den Grundton.</li>
+    <li><b>Dry/Wet</b> und vier <b>Mod-Slots</b>.</li>
   </ul>
   <p>Die Klangerzeugung ist derselbe Code wie im Modul. Was dort klingt, klingt hier genauso.</p>
   <h3 id="was-fehlt">Was der NT übernimmt</h3>
@@ -141,8 +143,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <tr><td>Pan Drift, Crossfade</td><td>NT-Mixer mit LFO, Four Play; die Stereobreite kommt aus Swarm (<i>Spread</i>)</td></tr>
   <tr><td>Multi Dry/Wet</td><td>eingebaut als <i>Dry/Wet</i>, auf Poti L (drücken)</td></tr>
   <tr><td>Mod-System</td><td>vier Mod-Slots sind eingebaut (siehe 08), dazu das CV-/MIDI-Mapping des NT; Auto-Mod Age/Pitch fehlt noch</td></tr>
-  <tr><td>Resonator</td><td>noch nicht enthalten</td></tr>
-  </table></div>
+    </table></div>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 
@@ -186,10 +187,10 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <div class="ph"><div class="num">04</div><div class="ph-main"><h2>Bedienung</h2></div></div>
   <div class="pb">
   <p>Im Algorithmus-Bildschirm übernimmt Perseids Potis, Encoder und die Tasten 3 und 4. Die Tasten 1 und 2 bleiben beim NT.</p>
-  <p><b>In VCV Rack (nt_emu)</b> kommt ein Druck auf Poti oder Encoder nicht beim Plug-in an. Dort schaltet <b>Taste 1</b> Poti L zwischen Blend und Dry/Wet und <b>Taste 2</b> Poti R zwischen Size und Atmosphere. Solo und Lock stellst du in nt_emu auf der Parameterseite <i>Mixer</i> ein. Tasten reagieren in nt_emu beim Loslassen.</p>
+  <p><b>In VCV Rack (nt_emu)</b> kommt ein Druck auf Poti oder Encoder nicht beim Plug-in an. Dort schaltet <b>Taste 1</b> Poti L zwischen Blend und Dry/Wet und <b>Taste 2</b> Poti C und Poti R gemeinsam zwischen Scan/Size und Reso mix/Atmosphere. Solo und Lock stellst du in nt_emu auf der Parameterseite <i>Mixer</i> ein. Tasten reagieren in nt_emu beim Loslassen.</p>
   <div class="tbl"><table><tr><th>Element</th><th>Drehen</th><th>Drücken</th></tr>
   <tr><td>Poti L</td><td><b>Blend</b> Spectra ↔ Swarm oder <b>Dry/Wet</b></td><td>schaltet zwischen Blend und Dry/Wet</td></tr>
-  <tr><td>Poti C</td><td><b>Scan</b>: wie schnell Swarm durch die Trails wandert, ganz links = Freeze</td><td>–</td></tr>
+  <tr><td>Poti C</td><td><b>Scan</b>: wie schnell Swarm durch die Trails wandert, ganz links = Freeze; oder <b>Reso mix</b></td><td>schaltet zwischen Scan und Reso mix</td></tr>
   <tr><td>Poti R</td><td><b>Size</b> (4–24 Grains) oder <b>Atmosphere</b></td><td>schaltet zwischen Size und Atmosphere</td></tr>
   <tr><td>Encoder L</td><td>Trail wählen (der gewählte ist umrahmt)</td><td><b>Solo</b> für diesen Trail</td></tr>
   <tr><td>Encoder R</td><td><b>Level</b> des gewählten Trails, 2 % pro Raste</td><td><b>Lock</b> für diesen Trail</td></tr>
@@ -247,7 +248,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
 </article>
 
 <article class="patch-card" id="engines">
-  <div class="ph"><div class="num">07</div><div class="ph-main"><h2>Spectra und Swarm</h2></div></div>
+  <div class="ph"><div class="num">07</div><div class="ph-main"><h2>Spectra, Swarm und Resonator</h2></div></div>
   <div class="pb">
   <h3>Spectra</h3>
   <p>Analysiert die Summe der Trails etwa 47-mal pro Sekunde und spielt die stärksten Teiltöne mit Sinus-Oszillatoren nach. Das Ergebnis ist ein weicher, schwebender Abdruck der Aufnahmen.</p>
@@ -270,6 +271,16 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
     <li><b>Pitch Swarm</b> ±24 Halbtöne.</li>
   </ul>
   <p>Swarm klingt leiser als Spectra; das ist im Modul genauso. Bei Blend 50 % sind beide gleich beteiligt, nicht gleich laut.</p>
+  <h3>Resonator</h3>
+  <p>Eine Bank aus acht Resonanzfiltern auf den Harmonischen eines Grundtons (ab Werk C2), parallel zum Swarm-Ausgang – derselbe Code wie im Modul. Die Körner regen die Bank an, sie klingt in Tönen nach. Wie am Modul liegt er nur auf Swarm: bei Blend ganz links (nur Spectra) hörst du ihn nicht.</p>
+  <ul class="lst">
+    <li><b>Reso mix:</b> Anteil der Resonanz, ab Werk 25 %. Am NT auf Poti C (drücken), in nt_emu über Taste 2.</li>
+    <li><b>Reso decay:</b> Ausklingzeit von 0,08 bis 8 s.</li>
+    <li><b>Reso damping:</b> links klingen alle Moden gleich lang (metallisch, glasig), rechts sterben die oberen schneller (Holz, Körper).</li>
+    <li><b>Reso spread:</b> fächert die oberen Moden im Stereobild auf, der Grundton bleibt in der Mitte.</li>
+    <li><b>Reso pitch</b> ±12 Halbtöne und <b>Reso V/Oct in</b>: 1 V pro Oktave auf den Grundton, 0 V = C2. Mit einer Sequenz am Eingang klingt die Resonanz in deren Tönen.</li>
+    <li><b>Reso quantize</b> legt die Moden auf die Stufen von <b>Reso scale</b> (Dur, Moll, Pentatonik) statt auf Harmonische, <b>Reso tuning</b> wählt gleichstufig oder rein.</li>
+  </ul>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 
@@ -281,7 +292,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <p>Vier Slots wie am Modul, je eine Parameterseite <i>Mod 1</i> bis <i>Mod 4</i>:</p>
   <div class="tbl"><table><tr><th>Parameter</th><th>Wirkung</th></tr>
   <tr><td>Mod in</td><td>CV-Eingang oder Bus als Quelle; ±5 V entsprechen ±100 %. <b>Leer</b> = internes LFO (Dreieck/Sinus wie am Modul), so wie eine unbelegte Mod-Buchse.</td></tr>
-  <tr><td>Mod dest</td><td>Ziel: einer von 40 Parametern (Trails, Time, Engines, Spectra, Swarm, Level/Lock/Solo je Trail), oder Off</td></tr>
+  <tr><td>Mod dest</td><td>Ziel: einer von 48 Parametern (Trails, Time, Engines, Spectra, Swarm, Resonator, Level/Lock/Solo je Trail, Dry/Wet), oder Off</td></tr>
   <tr><td>Mod amount</td><td>Abschwächer und Inverter, −100 … +100 %</td></tr>
   <tr><td>Mod offset</td><td>Verschiebung nach dem Abschwächer, −100 … +100 %</td></tr>
   <tr><td>Mod LFO rate</td><td>Tempo des internen LFO, 0,01–20 Hz (nur ohne Kabel)</td></tr></table></div>
@@ -322,8 +333,14 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <tr><td></td><td>Direction</td><td>Fwd/Rev/Rnd (Fwd)</td></tr>
   <tr><td>Mixer</td><td>Level 1–5</td><td>0–100 % (50 %)</td></tr>
   <tr><td></td><td>Lock 1–5 · Solo 1–5</td><td>Off/On (Off)</td></tr>
+  <tr><td>Resonator</td><td>Reso mix</td><td>0–100 % (25 %)</td></tr>
+  <tr><td></td><td>Reso decay · Reso damping · Reso spread</td><td>0–100 % (50 · 50 · 35 %)</td></tr>
+  <tr><td></td><td>Reso pitch</td><td>±12 Halbtöne (0 = C2)</td></tr>
+  <tr><td></td><td>Reso quantize</td><td>Off/On (Off)</td></tr>
+  <tr><td></td><td>Reso scale · Reso tuning</td><td>Major/Minor/Pentatonic · Equal/Just (Major · Equal)</td></tr>
+  <tr><td></td><td>Reso V/Oct in</td><td>CV-Eingang oder keiner</td></tr>
   <tr><td>Mod 1–4</td><td>Mod in</td><td>CV-Eingang oder keiner (keiner = LFO)</td></tr>
-  <tr><td></td><td>Mod dest</td><td>Off oder einer von 40 Parametern (Off)</td></tr>
+  <tr><td></td><td>Mod dest</td><td>Off oder einer von 48 Parametern (Off)</td></tr>
   <tr><td></td><td>Mod amount · Mod offset</td><td>−100 … +100 % (0)</td></tr>
   <tr><td></td><td>Mod LFO rate</td><td>0,01–20 Hz (0,25 Hz)</td></tr>
   <tr><td>Display</td><td>Rec style</td><td>PRS/PLR/CTR (PLR)</td></tr>
@@ -345,6 +362,8 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <p>Threshold 100 % (nur noch der Trigger nimmt auf), Rec trig in an einen langsamen Clock-Teiler, Buffer 1 s, Hold 8 s, Count 5. Jeder Takt hält eine Sekunde fest; die Wolke erneuert sich von selbst.</p>
   <h3>Wolke statt Hall</h3>
   <p>Perseids vor einen NT-Reverb setzen, Output level 0 dB, Out auf <i>Add</i>. Blend 60 %, Spread 80 %, Fade in/out 5 s. Mit Mod 1 ohne Kabel, Ziel <i>Blend</i>, Amount 40 %, LFO 0,05 Hz wandert der Klang von selbst zwischen Körnern und Teiltönen.</p>
+  <h3>Resonanz folgt der Melodie</h3>
+  <p>Den Pitch-Ausgang einer Sequenz (z. B. Duett Track A) an einen NT-Eingang, <i>Reso V/Oct in</i> darauf. Blend ganz rechts, Reso mix 60 %, Reso decay 80 %, Reso damping 30 %. Die Körner aus beliebigem Material klingen jetzt in den Tönen der Sequenz nach. Mit <i>Reso quantize</i> und <i>Reso scale</i> Minor werden daraus Akkordflächen.</p>
   <h3>Lauter = körniger</h3>
   <p>Einen Hüllkurvenfolger der Quelle an einen NT-Eingang, <i>Mod 1 in</i> darauf, Ziel <i>Blend</i>, Amount 60 %, Offset −30 %. In leisen Passagen dominiert Spectra, laute Stellen schieben die Wolke zu Swarm. Ein zweiter Slot mit demselben Eingang auf <i>Scatter</i> streut sie dabei weiter.</p>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
@@ -368,7 +387,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
     <li>Wie viel DRAM der NT einem Plug-in gibt, ist nicht dokumentiert; 30 s pro Trail erst ausprobieren.</li>
   </ul>
   <h3>Stand</h3>
-  <p>In einer Simulation getestet (94 Prüfungen, in der nt_emu-Fassung 98: Tonhöhe, Klicks, Blockgrößen, Modulation, Dry/Wet, Bedienung, Display) und unter Wine mit einem nt_emu-artigen Host. Die DLL läuft in nt_emu (VCV Rack). <b>Am NT selbst noch nicht getestet.</b> Rückmeldungen dazu, besonders zum Nachglimmen der Funken und zur CPU-Last, fließen in die nächste Fassung.</p>
+  <p>In einer Simulation getestet (101 Prüfungen, in der nt_emu-Fassung 106: Tonhöhe, Klicks, Blockgrößen, Modulation, Dry/Wet, Resonator, Bedienung, Display) und unter Wine mit einem nt_emu-artigen Host. Die DLL läuft in nt_emu (VCV Rack). <b>Am NT selbst noch nicht getestet.</b> Rückmeldungen dazu, besonders zum Nachglimmen der Funken und zur CPU-Last, fließen in die nächste Fassung.</p>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 </section>

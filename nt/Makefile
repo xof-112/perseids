@@ -16,7 +16,8 @@ CMSIS_CORE  := $(ROOT)/lib/libDaisy/Drivers/CMSIS_5/CMSIS/Core/Include
 DAISYSP     := $(ROOT)/lib/DaisySP/Source
 
 ENGINE_SRC  := $(ROOT)/src/capture_engine.cpp $(ROOT)/src/spectra_engine.cpp \
-               $(ROOT)/src/swarm_engine.cpp $(DAISYSP)/Effects/wavefolder.cpp
+               $(ROOT)/src/swarm_engine.cpp $(ROOT)/src/reso_engine.cpp \
+               $(DAISYSP)/Effects/wavefolder.cpp $(DAISYSP)/Filters/svf.cpp
 PLUGIN_SRC  := perseids_nt.cpp
 # CMSIS-DSP subset for the 2048-point RFFT (same list as link_cmsis_dsp.py).
 CMSIS_SRC   := $(addprefix $(CMSIS)/Source/, \
@@ -29,7 +30,7 @@ CMSIS_SRC   := $(addprefix $(CMSIS)/Source/, \
 DEFS        := -DPERSEIDS_TRAIL_INT16 -DARM_DSP_CONFIG_TABLES -DARM_FFT_ALLOW_TABLES \
                -DARM_TABLE_TWIDDLECOEF_F32_1024 -DARM_TABLE_BITREVIDX_FLT_1024 \
                -DARM_TABLE_TWIDDLECOEF_RFFT_F32_2048
-INCS        := -I$(NT_API_PATH)/include -I$(ROOT)/include -I$(DAISYSP) \
+INCS        := -I$(NT_API_PATH)/include -I$(ROOT)/include -I$(DAISYSP) -I$(DAISYSP)/Utility \
                -I$(CMSIS)/Include -I$(CMSIS)/PrivateInclude
 # Same float behaviour as the firmware (platformio.ini): no errno, fused multiply-add.
 MATH        := -fno-math-errno -ffp-contract=fast
@@ -42,7 +43,7 @@ ARM_FLAGS   := -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -fPIC -O2
 ARM_CXXFLAGS := -std=c++17 -fno-rtti -fno-exceptions -fno-threadsafe-statics -fno-use-cxa-atexit
 
 ARM_OBJ     := $(patsubst %,build/arm/%.o,$(notdir $(ENGINE_SRC) $(PLUGIN_SRC) $(CMSIS_SRC)))
-vpath %.cpp $(ROOT)/src $(DAISYSP)/Effects .
+vpath %.cpp $(ROOT)/src $(DAISYSP)/Effects $(DAISYSP)/Filters .
 vpath %.c   $(sort $(dir $(CMSIS_SRC)))
 
 all: plugins/perseids.o

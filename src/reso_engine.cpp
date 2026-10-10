@@ -85,6 +85,7 @@ void ResonatorEngine::Init(float sample_rate)
     params_          = ResoParamValues{};
     scale_           = 0.f;
     intonation_      = 0.f;
+    root_offset_oct_ = 0.f;
 
     for(size_t i = 0; i < kNumModes; ++i)
     {
@@ -115,7 +116,8 @@ void ResonatorEngine::SyncFromUi(const ResoParamValues& params,
     if(params_.pitch != tuned_pitch_ || params_.decay != tuned_decay_
        || params_.damping != tuned_damping_
        || params_.quantized != tuned_quantized_ || scale != tuned_scale_
-       || intonation != tuned_intonation_)
+       || intonation != tuned_intonation_
+       || root_offset_oct_ != tuned_root_offset_)
     {
         UpdateTuning();
     }
@@ -123,11 +125,19 @@ void ResonatorEngine::SyncFromUi(const ResoParamValues& params,
         UpdateGains();
 }
 
+void ResonatorEngine::SetRootOffset(float octaves)
+{
+    root_offset_oct_ = octaves;
+    if(root_offset_oct_ != tuned_root_offset_)
+        UpdateTuning();
+}
+
 float ResonatorEngine::RootHz() const
 {
-    // C2 ≈ 65.41 Hz, shifted ±1 octave by Pitch.
+    // C2 ≈ 65.41 Hz, shifted ±1 octave by Pitch (plus the platform's root
+    // offset, 0 on the Daisy).
     const float pitch
-        = std::pow(2.f, BipolarNorm(params_.pitch, -1.f, 1.f));
+        = std::pow(2.f, BipolarNorm(params_.pitch, -1.f, 1.f) + root_offset_oct_);
     return 65.406f * pitch;
 }
 
@@ -194,6 +204,7 @@ void ResonatorEngine::UpdateTuning()
     tuned_quantized_  = params_.quantized;
     tuned_scale_      = scale_;
     tuned_intonation_ = intonation_;
+    tuned_root_offset_ = root_offset_oct_;
 }
 
 void ResonatorEngine::UpdateGains()
