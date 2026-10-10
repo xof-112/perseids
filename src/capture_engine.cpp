@@ -5,13 +5,6 @@
 namespace perseids
 {
 
-float DSY_SDRAM_BSS trail_buffer[CaptureEngine::kTrailCount]
-                                [CaptureEngine::kMaxBufferSamples];
-
-CaptureEngine::SwarmTrailView
-    CaptureEngine::swarm_views_[CaptureEngine::kTrailCount];
-CaptureEngine::CloudPan CaptureEngine::cloud_pan_;
-
 namespace
 {
 constexpr float kPi  = 3.14159265f;
@@ -44,8 +37,9 @@ inline float FastSin(float x)
 inline float FastCos(float x) { return FastSin(x + kHalfPi); }
 } // namespace
 
-void CaptureEngine::Init(float sample_rate)
+void CaptureEngine::Init(float sample_rate, const TrailBank& bank)
 {
+    bank_            = bank;
     sample_rate_     = sample_rate > 1.f ? sample_rate : 48000.f;
     sample_rate_inv_ = 1.f / sample_rate_;
     next_generation_ = 1;
@@ -54,6 +48,7 @@ void CaptureEngine::Init(float sample_rate)
     gate_open_       = false;
     was_above_       = false;
     envelope_follower_ = 0.f;
+    applied_hold_s_  = CaptureParamValues{}.hold_s;
     play_gain_       = 1.f;
     want_playing_    = true;
     manual_trig_count_.store(0, std::memory_order_relaxed);
@@ -99,8 +94,16 @@ void CaptureEngine::Init(float sample_rate)
     lp_.SetFrequency(Clampf(20000.f * sample_rate_inv_, 0.f, 0.497f));
 
     for(size_t t = 0; t < kTrailCount; ++t)
-        for(size_t s = 0; s < kMaxBufferSamples; ++s)
-            trail_buffer[t][s] = 0.f;
+        for(size_t s = 0; s < bank_.capacity; ++s)
+            bank_.data[t][s] = TrailFromFloat(0.f);
+}
+
+float CaptureEngine::MaxBufferSeconds() const
+{
+    const float secs = static_cast<float>(bank_.capacity) * sample_rate_inv_;
+    return secs < static_cast<float>(kMaxBufferSeconds)
+               ? secs
+               : static_cast<float>(kMaxBufferSeconds);
 }
 
 float CaptureEngine::FilterInput(float x)
@@ -115,8 +118,8 @@ size_t CaptureEngine::BufferLengthSamples() const
     size_t      n    = static_cast<size_t>(secs * sample_rate_ + 0.5f);
     if(n < 64)
         n = 64;
-    if(n > kMaxBufferSamples)
-        n = kMaxBufferSamples;
+    if(n > bank_.capacity)
+        n = bank_.capacity;
     return n;
 }
 
@@ -125,13 +128,13 @@ size_t CaptureEngine::BufferLengthSamples() const
 // continuous *in the buffer*. Playback then hard-wraps the full length —
 // no shortened play length / runtime CF (those fought the baked seam and
 // left level-proportional crackle on both Spectra and Swarm).
-size_t CaptureEngine::LoopXfadeSamples(size_t length)
+size_t CaptureEngine::LoopXfadeSamples(size_t length) const
 {
-    size_t xf = static_cast<size_t>(0.040f * static_cast<float>(kSampleRate) + 0.5f);
+    size_t xf = static_cast<size_t>(0.040f * sample_rate_ + 0.5f);
     if(xf > length / 4)
         xf = length / 4;
-    if(length + xf > kMaxBufferSamples)
-        xf = kMaxBufferSamples - length;
+    if(length + xf > bank_.capacity)
+        xf = bank_.capacity - length;
     return xf;
 }
 
@@ -141,13 +144,13 @@ size_t CaptureEngine::LoopPlayLength(size_t length)
     return length;
 }
 
-float CaptureEngine::ReadLooped(size_t trail, size_t pos, size_t length)
+float CaptureEngine::ReadLooped(size_t trail, size_t pos, size_t length) const
 {
     if(length < 2 || trail >= kTrailCount)
         return 0.f;
     if(pos >= length)
         pos %= length;
-    return trail_buffer[trail][pos];
+    return TrailToFloat(bank_.data[trail][pos]);
 }
 
 int CaptureEngine::ActiveCount() const
@@ -155,7 +158,7 @@ int CaptureEngine::ActiveCount() const
     return static_cast<int>(Clampf(params_.count, 1.f, 5.f) + 0.5f);
 }
 
-size_t CaptureEngine::PickRoundRobinTarget() const
+size_t CaptureEngine::PickRoundRobinTarget(bool manual) const
 {
     const int  count       = ActiveCount();
     const bool allow_steal = ToggleOn(params_.overwrite); // OFF = Hold-Lock
@@ -172,14 +175,17 @@ size_t CaptureEngine::PickRoundRobinTarget() const
            || voices_[idx].state == TrailState::ArmingRecord)
             continue;
 
-        // Overwrite OFF: finish finite Hold + Fade-Out before replace (INF still
-        // stealable). Empty preferred either way.
+        // Overwrite OFF (4.8): finite Hold, INF Hold and Fade-Out finish before
+        // replace; only Rec/Trig may take the oldest INF Trail. Empty preferred
+        // either way.
         if(!allow_steal)
         {
             if(voices_[idx].state == TrailState::FadingOut)
                 continue;
             if(voices_[idx].state == TrailState::Playing
                && !voices_[idx].infinite_hold)
+                continue;
+            if(voices_[idx].state == TrailState::Playing && !manual)
                 continue;
         }
 
@@ -354,6 +360,7 @@ void CaptureEngine::BeginRecordWrites(size_t index)
     v.fade_inc           = 0.f;
     v.hold_samples_left  = 0.f;
     v.hold_samples_total = 0.f;
+    v.hold_elapsed       = 0.f;
     v.infinite_hold      = false;
     v.just_finished_rec  = false;
     active_record_index_ = index;
@@ -407,6 +414,7 @@ void CaptureEngine::BeginHold(size_t index)
 {
     TrailVoice& v = voices_[index];
     const float hold = params_.hold_s;
+    v.hold_elapsed   = 0.f;
     if(hold > kHoldInfiniteAbove)
     {
         v.infinite_hold      = true;
@@ -420,6 +428,40 @@ void CaptureEngine::BeginHold(size_t index)
             = Clampf(hold, 0.f, kHoldInfiniteAbove);
         v.hold_samples_total = secs * sample_rate_;
         v.hold_samples_left  = v.hold_samples_total;
+    }
+}
+
+void CaptureEngine::ApplyHoldChange()
+{
+    const float hold = params_.hold_s;
+    applied_hold_s_  = hold;
+    const bool  inf  = hold > kHoldInfiniteAbove;
+    const float total
+        = inf ? 0.f : Clampf(hold, 0.f, kHoldInfiniteAbove) * sample_rate_;
+    for(size_t i = 0; i < kTrailCount; ++i)
+    {
+        TrailVoice& v = voices_[i];
+        if(v.state != TrailState::Playing && v.state != TrailState::FadingOut)
+            continue;
+        v.infinite_hold      = inf;
+        v.hold_samples_total = total;
+        v.hold_samples_left  = inf ? 0.f : total - v.hold_elapsed;
+        const bool alive = inf || v.hold_samples_left > 0.f;
+        if(v.state == TrailState::FadingOut && alive)
+        {
+            // Only Hold expiry fades a Trail out: a longer Hold (or INF)
+            // brings it back, fading up again from where it is.
+            const float fade_n
+                = Clampf(params_.fade_in_s, 0.001f, 5.f) * sample_rate_;
+            v.state    = TrailState::Playing;
+            v.fade_inc = fade_n > 1.f ? (1.f - v.fade_gain) / fade_n : 1.f;
+            if(v.fade_inc <= 0.f)
+            {
+                v.fade_gain = 1.f;
+                v.fade_inc  = 0.f;
+            }
+        }
+        // Playing with no time left: the countdown fades it out right away.
     }
 }
 
@@ -440,14 +482,16 @@ void CaptureEngine::FinishRecording(size_t index)
             // fades to the original head. Hard wrap length−1→0 is then clean
             // for every reader (trail_mix → Spectra, buffer → Swarm).
             const size_t xf  = v.write_pos - v.length;
-            float*       buf = trail_buffer[index];
+            TrailSample* buf = bank_.data[index];
             const float  inv = 1.f / static_cast<float>(xf);
             for(size_t k = 0; k < xf; ++k)
             {
                 const float t      = static_cast<float>(k) * inv;
                 const float w_head = std::sin(1.5707964f * t);
                 const float w_ovf  = std::cos(1.5707964f * t);
-                buf[k] = buf[k] * w_head + buf[v.length + k] * w_ovf;
+                buf[k] = TrailFromFloat(TrailToFloat(buf[k]) * w_head
+                                        + TrailToFloat(buf[v.length + k])
+                                              * w_ovf);
             }
         }
         else
@@ -704,6 +748,11 @@ void CaptureEngine::Process(const float* in_l,
     // Heal inconsistent write/arming claims before anything can see Busy.
     SanitizeRecordHeads();
 
+    // A new Hold value applies to Trails that are already playing (4.1a:
+    // Hold length changes are audible at once), not only to the next take.
+    if(params_.hold_s != applied_hold_s_)
+        ApplyHoldChange();
+
     // Manual Rec/Trig — consume after a successful arm attempt (below), so a
     // stuck Busy head cannot silently eat the press forever.
     const uint32_t trig_now = manual_trig_count_.load(std::memory_order_relaxed);
@@ -831,7 +880,7 @@ void CaptureEngine::Process(const float* in_l,
 
         if(trigger)
         {
-            const size_t target = PickRoundRobinTarget();
+            const size_t target = PickRoundRobinTarget(manual && n == 0);
             if(target < kTrailCount)
                 StartRecording(target);
         }
@@ -842,7 +891,8 @@ void CaptureEngine::Process(const float* in_l,
             TrailVoice& v = voices_[active_record_index_];
             if(v.state == TrailState::Recording)
             {
-                trail_buffer[active_record_index_][v.write_pos] = filtered;
+                bank_.data[active_record_index_][v.write_pos]
+                    = TrailFromFloat(filtered);
                 ++v.write_pos;
                 // Keep writing past the loop end for the seam crossfade.
                 if(v.write_pos >= v.length + LoopXfadeSamples(v.length))
@@ -904,6 +954,9 @@ void CaptureEngine::Process(const float* in_l,
                 v.read_pos = 0;
 
             // Hold countdown (only while Playing, not during fade-out / arming)
+            if(v.state == TrailState::Playing && !mixer_[i].locked
+               && v.hold_elapsed < kHoldElapsedCap)
+                v.hold_elapsed += 1.f; // also under INF: a later finite Hold counts from here
             if(v.state == TrailState::Playing && !v.infinite_hold
                && !mixer_[i].locked)
             {
@@ -1089,7 +1142,7 @@ void CaptureEngine::Process(const float* in_l,
     }
     else
     {
-        const size_t next = PickRoundRobinTarget();
+        const size_t next = PickRoundRobinTarget(true); // where Rec would land
         uint8_t      slot = 1;
         if(next < kTrailCount && static_cast<int>(next) < count)
             slot = static_cast<uint8_t>(next + 1);

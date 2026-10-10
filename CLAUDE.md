@@ -92,3 +92,17 @@ the 4 mod CV inputs only). Pin assignments in `hw_pins.h`, matching `PANEL_and_P
 - Branch `vcv-port` prepares a shared core for a VCV Rack 2 plugin (`vcv/`, `tools/host/` not yet
   present). The portability rules in `.claude/rules/vcv-port.md` already apply to shared core code
   (engines, registry, UI controller/renderer).
+
+## disting NT plug-in (`nt/`)
+
+- `nt/perseids_nt.cpp` is the NT platform layer; it compiles Capture/Spectra/Swarm from `src/`
+  with `-DPERSEIDS_TRAIL_INT16`. `cd nt && make` (ARM .o), `make win` (nt_emu DLL),
+  `make test` (native simulation, NT + nt_emu builds), `make wintest` (Wine), `make render` (screens).
+- Platform seams used by the engines: `CaptureEngine::TrailBank` (Trail storage),
+  `SpectraEngine::Buffers`, `include/platform/trail_sample.h` (float on Daisy, int16 on NT),
+  `SwarmEngine::SyncFromUi(params, now_ms)`. Engines no longer include libDaisy headers.
+- The NT has no main loop: it uses `SpectraEngine::AnalysisSlice()` and
+  `SwarmEngine::SetParams()/WindowSlice()` from the audio thread. The Daisy keeps
+  `ProcessAnalysis()` / `SyncFromUi()`; both paths must stay equivalent.
+- Changes to the engines affect both targets: run `nt/` `make test` and keep the firmware
+  building.

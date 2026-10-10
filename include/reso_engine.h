@@ -24,6 +24,11 @@ class ResonatorEngine
                     float                  scale,      // 0 Major / 1 Minor / 2 Pent
                     float                  intonation); // 0 Equal / 1 Just
 
+    // Extra transposition of the bank root in octaves, on top of Pitch — e.g. a
+    // 1 V/oct input on the disting NT. The Daisy never sets it (stays 0, so
+    // the tuning is unchanged). Retunes only when the value moves.
+    void SetRootOffset(float octaves);
+
     // Processes Swarm L/R in place when mix > ~0; otherwise a no-op.
     void Process(float* io_l, float* io_r, size_t size);
 
@@ -55,6 +60,9 @@ class ResonatorEngine
     float tuned_scale_;
     float tuned_intonation_;
     float gained_spread_;
+
+    float root_offset_oct_;
+    float tuned_root_offset_;
 };
 
 } // namespace perseids

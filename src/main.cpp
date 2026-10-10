@@ -39,6 +39,14 @@ perseids::SpatialParamValues g_spatial_params;
 perseids::CaptureEngine      g_capture;
 perseids::SpectraEngine      g_spectra;
 perseids::SwarmEngine        g_swarm;
+// Daisy platform storage for the shared engines — Section 2 point 2.
+perseids::TrailSample DSY_SDRAM_BSS
+    g_trail_buffer[perseids::CaptureEngine::kTrailCount]
+                  [perseids::CaptureEngine::kMaxBufferSamples];
+float DSY_SDRAM_BSS g_spec_window[perseids::SpectraEngine::kFftSize];
+float DSY_SDRAM_BSS g_spec_mags[perseids::SpectraEngine::kBinCount];
+float DSY_SDRAM_BSS g_spec_mag_smooth[perseids::SpectraEngine::kBinCount];
+float DSY_SDRAM_BSS g_spec_input_ring[perseids::SpectraEngine::kInputRing];
 perseids::ResonatorEngine    g_reso;
 // ReverbSc tank ~400 KB in SDRAM; engine (Chorus etc.) stays in internal RAM.
 daisysp::ReverbSc DSY_SDRAM_BSS g_reverb_sc;
@@ -812,8 +820,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     {
         // Spectra is mono; apply Capture CloudPan (Trail VCA × Pan Drift).
         g_spectra.Process(g_spectra_out_l, g_spectra_out_l, size);
-        const perseids::CaptureEngine::CloudPan cp
-            = perseids::CaptureEngine::LastCloudPan();
+        const perseids::CaptureEngine::CloudPan cp = g_capture.LastCloudPan();
         for(size_t i = 0; i < size; ++i)
         {
             const float s      = g_spectra_out_l[i];
@@ -924,9 +931,19 @@ int main(void)
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
     hw.SetLed(true);
 
-    g_capture.Init(hw.AudioSampleRate());
-    g_spectra.Init(hw.AudioSampleRate());
-    g_swarm.Init(hw.AudioSampleRate());
+    {
+        perseids::CaptureEngine::TrailBank bank;
+        for(size_t t = 0; t < perseids::CaptureEngine::kTrailCount; ++t)
+            bank.data[t] = g_trail_buffer[t];
+        bank.capacity = perseids::CaptureEngine::kMaxBufferSamples;
+        g_capture.Init(hw.AudioSampleRate(), bank);
+    }
+    g_spectra.Init(hw.AudioSampleRate(),
+                   perseids::SpectraEngine::Buffers{g_spec_window,
+                                                    g_spec_mags,
+                                                    g_spec_mag_smooth,
+                                                    g_spec_input_ring});
+    g_swarm.Init(hw.AudioSampleRate(), &g_capture);
     g_reso.Init(hw.AudioSampleRate());
     g_reverb.Init(hw.AudioSampleRate(), g_reverb_sc);
     g_filter.Init(hw.AudioSampleRate());

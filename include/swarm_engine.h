@@ -11,8 +11,8 @@ namespace perseids
 {
 
 // Phase 5 — granular Swarm on Trail SDRAM buffers.
-// Audio callback only for Process; reads CaptureEngine::SwarmViews() filled
-// in the same callback after Capture::Process (no atomics needed).
+// Audio callback only for Process; reads the capture engine's SwarmViews()
+// filled in the same callback after Capture::Process (no atomics needed).
 class SwarmEngine
 {
   public:
@@ -28,10 +28,19 @@ class SwarmEngine
     // cos/sin/pow evaluation it replaces.
     static constexpr size_t kWindowLut = 1024;
 
-    void Init(float sample_rate);
+    // `capture` supplies the Trail buffers and per-block Trail views.
+    void Init(float sample_rate, const CaptureEngine* capture);
 
     // Main loop — also retabulates the grain envelope when Atmosphere moved.
-    void SyncFromUi(const SwarmParamValues& params);
+    // `now_ms` is the platform's millisecond tick (rebuild rate limit).
+    void SyncFromUi(const SwarmParamValues& params, uint32_t now_ms);
+
+    // Hosts without a main loop (disting NT) call these two from the audio
+    // thread instead of SyncFromUi: SetParams only copies, WindowSlice
+    // advances a pending envelope rebuild by kWindowSlice entries and flips
+    // the table when it is complete (one rebuild = 9 calls).
+    void SetParams(const SwarmParamValues& params) { params_ = params; }
+    void WindowSlice();
 
     // Audio thread — grain cloud stereo out.
     void Process(float* out_l, float* out_r, size_t size);
@@ -73,10 +82,14 @@ class SwarmEngine
                      float  pitch,
                      size_t cap);
     float NextRand();
+    float TargetBlur() const;
     void  BuildWindowTable(float blur);
+    void  BuildWindowRange(float* tab, float blur, size_t begin, size_t end) const;
 
     float sample_rate_;
     float sample_rate_inv_;
+
+    const CaptureEngine* capture_;
 
     SwarmParamValues params_;
 
@@ -91,6 +104,11 @@ class SwarmEngine
     std::atomic<uint32_t> win_index_;
     float                 win_blur_;
     uint32_t              win_build_ms_;
+    // WindowSlice() state: rebuild in progress toward win_slice_blur_.
+    static constexpr size_t kWindowSlice = 128;
+    bool                  win_slicing_;
+    float                 win_slice_blur_;
+    size_t                win_slice_pos_;
 
     // 1/sqrt(n) for the grain-sum normalisation — same values as the runtime
     // expression, just not recomputed 48000 times a second.

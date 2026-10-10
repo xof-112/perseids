@@ -27,10 +27,16 @@ class RecordSource
     // flipped the mono gain between 1.0 and 0.5 at audio rate whenever the
     // unpatched channel's noise floor straddled that threshold — broadband
     // grit, proportional to the signal, absent while the input was silent.
+    //
+    // The constants below are per 256 samples (the firmware block size). Hosts
+    // with smaller blocks (disting NT: 4…128 frames) accumulate peaks until
+    // 256 samples have passed, so timing is independent of the block size.
+    static constexpr size_t kUpdateSamples = 256;
+
     void UpdateBlock(const float* in_l, const float* in_r, size_t size)
     {
-        float pl = 0.f;
-        float pr = 0.f;
+        float pl = acc_pl_;
+        float pr = acc_pr_;
         for(size_t i = 0; i < size; ++i)
         {
             const float al = in_l[i] >= 0.f ? in_l[i] : -in_l[i];
@@ -40,6 +46,16 @@ class RecordSource
             if(ar > pr)
                 pr = ar;
         }
+        acc_n_ += size;
+        if(acc_n_ < kUpdateSamples)
+        {
+            acc_pl_ = pl;
+            acc_pr_ = pr;
+            return;
+        }
+        acc_n_  = 0;
+        acc_pl_ = 0.f;
+        acc_pr_ = 0.f;
 
         // Instant attack, ~0.5 s release at 256-sample blocks.
         constexpr float kRelease = 0.98f;
@@ -99,6 +115,9 @@ class RecordSource
     float gain_r_    = 0.f;
     float w_l_       = 0.5f;
     float w_r_       = 0.5f;
+    float  acc_pl_   = 0.f;
+    float  acc_pr_   = 0.f;
+    size_t acc_n_    = 0;
 };
 
 } // namespace perseids

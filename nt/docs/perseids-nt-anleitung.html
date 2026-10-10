@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perseids – Anleitung</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Same layout as the Duett handbook: one 780px column, numbered section cards, grouped contents at the top */
+:root{
+  --bg:#EDEFF3; --surface:#FFFFFF; --surface2:#F6F7FA;
+  --ink:#13161C; --muted:#5A6272; --line:#D3D8E1;
+  --audio:#1F4E8C; --cv:#A5510B; --ok:#2C6E49;
+  --audio-soft:#E2EAF6; --cv-soft:#F7EADA; --ok-soft:#E1EFE6;
+  --shadow:0 1px 2px rgba(15,23,42,.06);
+  --display:"Barlow Condensed",Impact,"Arial Narrow",sans-serif;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1218; --surface:#171B23; --surface2:#1C212B;
+  --ink:#E4E8EF; --muted:#96A0B1; --line:#2A3140;
+  --audio:#7FAAE7; --cv:#E7A54F; --ok:#6FC08F;
+  --audio-soft:#18263A; --cv-soft:#2B2317; --ok-soft:#16281E;
+  --shadow:0 1px 2px rgba(0,0,0,.4); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0F1218; --surface:#171B23; --surface2:#1C212B;
+  --ink:#E4E8EF; --muted:#96A0B1; --line:#2A3140;
+  --audio:#7FAAE7; --cv:#E7A54F; --ok:#6FC08F;
+  --audio-soft:#18263A; --cv-soft:#2B2317; --ok-soft:#16281E;
+  --shadow:0 1px 2px rgba(0,0,0,.4); color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{background:var(--bg); color:var(--ink); font-family:var(--body); font-size:15.5px; line-height:1.62;
+  margin:0; padding-block:40px 64px; padding-left:20px; padding-right:20px}
+.wrap{max-width:780px; margin:0 auto; display:flex; flex-direction:column; gap:40px}
+h1{font-family:var(--display); font-weight:700; font-size:clamp(36px,7.5vw,56px); line-height:1; margin:0; text-wrap:balance}
+h2{font-family:var(--display); font-weight:600; font-size:24px; letter-spacing:.02em; text-transform:uppercase; margin:0; text-wrap:balance}
+h3{font-family:var(--display); font-weight:600; font-size:20px; letter-spacing:.03em; text-transform:uppercase; margin:22px 0 8px; color:var(--cv); text-wrap:balance; scroll-margin-top:16px}
+p{margin:0 0 12px}
+a{color:var(--audio); text-underline-offset:2px}
+a[target="_blank"]::after{content:" ↗"; font-size:.85em}
+code{font-family:var(--mono); font-size:.86em; background:var(--surface2); border:1px solid var(--line); border-radius:2px; padding:0 4px; overflow-wrap:anywhere}
+b{font-weight:600}
+.eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--cv); margin:0 0 10px}
+.lede{font-size:17.5px; color:var(--muted); max-width:64ch; margin:14px 0 0}
+.chip{display:inline-block; font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; padding:3px 8px; border-radius:2px; border:1px solid; white-space:nowrap; margin-top:8px}
+.chip-now{color:var(--ok); border-color:var(--ok); background:var(--ok-soft)}
+.facts{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px}
+.facts span{font-family:var(--mono); font-size:11.5px; color:var(--muted); border:1px solid var(--line); background:var(--surface); border-radius:2px; padding:3px 8px}
+section{display:flex; flex-direction:column; gap:28px}
+.patch-card{background:var(--surface); border:1px solid var(--line); border-radius:4px; box-shadow:var(--shadow); overflow:hidden; scroll-margin-top:16px}
+.ph{display:flex; align-items:flex-start; gap:16px; padding:18px 20px 14px; border-bottom:1px solid var(--line); background:var(--surface2)}
+.num{font-family:var(--display); font-weight:700; font-size:34px; line-height:.85; color:var(--cv); flex:none; width:38px; font-variant-numeric:tabular-nums}
+.ph-main{flex:1; min-width:0}
+.pb{padding:18px 20px; min-width:0}
+.pb>h3:first-child{margin-top:0}
+.lst{margin:0 0 12px; padding-left:22px}
+.lst li{margin:3px 0}
+.lst .lst{margin:4px 0 0}
+.tbl{overflow-x:auto; margin:14px 0; border:1px solid var(--line); border-radius:3px}
+.tbl table{border-collapse:collapse; width:100%; font-size:13.5px; line-height:1.5}
+.tbl th{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:500; color:var(--muted); text-align:left; background:var(--surface2); padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:bottom}
+.tbl td{padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:top; min-width:7em}
+.tbl tr:last-child td{border-bottom:none}
+.tbl td:first-child{font-variant-numeric:tabular-nums}
+.tbl b{color:var(--audio)}
+.toc{background:var(--surface); border:1px solid var(--line); border-radius:4px; box-shadow:var(--shadow); padding:18px 20px; scroll-margin-top:16px}
+.toc ol{list-style:none; margin:0; padding:0; display:grid}
+.toc li{border-bottom:1px solid var(--line); padding:8px 0}
+.toc li:last-child{border-bottom:none}
+.toc .tl{display:flex; gap:10px; align-items:baseline; color:var(--ink); text-decoration:none}
+.toc .tl:hover .tt,.toc .tl:focus-visible .tt{color:var(--audio)}
+.tn{font-family:var(--display); font-weight:700; font-size:20px; line-height:1.2; color:var(--cv); font-variant-numeric:tabular-nums; width:28px; flex:none}
+.tt{font-family:var(--display); font-weight:600; font-size:18px; letter-spacing:.02em; text-transform:uppercase; line-height:1.2}
+.ts{font-size:13.5px; color:var(--muted); line-height:1.55; margin:2px 0 0 38px}
+.ts a{color:var(--muted); text-decoration:none; white-space:nowrap}
+.ts a:hover,.ts a:focus-visible{color:var(--audio); text-decoration:underline}
+.toc-grp{font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:16px 0 2px}
+.toc>.eyebrow{margin-bottom:0}
+a:focus-visible{outline:2px solid var(--audio); outline-offset:2px}
+.backtop{display:inline-block; margin-top:14px; font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); text-decoration:none}
+.backtop:hover{color:var(--audio)}
+footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); padding-top:18px}
+@media (max-width:480px){ .ts{margin-left:0} .num{width:30px; font-size:28px} .ph,.pb{padding-left:16px; padding-right:16px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <p class="eyebrow">disting NT · Plug-in · Perseids-core</p>
+  <h1>Perseids – Anleitung</h1>
+  <p class="lede">Perseids-core ist der Kern des Perseids-Moduls als Algorithmus für den Expert Sleepers disting NT: Audio in fünf Trails aufnehmen und daraus mit Spectra (additive Resynthese) und Swarm (Granular) eine Stereo-Wolke formen. Diese Anleitung erklärt Installation, den ersten Patch, Bedienung, Display und alle Parameter.</p>
+  <div class="facts"><span>In L/R · Out L/R</span><span>5 Trails, 1–30 s</span><span>Spectra ↔ Swarm</span><span>Rec trig per CV</span><span>12 Mod-Slots</span><span>Clock-Sync</span><span>Dry/Wet auf Poti L</span><span>Resonator mit V/Oct</span><span>159 Parameter</span><span>Bedienung wie am Modul</span></div>
+  <span class="chip chip-now">Stand 10.10.2026 · läuft in nt_emu, am NT noch nicht getestet</span>
+</header>
+
+<nav id="inhalt" class="toc" aria-label="Inhalt"><p class="eyebrow">Inhalt</p>
+<p class="toc-grp">Einstieg</p><ol>
+<li><a class="tl" href="#ueberblick"><span class="tn">01</span><span class="tt">Überblick</span></a><div class="ts"><a class="sl" href="#was-drin-ist">Was drin ist</a> · <a class="sl" href="#was-fehlt">Was der NT übernimmt</a></div></li>
+<li><a class="tl" href="#installation"><span class="tn">02</span><span class="tt">Installation</span></a><div class="ts"><a class="sl" href="#am-nt">Am NT</a> · <a class="sl" href="#in-vcv-rack">In VCV Rack (nt_emu)</a></div></li>
+<li><a class="tl" href="#erster-patch"><span class="tn">03</span><span class="tt">Erster Patch</span></a></li>
+</ol>
+<p class="toc-grp">Spielen</p><ol>
+<li><a class="tl" href="#bedienung"><span class="tn">04</span><span class="tt">Bedienung</span></a></li>
+<li><a class="tl" href="#display"><span class="tn">05</span><span class="tt">Display lesen</span></a><div class="ts"><a class="sl" href="#lebensbalken">Lebensbalken</a> · <a class="sl" href="#rec-style">Rec style</a></div></li>
+<li><a class="tl" href="#trails"><span class="tn">06</span><span class="tt">Wie Trails entstehen und vergehen</span></a></li>
+<li><a class="tl" href="#engines"><span class="tn">07</span><span class="tt">Spectra, Swarm und Resonator</span></a></li>
+<li><a class="tl" href="#modulation"><span class="tn">08</span><span class="tt">Modulation</span></a><div class="ts"><a class="sl" href="#mod-slots">Mod-Slots</a> · <a class="sl" href="#mod-shape">LFO-Kurven</a> · <a class="sl" href="#mod-ansicht">Mod-Ansicht</a> · <a class="sl" href="#nt-mapping">CV-Mapping des NT</a></div></li>
+</ol>
+<p class="toc-grp">Nachschlagen</p><ol>
+<li><a class="tl" href="#parameter"><span class="tn">09</span><span class="tt">Parameter</span></a></li>
+<li><a class="tl" href="#rezepte"><span class="tn">10</span><span class="tt">Rezepte</span></a></li>
+<li><a class="tl" href="#grenzen"><span class="tn">11</span><span class="tt">Unterschiede, Grenzen, Stand</span></a></li>
+<li><a class="tl" href="#anhang"><span class="tn">12</span><span class="tt">Anhang: Wo steht was</span></a></li>
+</ol>
+</nav>
+
+<section>
+<article class="patch-card" id="ueberblick">
+  <div class="ph"><div class="num">01</div><div class="ph-main"><h2>Überblick</h2></div></div>
+  <div class="pb">
+  <p>Perseids hört zu, schneidet Momente aus dem Eingang und lässt sie als <b>Trails</b> eine Weile weiterklingen. Daraus formen zwei Engines eine Wolke: <b>Spectra</b> analysiert die Trails per FFT und baut sie aus bis zu 32 Sinus-Partials neu auf, <b>Swarm</b> streut bis zu 24 kurze Grains aus den Aufnahmen. <b>Blend</b> mischt beide.</p>
+  <h3 id="was-drin-ist">Was drin ist</h3>
+  <ul class="lst">
+    <li><b>Capture:</b> fünf Trails, Aufnahme per Threshold, per Taste oder per Trigger-Eingang, Cont. Rec, Overwrite, Hold, Fade in, Fade out.</li>
+    <li><b>Trail-Mixer:</b> Level, Lock und Solo je Trail.</li>
+    <li><b>Spectra:</b> Partials, Waveshape (Saw ← Sinus → Fold), Umbra/Aurora, Ensemble, Pitch.</li>
+    <li><b>Swarm:</b> Size, Spread, Scan, Scatter, Atmosphere (Blur ← 0 → Radiation), Direction, Pitch.</li>
+    <li><b>Blend</b> zwischen beiden, gleichlaut (equal-power).</li>
+    <li><b>Resonator:</b> Resonanzbank auf dem Swarm-Ausgang, mit V/Oct-Eingang für den Grundton.</li>
+    <li><b>Dry/Wet</b> und zwölf <b>Mod-Slots</b> mit Clock-Sync.</li>
+  </ul>
+  <p>Die Klangerzeugung ist derselbe Code wie im Modul. Was dort klingt, klingt hier genauso.</p>
+  <h3 id="was-fehlt">Was der NT übernimmt</h3>
+  <div class="tbl"><table><tr><th>Im Modul</th><th>Am NT stattdessen</th></tr>
+  <tr><td>Reverb</td><td>einen NT-Reverb hinter Perseids setzen, oder Milky Way</td></tr>
+  <tr><td>Filter</td><td>NT-Filter, Wasp, SEM</td></tr>
+  <tr><td>Pan Drift, Crossfade</td><td>NT-Mixer mit LFO, Four Play; die Stereobreite kommt aus Swarm (<i>Spread</i>)</td></tr>
+  <tr><td>Multi Dry/Wet</td><td>eingebaut als <i>Dry/Wet</i>, auf Poti L (drücken)</td></tr>
+  <tr><td>Mod-System</td><td>zwölf Mod-Slots mit Clock-Sync sind eingebaut (siehe 08), dazu das CV-/MIDI-Mapping des NT; Auto-Mod Age/Pitch fehlt noch</td></tr>
+    </table></div>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
+<article class="patch-card" id="installation">
+  <div class="ph"><div class="num">02</div><div class="ph-main"><h2>Installation</h2></div></div>
+  <div class="pb">
+  <h3 id="am-nt">Am NT</h3>
+  <ol class="lst">
+    <li><code>perseids.o</code> auf die microSD-Karte nach <code>/programs/plug-ins/</code> kopieren.</li>
+    <li>Karte zurück, NT neu starten.</li>
+    <li>Algorithmus <b>Perseids</b> hinzufügen. Der NT fragt nach <b>Trail seconds</b> (1–30 s, Standard 10): so lang darf jede Aufnahme höchstens werden.</li>
+  </ol>
+  <div class="tbl"><table><tr><th>Trail seconds</th><th>Speicher (DRAM)</th></tr>
+  <tr><td>10 s</td><td>≈ 4,9 MB</td></tr><tr><td>15 s</td><td>≈ 7,3 MB</td></tr><tr><td>30 s</td><td>≈ 14,5 MB</td></tr></table></div>
+  <p>Der Wert lässt sich später über „Respecify“ ändern; dabei gehen die aufgenommenen Trails verloren.</p>
+  <h3 id="in-vcv-rack">In VCV Rack (nt_emu)</h3>
+  <ol class="lst">
+    <li>Die für Windows gebaute nt_emu-Fassung verwenden, dieselbe wie für Duett.</li>
+    <li><code>perseids.dll</code> nach <code>%LOCALAPPDATA%\Rack2\disting-nt-plugins\</code> kopieren, Rack dabei geschlossen lassen.</li>
+    <li>Rack starten, im nt_emu-Modul <b>Perseids</b> laden.</li>
+  </ol>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
+<article class="patch-card" id="erster-patch">
+  <div class="ph"><div class="num">03</div><div class="ph-main"><h2>Erster Patch</h2></div></div>
+  <div class="pb">
+  <ol class="lst">
+    <li>Eine Klangquelle an <b>Eingang 1</b> (In L), stereo zusätzlich an <b>Eingang 2</b> (In R). Mono geht auch: ein unbelegter Eingang wird erkannt und nicht mitgezählt.</li>
+    <li><b>Ausgang 1 und 2</b> (Out L/R) zum Mixer oder Kopfhörer.</li>
+    <li>Etwas spielen. Sobald der Pegel die <b>Threshold</b> überschreitet (Marke im Pegelmeter oben), nimmt Trail 1 auf: im Display steht <code>REC 1</code>, im Lebensbalken ziehen Funken.</li>
+    <li>Nach der Aufnahme (Standard 2 s) blendet der Trail ein und klingt <b>Hold</b> lang (Standard 15 s), dann blendet er aus. Die nächste Phrase landet in Trail 2, dann 3.</li>
+    <li><b>Poti L</b> (Blend) langsam drehen: links nur Spectra, rechts nur Swarm.</li>
+    <li>Soll das Original mitklingen: <b>Poti L drücken</b> (in nt_emu: <b>Taste 1</b>), die Fußzeile zeigt <code>DRY/WET</code>. Nach links drehen mischt den sauberen Eingang dazu. Ab Werk steht Dry/Wet auf 100 % (nur Wolke).</li>
+  </ol>
+  <p>Für einen dauerhaften Teppich: <b>Taste 4</b> (Hold unendlich), dann ein paar Phrasen spielen. Für eine Wolke aus allem, was kommt: <i>Cont. Rec</i> auf On und <i>Count</i> auf 5.</p>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
+<article class="patch-card" id="bedienung">
+  <div class="ph"><div class="num">04</div><div class="ph-main"><h2>Bedienung</h2></div></div>
+  <div class="pb">
+  <p>Im Algorithmus-Bildschirm übernimmt Perseids Potis, Encoder und die Tasten 3 und 4. Die Tasten 1 und 2 bleiben beim NT.</p>
+  <p><b>In VCV Rack (nt_emu)</b> kommt ein Druck auf Poti oder Encoder nicht beim Plug-in an. Dort schaltet <b>Taste 1</b> Poti L zwischen Blend und Dry/Wet und <b>Taste 2</b> Poti C und Poti R gemeinsam zwischen Scan/Size und Reso mix/Atmosphere. Solo und Lock stellst du in nt_emu auf der Parameterseite <i>Mixer</i> ein. Tasten reagieren in nt_emu beim Loslassen. Ein Druck auf ein Poti wird in nt_emu bewusst ignoriert, weil nt_emu ihn auch beim Anfassen zum Drehen meldet. Die Fußzeile zeigt dort vor jedem Poti-Ziel die zuständige Taste, etwa <code>1 BLEND</code> oder <code>2 SCAN</code>.</p>
+  <div class="tbl"><table><tr><th>Element</th><th>Drehen</th><th>Drücken</th></tr>
+  <tr><td>Poti L</td><td><b>Blend</b> Spectra ↔ Swarm oder <b>Dry/Wet</b></td><td>schaltet zwischen Blend und Dry/Wet</td></tr>
+  <tr><td>Poti C</td><td><b>Scan</b>: wie schnell Swarm durch die Trails wandert, ganz links = Freeze; oder <b>Reso mix</b></td><td>schaltet zwischen Scan und Reso mix</td></tr>
+  <tr><td>Poti R</td><td><b>Size</b> (4–24 Grains) oder <b>Atmosphere</b></td><td>schaltet zwischen Size und Atmosphere</td></tr>
+  <tr><td>Encoder L</td><td>Trail wählen (der gewählte ist umrahmt)</td><td><b>Solo</b> für diesen Trail</td></tr>
+  <tr><td>Encoder R</td><td><b>Level</b> des gewählten Trails, 2 % pro Raste</td><td><b>Lock</b> für diesen Trail</td></tr>
+  <tr><td>Taste 3</td><td colspan="2"><b>Rec</b>: sofort in den nächsten Trail aufnehmen, unabhängig von der Threshold</td></tr>
+  <tr><td>Taste 4</td><td colspan="2"><b>Hold</b> unendlich ein und aus. Wirkt sofort, auch auf Trails, die gerade klingen.</td></tr>
+  </table></div>
+  <p>Die Potis übernehmen erst, wenn sie den aktuellen Wert erreichen oder darüber hinweg gedreht werden (Catch-up, auch in nt_emu). Bis dahin steht der Wert in der Fußzeile dunkel, nach dem Umschalten genauso wie nach einer Änderung im Menü. Ein Encoder-Druck zählt nur, wenn dabei nicht gedreht wurde; in nt_emu drückt das Ziehen am Encoder ihn mit, das wird als Drehen gewertet.</p>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
+<article class="patch-card" id="display">
+  <div class="ph"><div class="num">05</div><div class="ph-main"><h2>Display lesen</h2></div></div>
+  <div class="pb">
+  <p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAEACAIAAACiR5NzAAAK80lEQVR42u3dv24cxx0H8DvjGr5F4DcQyMquDOgJbFBNUqmgm3QuxEaVG7pIl8YsVCWNiPgJBLhKKh34BkreguWlIzYBB5zhzOzOn8+nOh32lse53w31xfxmd78DXuR0ejAIHdnvzwzC/9WtMQGY01eGAAAABAAAAEAAAAAAenYwBADbOj9/NdXPZR3H471BAJ5kBQAAAAQAAABAAAAAALr2P3sAUq9rvryG9FavTX3/Oa+Nef81fq9SvyPbSv1cQp/1mucpda+DnO/FbN69+2nzn/XmzZ98EJ2yrwP/fyCGFQAAABAAAAAAAQAAAOha8D4ANfrsY6T+3FD/fY4aPXCp/dYxewzoV+3+/lLfr9p7Wlp2dfX28fHt7Ycnnw9ZHg8zuLn5+dljrq/fv/h4mO37kvrdCR0T+h5ZAQAAgIkIAAAAIAAAAAAjCu4B2Opa3TWuWT5S3/xIv+PHj3979pjQ9chTX5vzs2oodT+KGrXUwjwws19++UvV819e/vDsz3ItedaUujdg6fXr7wxgQcYz3qdPv3f9/q0AAADARAQAAAAQAAAAgBEl3wcgRs69AkLXHQ9dCz+mlzr1Ovq173WQqsbvWMqytz7Ucx/TW1+qXz/02pz3VkNMPZeqwzX7+N2/AuYUutZ4TE9/at//Uu992K0xnu18X1Kv6x9zzJIVAAAAmIgAAAAAAgAAADCiQ42Tlur3Te2HrvHaluX8jqW00Fsfs2eg1F6FGnJ65XM+99r1k7rPp0e3tx8eH19dvS1yznfvflrt/Yd+1lbfBfJtdQ+HnD7+mH5lGEnO96UUKwAAADARAQAAAAQAAABgRPvlP9bsRc65Xnipvufa77/U3oNe9jCk9tPH9O4v5dwrIOfeArVrvsZ3JOZ9jrTfoOXvRYxl33btPQCXlz88Pr67+0eR7wJt1tLxeG9AgCdZAQAAAAEAAAAQAAAAgK7tDQG8TO/XsJ9usutkD0Btnz//6/HxxcU3CmNg9gAAIVYAAABAAAAAAAQAAACga/YAwAvZA9DZZNfwHoCt6taYAMzJCgAAAAgAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOx2u91ubwhY083NzwaBIq6v3xsEAHgBdwIGAAABAAAAEAAAAICuHQwBW9HDTSp7SAAgnxUAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAADY7Xa73SHnxafTw5PP7/dnRnZDnz//89ljLi6+7eJ3CdWYemu/xnqpNzWmxlqoPTWW/z0NfWdzXtvLXFHqd2QeVgAAAEAAAAAABAAAAKBrWXsAcnrsqCemF3bZX9ty72xMn6I+2vbrrWVqbIx5rBf+Vtb7ztbo0U/d69jCXGGOIoYVAAAAEAAAAAABAAAA6NrBELA00j0E2LZmQnWixihVb2psTlvdgyjm/C3037tHEzGsAAAAgAAAAAAIAAAAQNfsARhcan92SGv9sq7Lvq0a95poocb0zqrbNecr9wR4mdAYxvxdqHGvgNbGxN/Nvlxefv/k83d3vyUdk8oKAAAATEQAAAAAAQAAABiRPQCDi7lO9vKY1OPXpH9xzppcU0zfsNpTY6XmMTVW9jtbu7/fZ0QNMX38Ob3+IVYAAABgIgIAAAAIAAAAwIiy9gDoZWxT6Nr/tV9bQ0yNLam3dmospg+75RqjzXpLvQdFC+wtWX+cU/92hM4Tc8+B1M99q3lMjbFkBQAAAAQAAABAAAAAALqWtQdAP1mbcq5vvdW1sdWYGlNjlKqZ1mpM7a0/VjXGtuXPSy2RygoAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAADsdrvd7pD6gvPzV0ZtcsfjfdXzqzHUGGoMNabGqFdjVgAAAGAiAgAAAAgAAADAiA45L768/N4ITuLu7rdNfq4aU2NqjN5rLKdPd1mfHz/+/fHxfn+WdAzr2Kovv/Z+A/qqsdevv3t8/OnT708eYwUAAAAmIgAAAIAAAAAAjOhgCABgHan9+st9CzHHvHnzx8fHp9PDs68FxrPs+w/tB7ACAAAAExEAAABAAAAAAEZkDwAArCSmp7/l8wNjsAIAAAACAAAAIAAAAABdswcAABqVet8AgKXQPQGsAAAAwEQEAAAAEAAAAIAR2QMAAI2qcV3/UvsK7E+A9i37/pf7AawAAADARAQAAAAQAAAAgBFl7QFY9iZCDWoMNUbvzs9fNfV+vnz59+Pji4tvXvw+S52H8WqM9lkBAAAAAQAAABAAAACAriXvATge740aVakx1BhqDNQYLxO69v+SFQAAAJiIAAAAAAIAAAAwooMhAACAMYT6/pesAAAAwEQEAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAICtJN8H4Pz8lVGb3PF4X/X8agw1hhpDjakx6tWYFQAAAJiIAAAAAAIAAAAwokPOi3/99a/TDtzFxbdT/b5b9RrOXGOz1bwaM4+Zx9SYGlNjamydGrMCAAAAExEAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAALaSdR+AH3/887QDt9W1fmczc42peTXmM1Vjagw1psZqsAIAAAACAAAAIAAAAABdS94DcDzeGzWqUmOoMdQYqDHqsQIAAAACAAAAIAAAAAACAAAAIAAAAAACAAAAIAAAAAACAAAAIAAAAAACAAAAIAAAAAACAAAACAAAAIAAAAAACAAAAIAAAAAACAAAAIAAAAAACAAAAEBhh1InOp0eHh/v92fF3+jXX//h2WO+fPnPkB/Szc3PRc5zff3+2XOGjlk+v5VlDdT4rNWYGlNjakyNqTE1psZmqDErAAAAMBEBAAAABAAAAGBEB0MwnpjespDWehnZtmZSn1djmMdQY9B+jVkBAACAiQgAAAAgAAAAACPqZg9A6JqyMdej7V2o9yvnerQx54y5Nu1IZq6xUv39akyNmcfUmBpTY2qs/RqzAgAAABMRAAAAQAAAAABGVGUPwOn08OTz+/3Zi885Q29ZSM61Y1OPL9X/XVuoHkK9iWqsbP2oMTVmHlNjakyNqbF+a8wKAAAATEQAAAAAAQAAABjR3hCwplB/G6gfAFiHFQAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAAKjuYAjYyvKa7gAArMMKAAAACAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAs/YxB11dvX32mNvbD08ev3y+1Dljjs/5WalOp4fnB3p/Vvz40DHL52FUtecE84x5Bmr/vyhnLqoxz7CtmHm41Gu/MtwAADAPAQAAAAQAAABgRIecF/fYZxbTv7vm75Xas7ukHxfipX7Ha/TmlporQvOAeQb6/T9JaM6pvWeANuf5mLk6Z362AgAAABMRAAAAQAAAAABGlLwHIPV6/6nn7FFOb26p8+dcOxZ6VOMa/70oNbeYZ6DN+Sfm/0Wu90/M3wX3AQAAAAQAAAAQAAAAgCEl7wFI7W+LOT7m2reh50u9n5xeupx+3FLX5K7REwwtS/3up84bOfcMqXHdbvMM9Dv/pJ6nxv+daF9ojq1xPxYrAAAAMBEBAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOjffwGuBXyiylxuKwAAAABJRU5ErkJggg==" alt="Perseids-Display mit fünf Trails" style="width:100%;image-rendering:pixelated;border:1px solid var(--line);border-radius:3px"></p>
+  <ul class="lst">
+    <li><b>Kopfzeile:</b> neben „PERSEIDS“ die Version (z. B. <code>v0.28</code>), daran erkennst du, welche Fassung geladen ist. <code>REC n</code> hell, solange aufgenommen wird, sonst grau <code>next n</code> (wohin die nächste Aufnahme geht). Daneben das Pegelmeter L/R mit der Threshold-Marke, rechts die Blend-Stellung zwischen SP und SW.</li>
+    <li><b>Fünf Spalten</b>, eine pro Trail. Oben Nummer und Zustand: <code>REC</code>, <code>IN</code> (Fade in), Sekunden bis zum Ausblenden, <code>INF</code> (unendlich oder gelockt), <code>OUT</code> (Fade out), <code>--</code> leer.</li>
+    <li>Darunter der <b>Lebensbalken</b> (siehe unten) und der <b>Level-Balken</b>, ganz unten <code>L</code> und <code>S</code> (hell = Lock bzw. Solo an) und der Level in Prozent.</li>
+    <li>Trails jenseits von <i>Count</i> sind dunkel.</li>
+    <li><b>Fußzeile:</b> was die drei Potis gerade tun, mit Wert. <code>HOLD</code> bei unendlichem Hold, <code>CPU</code>, wenn Swarm Grains spart, weil der NT knapp wird, <code>MOD n</code>, wenn n Mod-Slots arbeiten (<code>MOD*</code>: eine geänderte Slot-Einstellung wartet noch), <code>CLK</code>, wenn am <i>Clock in</i> eine Clock erkannt wird, <code>CLK?</code>, wenn ein Slot auf die Clock synchronisiert ist, aber keine ankommt. In nt_emu steht vor jedem Poti-Ziel die Taste, die es umschaltet (<code>1 BLEND</code>, <code>2 SCAN</code>, <code>2 SIZE</code>); die Ziffer gehört also zum Poti, nicht zur Anzeige davor.</li>
+  </ul>
+  <h3 id="lebensbalken">Lebensbalken</h3>
+  <p>Wie am Modul zeigt der Balken das Leben eines Trails von links nach rechts:</p>
+  <div class="tbl"><table><tr><th>Phase</th><th>Bild</th></tr>
+  <tr><td>Aufnahme</td><td>Funken ziehen durch den Balken, so weit die Aufnahme fortgeschritten ist</td></tr>
+  <tr><td>Ende der Aufnahme</td><td>die Funken verglühen in 200 ms</td></tr>
+  <tr><td>Fade in</td><td>der Balken füllt sich von links</td></tr>
+  <tr><td>Hold</td><td>voller Balken</td></tr>
+  <tr><td>Fade out</td><td>der Balken leert sich von links</td></tr></table></div>
+  <p><img src="data:image/png;base64,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" alt="Aufnahme mit Funken" style="width:100%;image-rendering:pixelated;border:1px solid var(--line);border-radius:3px"></p>
+  <p>Die Funken sind voll hell wie am Modul. Das NT-Display hat 16 Helligkeitsstufen; jeder Funke zieht deshalb zusätzlich einen schwachen Punkt hinter sich her. Ist die Abstufung auf deinem Display kaum zu sehen, sieht es aus wie am Modul.</p>
+  <h3 id="rec-style">Rec style</h3>
+  <p>Parameterseite <i>Display</i>, wie Settings → REC am Modul:</p>
+  <div class="tbl"><table><tr><th>Stil</th><th>Aufnahme-Bild</th></tr>
+  <tr><td>PLR (Standard)</td><td>Funken laufen von links nach rechts bis zur Aufnahme-Front, in der Mitte am dichtesten</td></tr>
+  <tr><td>PRS</td><td>Funken wachsen aus der Mitte nach außen</td></tr>
+  <tr><td>CTR</td><td>voller Balken wächst aus der Mitte</td></tr></table></div>
+  <p><img src="data:image/png;base64,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" alt="Rec style PRS" style="width:49%;image-rendering:pixelated;border:1px solid var(--line);border-radius:3px"> <img src="data:image/png;base64,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" alt="Rec style CTR" style="width:49%;image-rendering:pixelated;border:1px solid var(--line);border-radius:3px"></p>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
+<article class="patch-card" id="trails">
+  <div class="ph"><div class="num">06</div><div class="ph-main"><h2>Wie Trails entstehen und vergehen</h2></div></div>
+  <div class="pb">
+  <ul class="lst">
+    <li><b>Auslöser:</b> der Eingangspegel steigt über <i>Threshold</i>, <b>Taste 3</b>, oder eine Flanke über 1 V am <i>Rec trig in</i> (Seite Routing, z. B. eine Clock oder ein Gate).</li>
+    <li><b>Ziel:</b> zuerst ein leerer Trail, sonst der älteste. Gelockte Trails werden nie überschrieben. Mit <i>Overwrite</i> Off wartet Perseids, bis ein Trail ausgeklungen ist; unendliche Trails (INF) bleiben dann stehen, nur <b>Taste 3</b> bzw. <i>Rec trig in</i> ersetzt den ältesten. Mit <i>Overwrite</i> On ersetzt jede neue Phrase den ältesten Trail, auch einen unendlichen.</li>
+    <li><b>Länge:</b> <i>Buffer</i>, höchstens <i>Trail seconds</i>. Der Übergang vom Ende zum Anfang wird weich überblendet, die Schleife hat keinen Knacks.</li>
+    <li><b>Danach:</b> <i>Fade in</i>, dann <i>Hold</i> (31 = INF), dann <i>Fade out</i>. Lock hält den Trail unbegrenzt.</li>
+    <li><b>Hold ändern wirkt sofort:</b> auf INF stellen hält auch die Trails an, deren Zeit gerade abläuft. Ein kürzerer Wert zählt ab dem Beginn des Hold: ist der Trail schon länger gelaufen, blendet er sofort aus. Ein längerer Wert während des Ausblendens holt ihn zurück.</li>
+    <li><b>Cont. Rec:</b> füllt erst alle leeren Trails, solange Signal anliegt; danach startet jede neue Phrase eine Aufnahme.</li>
+    <li><b>Solo</b> lässt nur die gesoloten Trails klingen; die anderen pausieren in ihrem Zustand.</li>
+    <li><b>Capture</b> Off nimmt nichts mehr auf, <b>Play</b> Off blendet die Wolke über die Fade-Zeiten aus, <b>Clear trails</b> leert alles (auch per Gate auslösbar).</li>
+  </ul>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
+<article class="patch-card" id="engines">
+  <div class="ph"><div class="num">07</div><div class="ph-main"><h2>Spectra, Swarm und Resonator</h2></div></div>
+  <div class="pb">
+  <h3>Spectra</h3>
+  <p>Analysiert die Summe der Trails etwa 47-mal pro Sekunde und spielt die stärksten Teiltöne mit Sinus-Oszillatoren nach. Das Ergebnis ist ein weicher, schwebender Abdruck der Aufnahmen.</p>
+  <ul class="lst">
+    <li><b>Partials</b> 4–32: wie viele Teiltöne.</li>
+    <li><b>Waveshape:</b> links Sägezahn, Mitte Sinus, rechts Wavefolding.</li>
+    <li><b>Umbra/Aurora:</b> links dunkler und gedeckter, rechts Formanten wie bei einem Vokal.</li>
+    <li><b>Ensemble:</b> leichtes Verstimmen gerader und ungerader Teiltöne, langsameres Gleiten.</li>
+    <li><b>Pitch Spectra</b> ±24 Halbtöne.</li>
+  </ul>
+  <h3>Swarm</h3>
+  <p>Spielt viele kurze Ausschnitte (je ~100 ms) aus den Trails gleichzeitig. Ein Lesekopf (<i>Scan</i>) wandert durch jede Aufnahme, die Grains streuen um ihn herum.</p>
+  <ul class="lst">
+    <li><b>Size</b> 4–24: Anzahl gleichzeitiger Grains.</li>
+    <li><b>Scan:</b> Wandertempo, ganz links eingefroren.</li>
+    <li><b>Scatter:</b> wie weit die Grains um den Lesekopf streuen, bis zur ganzen Aufnahme.</li>
+    <li><b>Spread:</b> Stereobreite.</li>
+    <li><b>Atmosphere:</b> links Blur (weichere, längere Hüllkurven bis zur kantenlosen Fläche), rechts Radiation (Lo-Fi, Sample &amp; Hold).</li>
+    <li><b>Direction:</b> vorwärts, rückwärts oder zufällig je Grain.</li>
+    <li><b>Pitch Swarm</b> ±24 Halbtöne.</li>
+  </ul>
+  <h3>Level match</h3>
+  <p>Ohne Ausgleich klingt Swarm deutlich lauter als Spectra, vor allem bei kurzen, perkussiven Klängen (4–8 dB); dazu wird Spectra lauter, wenn mehrere Trails dieselben Töne halten. Swarm überdeckt dann schon weit vor 50 % Blend.</p>
+  <p><i>Level match</i> (Seite Engines, ab Werk On) gleicht das aus wie ein sehr langsamer Kompressor: Jede Engine wird gegen die Trail-Summe gemessen, aus der sie gespeist wird, und ihre Lautstärke wird auf dasselbe Verhältnis nachgeführt. Wie schnell, stellt <i>Match speed</i> ein: <b>Slow</b> (≈ 4 s), <b>Medium</b> (≈ 1,5 s, ab Werk), <b>Fast</b> (≈ 0,4 s). Die ersten 3 s nach dem Laden oder nach <i>Clear trails</i> rastet der Ausgleich immer schnell ein, damit nichts nachzieht. Gemessen werden die lauten Stellen (steigt schnell, fällt über 1,2 s), gelernt wird nur bei Signal, in Pausen bleibt der Wert stehen. Höchstens ±12 dB, die Dynamik einzelner Anschläge bleibt erhalten. Damit ist Blend eine echte Überblendung zwischen zwei gleich lauten Engines. Auf Off verhält sich das Plug-in wie bisher.</p>
+  <p><b>Trail-Level bleiben Akzente:</b> Die Trail-Summe, gegen die gemessen wird, enthält die Level schon. Dreht man einen Trail leiser, werden Summe und Engine gemeinsam leiser und der Ausgleich hält still; Level 50 → 20 % ist rund 8 dB leiser, wie ohne Level match.</p>
+  <h3>Resonator</h3>
+  <p>Eine Bank aus acht Resonanzfiltern auf den Harmonischen eines Grundtons (ab Werk C2), parallel zum Swarm-Ausgang – derselbe Code wie im Modul. Die Körner regen die Bank an, sie klingt in Tönen nach. Wie am Modul liegt er nur auf Swarm: bei Blend ganz links (nur Spectra) hörst du ihn nicht.</p>
+  <ul class="lst">
+    <li><b>Reso mix:</b> Anteil der Resonanz, ab Werk 25 %. Am NT auf Poti C (drücken), in nt_emu über Taste 2.</li>
+    <li><b>Reso decay:</b> Ausklingzeit von 0,08 bis 8 s.</li>
+    <li><b>Reso damping:</b> links klingen alle Moden gleich lang (metallisch, glasig), rechts sterben die oberen schneller (Holz, Körper).</li>
+    <li><b>Reso spread:</b> fächert die oberen Moden im Stereobild auf, der Grundton bleibt in der Mitte.</li>
+    <li><b>Reso pitch</b> ±12 Halbtöne und <b>Reso V/Oct in</b>: 1 V pro Oktave auf den Grundton, 0 V = C2. Mit einer Sequenz am Eingang klingt die Resonanz in deren Tönen.</li>
+    <li><b>Reso quantize</b> legt die Moden auf die Stufen von <b>Reso scale</b> (Dur, Moll, Pentatonik) statt auf Harmonische, <b>Reso tuning</b> wählt gleichstufig oder rein.</li>
+  </ul>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
+<article class="patch-card" id="modulation">
+  <div class="ph"><div class="num">08</div><div class="ph-main"><h2>Modulation</h2></div></div>
+  <div class="pb">
+  <p>Jeder Klang- und Trail-Parameter lässt sich per CV modulieren, auf zwei Wegen, die sich ergänzen.</p>
+  <h3 id="mod-slots">Mod-Slots</h3>
+  <p>Zwölf Slots, aufgebaut wie die vier am Modul, je eine Parameterseite <i>Mod 1</i> bis <i>Mod 12</i> am Ende der Seitenliste:</p>
+  <div class="tbl"><table><tr><th>Parameter</th><th>Wirkung</th></tr>
+  <tr><td>Mod in</td><td>CV-Eingang oder Bus als Quelle; ±5 V entsprechen ±100 %. <b>Leer</b> = internes LFO (Dreieck/Sinus wie am Modul), so wie eine unbelegte Mod-Buchse.</td></tr>
+  <tr><td>Mod dest</td><td>Ziel: einer von 84 Parametern (Trails, Time, Engines, Spectra, Swarm, Resonator, Level/Lock/Solo je Trail, Dry/Wet, dazu Amount, Offset und LFO rate jedes Slots: „Mod the mod“). <b>None</b> (ganz links, erster Eintrag) schaltet den Slot ab; alternativ <i>Reset all mods</i> für alle.</td></tr>
+  <tr><td>Mod amount</td><td>Abschwächer und Inverter, −100 … +100 %</td></tr>
+  <tr><td>Mod offset</td><td>Verschiebung nach dem Abschwächer, −100 … +100 %</td></tr>
+  <tr><td>Mod shape</td><td>Kurve des internen LFO, siehe Bild unten. <b>Random steps</b> würfelt je Durchlauf einen neuen Wert; mit <i>Mod sync</i> also im Takt, mit Teiler seltener (/4 = alle vier Takte), mit Multiplikator öfter (x2 = zweimal pro Takt).</td></tr>
+  <tr><td>Mod LFO rate</td><td>Tempo des internen LFO, 0,01–20 Hz (nur ohne Kabel)</td></tr>
+  <tr><td>Mod mode</td><td><b>Around base</b> (ab Werk): der eingestellte Wert ist die Mitte, der Slot schwingt darum (50 %, Amount 10 % → 40–60 %). <b>Override</b>: der eingestellte Wert zählt nicht, der Slot läuft von der Mitte des Bereichs, Amount 100 % = ganzer Bereich.</td></tr>
+  <tr><td>Mod sync</td><td>Letzter Eintrag auf der Seite <i>Mod n</i>, gilt nur für das interne LFO (<i>Mod n in</i> = None). <b>Free</b> = eigenes Tempo. Sonst folgt das LFO dem <i>Clock in</i> (Seite Routing): <b>/16 … /2</b> = ein Durchlauf über so viele Takte, <b>x1 … x8</b> = so viele Durchläufe pro Takt, jeweils am Takt neu gestartet. <b>Rst /16 … Rst x8</b>: eigenes Tempo (<i>LFO rate</i>), aber im selben Raster neu gestartet. <i>Clock in</i> liegt ab Werk auf In 3. Bleibt die Clock 4 Perioden (höchstens 3 s) aus, läuft das LFO frei weiter; <code>CLK</code> in der Fußzeile zeigt eine laufende Clock. Steht dort <code>CLK?</code>, ist ein Slot synchronisiert, aber es kommt keine Clock an: <i>Clock in</i> auf der Seite Routing prüfen (in Patches aus v0.15 steht dort noch <i>None</i>).</td></tr></table></div>
+  <p>Gerechnet wird wie am Modul: <code>Beitrag = Offset + Amount × Quelle</code>, <code>Ziel = Grundwert + Beitrag × voller Regelweg</code>, an den Grenzen abgeschnitten. Mit dem Offset liegt die Modulation ganz unterhalb, ganz oberhalb oder symmetrisch um den Grundwert: Amount 50 %, Offset −50 % bewegt <i>Pitch Swarm</i> nur nach unten.</p>
+  <ul class="lst">
+    <li>Der gespeicherte Wert bleibt stehen; nur der wirksame Wert bewegt sich. Potis und Display zeigen den Grundwert, <code>MOD n</code> unten links die Zahl aktiver Slots.</li>
+    <li>Mehrere Slots auf dasselbe Ziel addieren sich.</li>
+    <li><b>Mod overview</b> (vor Mod 1): oben <i>Reset all mods</i> (bestätigen; setzt jeden Slot ganz zurück: Eingang, Ziel, Amount, Offset, Rate, Sync, Mode), darunter eine Zeile je aktivem Slot: <i>Mod n</i> mit Ziel, Amount und aktueller Ausgabe, etwa <code>Mod 1    Blend 40 % &gt; +12 %</code> (links der Slot, rechts Ziel, Amount, aktuelle Ausgabe). Drehen an der Zeile verstellt den Amount des Slots, beide Stellen zeigen immer denselben Wert. Neue Slots legst du auf ihrer eigenen Seite an, dort steht auch alles Weitere (Eingang, Offset, Mode, Rate, Sync).</li>
+    <li><b>Bewegung sehen:</b> <i>Mod n amount</i> zeigt hinter dem eingestellten Wert, was der Slot gerade ausgibt, etwa <code>40 % &gt; +23 %</code>: Amount, dann Offset + Amount × Quelle. Das Ziel steht eine Zeile darüber in <i>Mod n dest</i>, in der Mod overview steht es mit in der Zeile. In nt_emu läuft die Zahl live mit.</li>
+    <li>Modulierte Parameter tragen in allen Menüs ein <b>„ ~“</b> hinter dem Wert, etwa <code>Blend 37% ~</code> auf der Seite Engines – so siehst du beim Einstellen, dass ein Slot darauf wirkt.</li>
+    <li>Eingang, Ziel, Mode und Sync eines Slots greifen erst, wenn sie 1,5 s stehen bleiben oder sobald du wieder auf der Perseids-Oberfläche bist. Beim Durchblättern der Ziele wird also nichts nebenbei moduliert; solange etwas wartet, zeigt die Fußzeile <code>MOD*</code>. Amount, Offset und Rate wirken sofort.</li>
+    <li><b>Mod the mod:</b> Ein Slot kann Amount, Offset oder LFO rate eines anderen (oder seiner selbst) modulieren, etwa ein langsames LFO, das die Tiefe eines schnellen öffnet. Das wirkt eine Millisekunde später, ohne hörbaren Unterschied.</li>
+    <li><b>Warum höchstens 20 Hz:</b> Die Mod-Slots rechnen alle 64 Samples (gut 1 ms) neu, viele Ziele (Partials, Size, Pitch …) bauen dabei Tabellen um. Die Modulation ist ein Steuersignal, kein Audio-FM; darüber würde sie stufig.</li>
+    <li>Schalter und Zahlen (Lock, Solo, Cont. Rec, Count, Size, Partials, Direction) werden gerundet: Offset +100 % auf <i>Lock 1</i> hält Trail 1 fest, solange der Slot aktiv ist.</li>
+    <li>Nicht modulierbar: Routing, <i>Clear trails</i> (dafür ein Gate per NT-Mapping), <i>Rec style</i>.</li>
+  </ul>
+  <p><b>Mod n shape</b>, die Kurve des internen LFO (ab Werk <i>Classic</i>, die Dreieck/Sinus-Mischung des Moduls). Ein Durchlauf von links nach rechts, gestrichelt die Mitte:</p>
+  <!-- shapes:start -->
+  <svg viewBox="0 0 708 128" width="100%" role="img" aria-label="LFO-Kurven" style="max-width:708px;color:var(--ink)" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="6" width="98" height="38" fill="none" stroke="currentColor" stroke-opacity=".18"/><line x1="10" y1="25.0" x2="108" y2="25.0" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="2 3"/><polyline points="10.0,25.0 11.5,23.7 13.1,22.5 14.6,21.3 16.1,20.0 17.7,18.9 19.2,17.7 20.7,16.6 22.2,15.5 23.8,14.5 25.3,13.5 26.8,12.6 28.4,11.7 29.9,11.0 31.4,10.2 33.0,9.6 34.5,9.0 36.0,9.6 37.6,10.2 39.1,11.0 40.6,11.7 42.2,12.6 43.7,13.5 45.2,14.5 46.8,15.5 48.3,16.6 49.8,17.7 51.3,18.9 52.9,20.0 54.4,21.3 55.9,22.5 57.5,23.7 59.0,25.0 60.5,26.3 62.1,27.5 63.6,28.7 65.1,30.0 66.7,31.1 68.2,32.3 69.7,33.4 71.2,34.5 72.8,35.5 74.3,36.5 75.8,37.4 77.4,38.3 78.9,39.0 80.4,39.8 82.0,40.4 83.5,41.0 85.0,40.4 86.6,39.8 88.1,39.0 89.6,38.3 91.2,37.4 92.7,36.5 94.2,35.5 95.8,34.5 97.3,33.4 98.8,32.3 100.3,31.1 101.9,30.0 103.4,28.7 104.9,27.5 106.5,26.3 108.0,25.0" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="10" y="59" font-size="11" fill="currentColor" font-family="var(--body)">Classic</text><rect x="128" y="6" width="98" height="38" fill="none" stroke="currentColor" stroke-opacity=".18"/><line x1="128" y1="25.0" x2="226" y2="25.0" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="2 3"/><polyline points="128.0,25.0 129.5,23.4 131.1,21.9 132.6,20.4 134.1,18.9 135.7,17.5 137.2,16.1 138.7,14.8 140.2,13.7 141.8,12.6 143.3,11.7 144.8,10.9 146.4,10.2 147.9,9.7 149.4,9.3 151.0,9.1 152.5,9.0 154.0,9.1 155.6,9.3 157.1,9.7 158.6,10.2 160.2,10.9 161.7,11.7 163.2,12.6 164.8,13.7 166.3,14.8 167.8,16.1 169.3,17.5 170.9,18.9 172.4,20.4 173.9,21.9 175.5,23.4 177.0,25.0 178.5,26.6 180.1,28.1 181.6,29.6 183.1,31.1 184.7,32.5 186.2,33.9 187.7,35.2 189.2,36.3 190.8,37.4 192.3,38.3 193.8,39.1 195.4,39.8 196.9,40.3 198.4,40.7 200.0,40.9 201.5,41.0 203.0,40.9 204.6,40.7 206.1,40.3 207.6,39.8 209.2,39.1 210.7,38.3 212.2,37.4 213.8,36.3 215.3,35.2 216.8,33.9 218.3,32.5 219.9,31.1 221.4,29.6 222.9,28.1 224.5,26.6 226.0,25.0" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="128" y="59" font-size="11" fill="currentColor" font-family="var(--body)">Sine</text><rect x="246" y="6" width="98" height="38" fill="none" stroke="currentColor" stroke-opacity=".18"/><line x1="246" y1="25.0" x2="344" y2="25.0" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="2 3"/><polyline points="246.0,41.0 247.5,40.0 249.1,39.0 250.6,38.0 252.1,37.0 253.7,36.0 255.2,35.0 256.7,34.0 258.2,33.0 259.8,32.0 261.3,31.0 262.8,30.0 264.4,29.0 265.9,28.0 267.4,27.0 269.0,26.0 270.5,25.0 272.0,24.0 273.6,23.0 275.1,22.0 276.6,21.0 278.2,20.0 279.7,19.0 281.2,18.0 282.8,17.0 284.3,16.0 285.8,15.0 287.3,14.0 288.9,13.0 290.4,12.0 291.9,11.0 293.5,10.0 295.0,9.0 296.5,10.0 298.1,11.0 299.6,12.0 301.1,13.0 302.7,14.0 304.2,15.0 305.7,16.0 307.2,17.0 308.8,18.0 310.3,19.0 311.8,20.0 313.4,21.0 314.9,22.0 316.4,23.0 318.0,24.0 319.5,25.0 321.0,26.0 322.6,27.0 324.1,28.0 325.6,29.0 327.2,30.0 328.7,31.0 330.2,32.0 331.8,33.0 333.3,34.0 334.8,35.0 336.3,36.0 337.9,37.0 339.4,38.0 340.9,39.0 342.5,40.0 344.0,41.0" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="246" y="59" font-size="11" fill="currentColor" font-family="var(--body)">Triangle</text><rect x="364" y="6" width="98" height="38" fill="none" stroke="currentColor" stroke-opacity=".18"/><line x1="364" y1="25.0" x2="462" y2="25.0" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="2 3"/><polyline points="364.0,41.0 365.5,40.5 367.1,40.0 368.6,39.5 370.1,39.0 371.7,38.5 373.2,38.0 374.7,37.5 376.2,37.0 377.8,36.5 379.3,36.0 380.8,35.5 382.4,35.0 383.9,34.5 385.4,34.0 387.0,33.5 388.5,33.0 390.0,32.5 391.6,32.0 393.1,31.5 394.6,31.0 396.2,30.5 397.7,30.0 399.2,29.5 400.8,29.0 402.3,28.5 403.8,28.0 405.3,27.5 406.9,27.0 408.4,26.5 409.9,26.0 411.5,25.5 413.0,25.0 414.5,24.5 416.1,24.0 417.6,23.5 419.1,23.0 420.7,22.5 422.2,22.0 423.7,21.5 425.2,21.0 426.8,20.5 428.3,20.0 429.8,19.5 431.4,19.0 432.9,18.5 434.4,18.0 436.0,17.5 437.5,17.0 439.0,16.5 440.6,16.0 442.1,15.5 443.6,15.0 445.2,14.5 446.7,14.0 448.2,13.5 449.8,13.0 451.3,12.5 452.8,12.0 454.3,11.5 455.9,11.0 457.4,10.5 458.9,10.0 460.5,9.5 462.0,9.0" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="364" y="59" font-size="11" fill="currentColor" font-family="var(--body)">Saw up</text><rect x="482" y="6" width="98" height="38" fill="none" stroke="currentColor" stroke-opacity=".18"/><line x1="482" y1="25.0" x2="580" y2="25.0" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="2 3"/><polyline points="482.0,9.0 483.5,9.5 485.1,10.0 486.6,10.5 488.1,11.0 489.7,11.5 491.2,12.0 492.7,12.5 494.2,13.0 495.8,13.5 497.3,14.0 498.8,14.5 500.4,15.0 501.9,15.5 503.4,16.0 505.0,16.5 506.5,17.0 508.0,17.5 509.6,18.0 511.1,18.5 512.6,19.0 514.2,19.5 515.7,20.0 517.2,20.5 518.8,21.0 520.3,21.5 521.8,22.0 523.3,22.5 524.9,23.0 526.4,23.5 527.9,24.0 529.5,24.5 531.0,25.0 532.5,25.5 534.1,26.0 535.6,26.5 537.1,27.0 538.7,27.5 540.2,28.0 541.7,28.5 543.2,29.0 544.8,29.5 546.3,30.0 547.8,30.5 549.4,31.0 550.9,31.5 552.4,32.0 554.0,32.5 555.5,33.0 557.0,33.5 558.6,34.0 560.1,34.5 561.6,35.0 563.2,35.5 564.7,36.0 566.2,36.5 567.8,37.0 569.3,37.5 570.8,38.0 572.3,38.5 573.9,39.0 575.4,39.5 576.9,40.0 578.5,40.5 580.0,41.0" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="482" y="59" font-size="11" fill="currentColor" font-family="var(--body)">Saw down</text><rect x="600" y="6" width="98" height="38" fill="none" stroke="currentColor" stroke-opacity=".18"/><line x1="600" y1="25.0" x2="698" y2="25.0" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="2 3"/><polyline points="600.0,9.0 601.5,9.0 603.1,9.0 604.6,9.0 606.1,9.0 607.7,9.0 609.2,9.0 610.7,9.0 612.2,9.0 613.8,9.0 615.3,9.0 616.8,9.0 618.4,9.0 619.9,9.0 621.4,9.0 623.0,9.0 624.5,9.0 626.0,9.0 627.6,9.0 629.1,9.0 630.6,9.0 632.2,9.0 633.7,9.0 635.2,9.0 636.8,9.0 638.3,9.0 639.8,9.0 641.3,9.0 642.9,9.0 644.4,9.0 645.9,9.0 647.5,9.0 649.0,41.0 650.5,41.0 652.1,41.0 653.6,41.0 655.1,41.0 656.7,41.0 658.2,41.0 659.7,41.0 661.2,41.0 662.8,41.0 664.3,41.0 665.8,41.0 667.4,41.0 668.9,41.0 670.4,41.0 672.0,41.0 673.5,41.0 675.0,41.0 676.6,41.0 678.1,41.0 679.6,41.0 681.2,41.0 682.7,41.0 684.2,41.0 685.8,41.0 687.3,41.0 688.8,41.0 690.3,41.0 691.9,41.0 693.4,41.0 694.9,41.0 696.5,41.0 698.0,41.0" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="600" y="59" font-size="11" fill="currentColor" font-family="var(--body)">Square</text><rect x="10" y="70" width="98" height="38" fill="none" stroke="currentColor" stroke-opacity=".18"/><line x1="10" y1="89.0" x2="108" y2="89.0" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="2 3"/><polyline points="10.0,105.0 11.5,101.2 13.1,97.8 14.6,94.8 16.1,92.2 17.7,89.9 19.2,87.8 20.7,86.0 22.2,84.4 23.8,83.0 25.3,81.7 26.8,80.6 28.4,79.7 29.9,78.8 31.4,78.1 33.0,77.4 34.5,76.8 36.0,76.3 37.6,75.8 39.1,75.4 40.6,75.1 42.2,74.8 43.7,74.5 45.2,74.2 46.8,74.0 48.3,73.8 49.8,73.7 51.3,73.5 52.9,73.4 54.4,73.3 55.9,73.2 57.5,73.1 59.0,73.0 60.5,76.8 62.1,80.2 63.6,83.2 65.1,85.8 66.7,88.1 68.2,90.2 69.7,92.0 71.2,93.6 72.8,95.0 74.3,96.3 75.8,97.4 77.4,98.3 78.9,99.2 80.4,99.9 82.0,100.6 83.5,101.2 85.0,101.7 86.6,102.2 88.1,102.6 89.6,102.9 91.2,103.2 92.7,103.5 94.2,103.8 95.8,104.0 97.3,104.2 98.8,104.3 100.3,104.5 101.9,104.6 103.4,104.7 104.9,104.8 106.5,104.9 108.0,105.0" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="10" y="123" font-size="11" fill="currentColor" font-family="var(--body)">Shark</text><rect x="128" y="70" width="98" height="38" fill="none" stroke="currentColor" stroke-opacity=".18"/><line x1="128" y1="89.0" x2="226" y2="89.0" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="2 3"/><polyline points="128.0,105.0 129.5,104.9 131.1,104.8 132.6,104.7 134.1,104.6 135.7,104.5 137.2,104.3 138.7,104.2 140.2,104.0 141.8,103.8 143.3,103.5 144.8,103.2 146.4,102.9 147.9,102.6 149.4,102.2 151.0,101.7 152.5,101.2 154.0,100.6 155.6,99.9 157.1,99.2 158.6,98.3 160.2,97.4 161.7,96.3 163.2,95.0 164.8,93.6 166.3,92.0 167.8,90.2 169.3,88.1 170.9,85.8 172.4,83.2 173.9,80.2 175.5,76.8 177.0,73.0 178.5,73.1 180.1,73.2 181.6,73.3 183.1,73.4 184.7,73.5 186.2,73.7 187.7,73.8 189.2,74.0 190.8,74.2 192.3,74.5 193.8,74.8 195.4,75.1 196.9,75.4 198.4,75.8 200.0,76.3 201.5,76.8 203.0,77.4 204.6,78.1 206.1,78.8 207.6,79.7 209.2,80.6 210.7,81.7 212.2,83.0 213.8,84.4 215.3,86.0 216.8,87.8 218.3,89.9 219.9,92.2 221.4,94.8 222.9,97.8 224.5,101.2 226.0,105.0" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="128" y="123" font-size="11" fill="currentColor" font-family="var(--body)">Shark rev</text><rect x="246" y="70" width="98" height="38" fill="none" stroke="currentColor" stroke-opacity=".18"/><line x1="246" y1="89.0" x2="344" y2="89.0" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="2 3"/><polyline points="246.0,105.0 247.5,105.0 249.1,104.9 250.6,104.9 252.1,104.8 253.7,104.8 255.2,104.7 256.7,104.7 258.2,104.6 259.8,104.5 261.3,104.5 262.8,104.4 264.4,104.3 265.9,104.3 267.4,104.2 269.0,104.1 270.5,104.0 272.0,103.9 273.6,103.8 275.1,103.6 276.6,103.5 278.2,103.4 279.7,103.2 281.2,103.1 282.8,102.9 284.3,102.7 285.8,102.6 287.3,102.4 288.9,102.2 290.4,101.9 291.9,101.7 293.5,101.5 295.0,101.2 296.5,100.9 298.1,100.6 299.6,100.3 301.1,99.9 302.7,99.6 304.2,99.2 305.7,98.8 307.2,98.3 308.8,97.9 310.3,97.4 311.8,96.8 313.4,96.3 314.9,95.7 316.4,95.0 318.0,94.3 319.5,93.6 321.0,92.8 322.6,92.0 324.1,91.1 325.6,90.2 327.2,89.2 328.7,88.1 330.2,87.0 331.8,85.8 333.3,84.6 334.8,83.2 336.3,81.7 337.9,80.2 339.4,78.6 340.9,76.8 342.5,75.0 344.0,73.0" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="246" y="123" font-size="11" fill="currentColor" font-family="var(--body)">Exp</text><rect x="364" y="70" width="98" height="38" fill="none" stroke="currentColor" stroke-opacity=".18"/><line x1="364" y1="89.0" x2="462" y2="89.0" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="2 3"/><polyline points="364.0,105.0 365.5,103.0 367.1,101.2 368.6,99.4 370.1,97.8 371.7,96.3 373.2,94.8 374.7,93.4 376.2,92.2 377.8,91.0 379.3,89.9 380.8,88.8 382.4,87.8 383.9,86.9 385.4,86.0 387.0,85.2 388.5,84.4 390.0,83.7 391.6,83.0 393.1,82.3 394.6,81.7 396.2,81.2 397.7,80.6 399.2,80.1 400.8,79.7 402.3,79.2 403.8,78.8 405.3,78.4 406.9,78.1 408.4,77.7 409.9,77.4 411.5,77.1 413.0,76.8 414.5,76.5 416.1,76.3 417.6,76.1 419.1,75.8 420.7,75.6 422.2,75.4 423.7,75.3 425.2,75.1 426.8,74.9 428.3,74.8 429.8,74.6 431.4,74.5 432.9,74.4 434.4,74.2 436.0,74.1 437.5,74.0 439.0,73.9 440.6,73.8 442.1,73.7 443.6,73.7 445.2,73.6 446.7,73.5 448.2,73.5 449.8,73.4 451.3,73.3 452.8,73.3 454.3,73.2 455.9,73.2 457.4,73.1 458.9,73.1 460.5,73.0 462.0,73.0" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="364" y="123" font-size="11" fill="currentColor" font-family="var(--body)">Log</text><rect x="482" y="70" width="98" height="38" fill="none" stroke="currentColor" stroke-opacity=".18"/><line x1="482" y1="89.0" x2="580" y2="89.0" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="2 3"/><polyline points="482.0,94.6 483.5,94.6 485.1,94.6 486.6,94.6 488.1,94.6 489.7,94.6 491.2,94.6 492.7,94.6 494.2,94.6 495.8,94.6 497.3,94.6 498.8,94.6 500.4,94.6 501.9,94.6 503.4,94.6 505.0,94.6 506.5,94.6 508.0,100.2 509.6,100.2 511.1,100.2 512.6,100.2 514.2,100.2 515.7,100.2 517.2,100.2 518.8,100.2 520.3,100.2 521.8,100.2 523.3,100.2 524.9,100.2 526.4,100.2 527.9,100.2 529.5,100.2 531.0,100.2 532.5,84.2 534.1,84.2 535.6,84.2 537.1,84.2 538.7,84.2 540.2,84.2 541.7,84.2 543.2,84.2 544.8,84.2 546.3,84.2 547.8,84.2 549.4,84.2 550.9,84.2 552.4,84.2 554.0,84.2 555.5,84.2 557.0,102.7 558.6,102.7 560.1,102.7 561.6,102.7 563.2,102.7 564.7,102.7 566.2,102.7 567.8,102.7 569.3,102.7 570.8,102.7 572.3,102.7 573.9,102.7 575.4,102.7 576.9,102.7 578.5,102.7 580.0,102.7" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="482" y="123" font-size="11" fill="currentColor" font-family="var(--body)">Random steps</text></svg>
+  <!-- shapes:end -->
+  <h3 id="mod-shape">Die Kurven im Einzelnen</h3>
+  <div class="tbl"><table><tr><th>Shape</th><th>Verlauf</th><th>Wofür</th></tr>
+  <tr><td>Classic</td><td>Mischung aus 55 % Dreieck und 45 % Sinus, wie sie das Modul für seine internen LFOs vorsieht. Gleichmäßige, fast gerade Flanken, leicht spitze Umkehrpunkte.</td><td>Ab Werk; gleichmäßiges Hin und Her durch den ganzen Bereich. Alte Patches klingen damit wie vorher.</td></tr>
+  <tr><td>Sine</td><td>Reiner Sinus: wird zu den Spitzen hin weich langsamer und verweilt dort.</td><td>Atmen, Schweben; die Modulation hält sich länger oben und unten auf.</td></tr>
+  <tr><td>Triangle</td><td>Gerade hoch, gerade runter, gleich schnell.</td><td>Gleichmäßige Sweeps, z. B. Scan oder Blend.</td></tr>
+  <tr><td>Saw up</td><td>Steigt gleichmäßig an und springt am Ende zurück.</td><td>Wiederkehrendes Anschwellen, z. B. Reso mix oder Dry/Wet.</td></tr>
+  <tr><td>Saw down</td><td>Springt hoch und fällt gleichmäßig ab.</td><td>Abklingen wie eine Hüllkurve, mit Clock pro Takt.</td></tr>
+  <tr><td>Square</td><td>Zwei Zustände, je die halbe Periode.</td><td>Umschalten im Takt, z. B. zwischen zwei Blend-Stellungen oder Lock an/aus.</td></tr>
+  <tr><td>Shark</td><td>Haifischflosse: steigt schnell an und flacht oben ab, fällt dann ebenso gebogen (Lade- und Entladekurve eines Kondensators).</td><td>Weiche, „analoge“ Bewegung mit Schwung nach oben.</td></tr>
+  <tr><td>Shark rev</td><td>Dieselbe Flosse rückwärts: langsam an, schnell ab.</td><td>Aufbauen und dann loslassen.</td></tr>
+  <tr><td>Exp</td><td>Steigt erst langsam, dann immer schneller, springt am Ende zurück.</td><td>Spannung, die sich zuspitzt; Pitch- oder Filter-artige Fahrten.</td></tr>
+  <tr><td>Log</td><td>Steigt erst schnell, dann immer langsamer, springt am Ende zurück.</td><td>Schneller Einsatz, langes Ausklingen nach oben.</td></tr>
+  <tr><td>Random steps</td><td>Pro LFO-Durchlauf ein neuer Zufallswert, dazwischen bleibt er stehen (Sample &amp; Hold). Mit <i>Mod sync</i> im Takt, /4 = alle vier Takte, x2 = zweimal pro Takt.</td><td>Zufällige Sprünge, z. B. Partials, Size oder Pitch Swarm.</td></tr>
+  </table></div>
+  <p>Alle Kurven laufen zwischen −100 % und +100 % der Quelle; wohin das auf dem Ziel führt, bestimmen <i>Amount</i>, <i>Offset</i> und <i>Mod mode</i> wie bei jeder anderen Quelle. Mit <i>Offset</i> lässt sich eine Kurve auch nur nach oben oder nur nach unten legen.</p>
+  <h3 id="mod-ansicht">Mod-Ansicht</h3>
+  <p>Encoder L über den letzten Trail hinaus nach rechts drehen: Statt der Trails erscheint eine Kachel je aktivem Slot, vier nebeneinander, zwei Reihen. Der kleine Pfeil am rechten Rand zeigt, dass es dort weitergeht; er leuchtet, wenn der nächste Schritt hinführt.</p>
+  <ul class="lst">
+    <li><b>Kachel:</b> Slot-Nummer, Ziel, Amount. Darunter eine kleine Oszilloskop-Spur des Ziels über gut 2 s (unten 0, oben 100 % seines Bereichs), der eingestellte Wert gepunktet. Schwingt ein Slot von 100 % nur nach unten bis 40 %, sieht man das sofort.</li>
+    <li><b>Encoder L</b> wählt die Kachel, links von der ersten geht es zurück zu den Trails. <b>Encoder R</b> stellt den Amount des gewählten Slots, 1 % je Raste.</li>
+    <li>Pfeile in der Mod-Ansicht: links der ersten Kachel = zurück (zu den Trails bzw. zur vorigen Seite); rechts der vierten Kachel nur, wenn es mehr als acht aktive Slots gibt – dann folgt eine weitere Seite zu acht.</li>
+    <li>Ein Ziel, das noch auf die 1,5 s wartet, steht dunkel.</li>
+    <li><i>Mod view</i> (Seite Display) stellt auf <b>Numbers</b> um: eingestellter Wert &gt; aktueller Wert in den Einheiten des Parameters, darunter Offset und <code>ovr</code> bei Override.</li>
+    <li>Solange die Mod-Ansicht offen ist, steht <i>Mod overview</i> als erste Seite im Menü, so öffnet das Menü dort (nt_emu beginnt immer auf der ersten Seite).</li>
+  </ul>
+  <p><img src="data:image/png;base64,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" alt="Mod-Ansicht grafisch" style="width:100%;image-rendering:pixelated;border:1px solid var(--line);border-radius:3px"></p>
+  <p><img src="data:image/png;base64,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" alt="Mod-Ansicht als Zahlen" style="width:100%;image-rendering:pixelated;border:1px solid var(--line);border-radius:3px"></p>
+  <h3 id="nt-mapping">CV-Mapping des NT</h3>
+  <p>Zusätzlich lässt sich im NT jeder Parameter auf CV oder MIDI legen, auch die Mod-Slots selbst (etwa <i>Mod 1 amount</i> per Fader). Das NT-Mapping verstellt den gespeicherten Wert direkt; die Mod-Slots wirken obendrauf.</p>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
+<article class="patch-card" id="parameter">
+  <div class="ph"><div class="num">09</div><div class="ph-main"><h2>Parameter</h2></div></div>
+  <div class="pb">
+  <p>Alle Parameter lassen sich im NT auf CV oder MIDI legen und werden mit dem Preset gespeichert.</p>
+  <div class="tbl"><table><tr><th>Seite</th><th>Parameter</th><th>Bereich (Standard)</th></tr>
+  <tr><td>Trails</td><td>Count</td><td>1–5 (3)</td></tr>
+  <tr><td></td><td>Threshold</td><td>0–100 % (12 %)</td></tr>
+  <tr><td></td><td>Cont. Rec · Overwrite · Capture · Play</td><td>Off/On (Off · On · On · On)</td></tr>
+  <tr><td></td><td>Clear trails</td><td>bestätigen</td></tr>
+  <tr><td>Time</td><td>Buffer</td><td>0,1 s – Trail seconds (2,0 s)</td></tr>
+  <tr><td></td><td>Hold</td><td>0–30 s, INF (15 s)</td></tr>
+  <tr><td></td><td>Fade in · Fade out</td><td>0–5 s (3,0 s)</td></tr>
+  <tr><td>Engines</td><td>Blend</td><td>0–100 % (50 %)</td></tr>
+  <tr><td></td><td>Dry/Wet</td><td>0–100 % (100 % = nur Wolke)</td></tr>
+  <tr><td></td><td>Pitch Spectra · Pitch Swarm</td><td>±24 Halbtöne (0)</td></tr>
+  <tr><td></td><td>Level match</td><td>Off/On (On)</td></tr>
+  <tr><td></td><td>Match speed</td><td>Slow/Medium/Fast (Medium)</td></tr>
+  <tr><td></td><td>Output level</td><td>−24 … +24 dB (+12 dB)</td></tr>
+  <tr><td>Spectra</td><td>Partials</td><td>4–32 (16)</td></tr>
+  <tr><td></td><td>Waveshape · Umbra/Aurora</td><td>−100 … +100 % (0)</td></tr>
+  <tr><td></td><td>Ensemble</td><td>0–100 % (0)</td></tr>
+  <tr><td>Swarm</td><td>Size</td><td>4–24 (16)</td></tr>
+  <tr><td></td><td>Spread · Scan · Scatter</td><td>0–100 % (35 · 20 · 75 %)</td></tr>
+  <tr><td></td><td>Atmosphere</td><td>−100 … +100 % (0)</td></tr>
+  <tr><td></td><td>Direction</td><td>Fwd/Rev/Rnd (Fwd)</td></tr>
+  <tr><td>Resonator</td><td>Reso mix</td><td>0–100 % (25 %)</td></tr>
+  <tr><td></td><td>Reso decay · Reso damping · Reso spread</td><td>0–100 % (50 · 50 · 35 %)</td></tr>
+  <tr><td></td><td>Reso pitch</td><td>±12 Halbtöne (0 = C2)</td></tr>
+  <tr><td></td><td>Reso quantize</td><td>Off/On (Off)</td></tr>
+  <tr><td></td><td>Reso scale · Reso tuning</td><td>Major/Minor/Pentatonic · Equal/Just (Major · Equal)</td></tr>
+  <tr><td></td><td>Reso V/Oct in</td><td>CV-Eingang oder keiner</td></tr>
+  <tr><td>Mixer</td><td>Level 1–5</td><td>0–100 % (50 %)</td></tr>
+  <tr><td></td><td>Lock 1–5 · Solo 1–5</td><td>Off/On (Off)</td></tr>
+  <tr><td>Mod 1–12</td><td>Mod in</td><td>CV-Eingang oder keiner (keiner = LFO)</td></tr>
+  <tr><td></td><td>Mod dest</td><td>None oder einer von 84 Zielen (None)</td></tr>
+  <tr><td></td><td>Mod amount · Mod offset</td><td>−100 … +100 % (0)</td></tr>
+  <tr><td></td><td>Mod shape</td><td>Classic · Sine · Triangle · Saw up · Saw down · Square · Shark · Shark rev · Exp · Log · Random steps (Classic)</td></tr>
+  <tr><td></td><td>Mod LFO rate</td><td>0,01–20 Hz (0,25 Hz)</td></tr>
+  <tr><td></td><td>Mod mode</td><td>Around base / Override (Around base)</td></tr>
+  <tr><td></td><td>Mod sync</td><td>Free · /16 … /2 · x1 … x8 · Rst /16 … Rst x8 (Free)</td></tr>
+  <tr><td>Mod overview</td><td>Reset all mods · je aktivem Slot eine Zeile (Ziel, Amount, Ausgabe)</td><td>bestätigen</td></tr>
+  <tr><td>Display</td><td>Rec style</td><td>PRS/PLR/CTR (PLR)</td></tr>
+  <tr><td></td><td>Mod view</td><td>Graphic/Numbers (Graphic)</td></tr>
+  <tr><td>Routing</td><td>In L · In R</td><td>Eingang 1 · 2 (In R auch „keiner“)</td></tr>
+  <tr><td></td><td>Rec trig in · Clock in</td><td>keiner · In 3</td></tr>
+  <tr><td></td><td>Out L · Out R, je mit Add/Replace</td><td>Ausgang 1 · 2, Add</td></tr>
+  </table></div>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
+<article class="patch-card" id="rezepte">
+  <div class="ph"><div class="num">10</div><div class="ph-main"><h2>Rezepte</h2></div></div>
+  <div class="pb">
+  <h3>Gefrorene Fläche</h3>
+  <p>Count 3, Hold INF (Taste 4), Overwrite Off, Blend ganz rechts, Scan 0, Scatter 100 %, Atmosphere −80 %. Drei Phrasen spielen, dann nur noch mit Poti C (Scan) leicht bewegen.</p>
+  <h3>Spektraler Schatten</h3>
+  <p>Blend ganz links, Partials 8, Umbra/Aurora −60 %, Ensemble 40 %, Pitch Spectra −12. Ergibt einen dunklen Orgelton unter dem Original. Damit beides zusammen klingt, Out L/R mit <i>Add</i> auf die Busse legen, über die das Original zum Ausgang läuft.</p>
+  <h3>Getaktete Erinnerung</h3>
+  <p>Threshold 100 % (nur noch der Trigger nimmt auf), Rec trig in an einen langsamen Clock-Teiler, Buffer 1 s, Hold 8 s, Count 5. Jeder Takt hält eine Sekunde fest; die Wolke erneuert sich von selbst.</p>
+  <h3>Wolke statt Hall</h3>
+  <p>Perseids vor einen NT-Reverb setzen, Output level 0 dB, Out auf <i>Add</i>. Blend 60 %, Spread 80 %, Fade in/out 5 s. Mit Mod 1 ohne Kabel, Ziel <i>Blend</i>, Amount 40 %, LFO 0,05 Hz wandert der Klang von selbst zwischen Körnern und Teiltönen.</p>
+  <h3>Resonanz folgt der Melodie</h3>
+  <p>Den Pitch-Ausgang einer Sequenz (z. B. Duett Track A) an einen NT-Eingang, <i>Reso V/Oct in</i> darauf. Blend ganz rechts, Reso mix 60 %, Reso decay 80 %, Reso damping 30 %. Die Körner aus beliebigem Material klingen jetzt in den Tönen der Sequenz nach. Mit <i>Reso quantize</i> und <i>Reso scale</i> Minor werden daraus Akkordflächen.</p>
+  <h3>Lauter = körniger</h3>
+  <p>Einen Hüllkurvenfolger der Quelle an einen NT-Eingang, <i>Mod 1 in</i> darauf, Ziel <i>Blend</i>, Amount 60 %, Offset −30 %. In leisen Passagen dominiert Spectra, laute Stellen schieben die Wolke zu Swarm. Ein zweiter Slot mit demselben Eingang auf <i>Scatter</i> streut sie dabei weiter.</p>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
+<article class="patch-card" id="grenzen">
+  <div class="ph"><div class="num">11</div><div class="ph-main"><h2>Unterschiede, Grenzen, Stand</h2></div></div>
+  <div class="pb">
+  <h3>Anders als am Modul</h3>
+  <ul class="lst">
+    <li><b>Pitch</b> in Halbtönen (±24) statt Prozent mit <i>Pitch Both</i>.</li>
+    <li><b>Pegel:</b> ±5 V am Eingang entsprechen Vollaussteuerung. <i>Output level</i> steht ab Werk auf +12 dB, weil die Wolke deutlich leiser ist als der Eingang.</li>
+    <li><b>Blend</b> steht ab Werk auf 50 % (Modul: nur Spectra).</li>
+    <li><b>Trails in 16 Bit</b> statt 32 Bit; im Klang nicht zu unterscheiden.</li>
+    <li><b>Trails stehen in der Mitte</b>, Pan Drift fehlt (siehe 01).</li>
+  </ul>
+  <h3>Grenzen</h3>
+  <ul class="lst">
+    <li>Wird der NT knapp, spart Swarm Grains (Anzeige <code>CPU</code>), mindestens 6 bleiben.</li>
+    <li>Aufnahmen gehen beim Ausschalten, beim Neuladen und bei „Respecify“ verloren; gespeichert werden nur die Einstellungen.</li>
+    <li>Wie viel DRAM der NT einem Plug-in gibt, ist nicht dokumentiert; 30 s pro Trail erst ausprobieren.</li>
+    <li>Das Parametermenü gehört dem NT bzw. nt_emu: Wie lange es offen bleibt und auf welcher Seite es öffnet, kann ein Plug-in nicht einstellen. Perseids stellt nur die Seitenreihenfolge um (Mod overview zuerst, solange die Mod-Ansicht offen ist).</li>
+  </ul>
+  <h3>Stand</h3>
+  <p>In einer Simulation getestet (174 Prüfungen, in der nt_emu-Fassung 173: Tonhöhe, Klicks, Blockgrößen, Modulation, Dry/Wet, Level match, Resonator, Bedienung mit Catch-up, Clock-Sync, Display) und unter Wine mit einem nt_emu-artigen Host. Die DLL läuft in nt_emu (VCV Rack). <b>Am NT selbst noch nicht getestet.</b> Rückmeldungen dazu, besonders zum Nachglimmen der Funken und zur CPU-Last, fließen in die nächste Fassung.</p>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+<!-- appendix:start -->
+<article class="patch-card" id="anhang">
+  <div class="ph"><div class="num">12</div><div class="ph-main"><h2>Anhang: Wo steht was</h2></div></div>
+  <div class="pb">
+  <p>Erzeugt aus den Tabellen des Plug-ins (<code>./test/sim --list | python3 docs/appendix.py …</code>), passt also immer zur Version.</p>
+  <h3>Parameterseiten in Menü-Reihenfolge</h3>
+  <div class="tbl"><table><tr><th>Seite</th><th>Parameter</th></tr>
+  <tr><td>Trails</td><td>Count · Threshold · Cont. Rec · Overwrite · Capture · Play · Clear trails</td></tr>
+  <tr><td>Time</td><td>Buffer · Hold · Fade in · Fade out</td></tr>
+  <tr><td>Engines</td><td>Blend · Dry/Wet · Level match · Match speed · Pitch Spectra · Pitch Swarm · Output level</td></tr>
+  <tr><td>Spectra</td><td>Partials · Waveshape · Umbra/Aurora · Ensemble</td></tr>
+  <tr><td>Swarm</td><td>Size · Spread · Scan · Scatter · Atmosphere · Direction</td></tr>
+  <tr><td>Resonator</td><td>Reso mix · Reso decay · Reso damping · Reso spread · Reso pitch · Reso quantize · Reso scale · Reso tuning · Reso V/Oct in</td></tr>
+  <tr><td>Mixer</td><td>Level 1 · Level 2 · Level 3 · Level 4 · Level 5 · Lock 1 · Lock 2 · Lock 3 · Lock 4 · Lock 5 · Solo 1 · Solo 2 · Solo 3 · Solo 4 · Solo 5</td></tr>
+  <tr><td>Display</td><td>Rec style · Mod view</td></tr>
+  <tr><td>Routing</td><td>In L · In R · Rec trig in · Clock in · Out L · Out L mode · Out R · Out R mode</td></tr>
+  <tr><td>Mod overview</td><td>(Reset all mods, dann je aktivem Slot eine Zeile: Mod n mit Ziel, Amount, Ausgabe)</td></tr>
+  <tr><td>Mod 1 … Mod 12</td><td>Mod n in · Mod n dest · Mod n amount · Mod n offset · Mod n mode · Mod n shape · Mod n LFO rate · Mod n sync</td></tr>
+  </table></div>
+  <h3>Mod-Ziele (Mod n dest)</h3>
+  <p><b>Nr.</b> = Rasten von <i>None</i> aus nach rechts. Beispiel: <i>Dry/Wet</i> ist Nr. 40. Die Ziele stehen in der Reihenfolge der Parameterseiten, die Amount/Offset/Rate-Ziele der Slots („Mod the mod“) am Ende.</p>
+  <div class="tbl"><table><tr><th>Nr.</th><th>Ziel</th><th>Seite</th></tr>
+  <tr><td>0</td><td>None</td><td>schaltet den Slot ab</td></tr>
+  <tr><td>1</td><td>Count</td><td>Trails</td></tr>
+  <tr><td>2</td><td>Threshold</td><td>Trails</td></tr>
+  <tr><td>3</td><td>Cont. Rec</td><td>Trails</td></tr>
+  <tr><td>4</td><td>Overwrite</td><td>Trails</td></tr>
+  <tr><td>5</td><td>Capture</td><td>Trails</td></tr>
+  <tr><td>6</td><td>Play</td><td>Trails</td></tr>
+  <tr><td>7</td><td>Buffer</td><td>Time</td></tr>
+  <tr><td>8</td><td>Hold</td><td>Time</td></tr>
+  <tr><td>9</td><td>Fade in</td><td>Time</td></tr>
+  <tr><td>10</td><td>Fade out</td><td>Time</td></tr>
+  <tr><td>11</td><td>Blend</td><td>Engines</td></tr>
+  <tr><td>12</td><td>Pitch Spectra</td><td>Engines</td></tr>
+  <tr><td>13</td><td>Pitch Swarm</td><td>Engines</td></tr>
+  <tr><td>14</td><td>Output level</td><td>Engines</td></tr>
+  <tr><td>15</td><td>Partials</td><td>Spectra</td></tr>
+  <tr><td>16</td><td>Waveshape</td><td>Spectra</td></tr>
+  <tr><td>17</td><td>Umbra/Aurora</td><td>Spectra</td></tr>
+  <tr><td>18</td><td>Ensemble</td><td>Spectra</td></tr>
+  <tr><td>19</td><td>Size</td><td>Swarm</td></tr>
+  <tr><td>20</td><td>Spread</td><td>Swarm</td></tr>
+  <tr><td>21</td><td>Scan</td><td>Swarm</td></tr>
+  <tr><td>22</td><td>Scatter</td><td>Swarm</td></tr>
+  <tr><td>23</td><td>Atmosphere</td><td>Swarm</td></tr>
+  <tr><td>24</td><td>Direction</td><td>Swarm</td></tr>
+  <tr><td>25</td><td>Level 1</td><td>Mixer</td></tr>
+  <tr><td>26</td><td>Level 2</td><td>Mixer</td></tr>
+  <tr><td>27</td><td>Level 3</td><td>Mixer</td></tr>
+  <tr><td>28</td><td>Level 4</td><td>Mixer</td></tr>
+  <tr><td>29</td><td>Level 5</td><td>Mixer</td></tr>
+  <tr><td>30</td><td>Lock 1</td><td>Mixer</td></tr>
+  <tr><td>31</td><td>Lock 2</td><td>Mixer</td></tr>
+  <tr><td>32</td><td>Lock 3</td><td>Mixer</td></tr>
+  <tr><td>33</td><td>Lock 4</td><td>Mixer</td></tr>
+  <tr><td>34</td><td>Lock 5</td><td>Mixer</td></tr>
+  <tr><td>35</td><td>Solo 1</td><td>Mixer</td></tr>
+  <tr><td>36</td><td>Solo 2</td><td>Mixer</td></tr>
+  <tr><td>37</td><td>Solo 3</td><td>Mixer</td></tr>
+  <tr><td>38</td><td>Solo 4</td><td>Mixer</td></tr>
+  <tr><td>39</td><td>Solo 5</td><td>Mixer</td></tr>
+  <tr><td>40</td><td>Dry/Wet</td><td>Engines</td></tr>
+  <tr><td>41</td><td>Reso mix</td><td>Resonator</td></tr>
+  <tr><td>42</td><td>Reso decay</td><td>Resonator</td></tr>
+  <tr><td>43</td><td>Reso damping</td><td>Resonator</td></tr>
+  <tr><td>44</td><td>Reso spread</td><td>Resonator</td></tr>
+  <tr><td>45</td><td>Reso pitch</td><td>Resonator</td></tr>
+  <tr><td>46</td><td>Reso quantize</td><td>Resonator</td></tr>
+  <tr><td>47</td><td>Reso scale</td><td>Resonator</td></tr>
+  <tr><td>48</td><td>Reso tuning</td><td>Resonator</td></tr>
+  <tr><td>49</td><td>Mod 1 amount</td><td>Mod 1</td></tr>
+  <tr><td>50</td><td>Mod 1 offset</td><td>Mod 1</td></tr>
+  <tr><td>51</td><td>Mod 1 LFO rate</td><td>Mod 1</td></tr>
+  <tr><td>52</td><td>Mod 2 amount</td><td>Mod 2</td></tr>
+  <tr><td>53</td><td>Mod 2 offset</td><td>Mod 2</td></tr>
+  <tr><td>54</td><td>Mod 2 LFO rate</td><td>Mod 2</td></tr>
+  <tr><td>55</td><td>Mod 3 amount</td><td>Mod 3</td></tr>
+  <tr><td>56</td><td>Mod 3 offset</td><td>Mod 3</td></tr>
+  <tr><td>57</td><td>Mod 3 LFO rate</td><td>Mod 3</td></tr>
+  <tr><td>58</td><td>Mod 4 amount</td><td>Mod 4</td></tr>
+  <tr><td>59</td><td>Mod 4 offset</td><td>Mod 4</td></tr>
+  <tr><td>60</td><td>Mod 4 LFO rate</td><td>Mod 4</td></tr>
+  <tr><td>61</td><td>Mod 5 amount</td><td>Mod 5</td></tr>
+  <tr><td>62</td><td>Mod 5 offset</td><td>Mod 5</td></tr>
+  <tr><td>63</td><td>Mod 5 LFO rate</td><td>Mod 5</td></tr>
+  <tr><td>64</td><td>Mod 6 amount</td><td>Mod 6</td></tr>
+  <tr><td>65</td><td>Mod 6 offset</td><td>Mod 6</td></tr>
+  <tr><td>66</td><td>Mod 6 LFO rate</td><td>Mod 6</td></tr>
+  <tr><td>67</td><td>Mod 7 amount</td><td>Mod 7</td></tr>
+  <tr><td>68</td><td>Mod 7 offset</td><td>Mod 7</td></tr>
+  <tr><td>69</td><td>Mod 7 LFO rate</td><td>Mod 7</td></tr>
+  <tr><td>70</td><td>Mod 8 amount</td><td>Mod 8</td></tr>
+  <tr><td>71</td><td>Mod 8 offset</td><td>Mod 8</td></tr>
+  <tr><td>72</td><td>Mod 8 LFO rate</td><td>Mod 8</td></tr>
+  <tr><td>73</td><td>Mod 9 amount</td><td>Mod 9</td></tr>
+  <tr><td>74</td><td>Mod 9 offset</td><td>Mod 9</td></tr>
+  <tr><td>75</td><td>Mod 9 LFO rate</td><td>Mod 9</td></tr>
+  <tr><td>76</td><td>Mod 10 amount</td><td>Mod 10</td></tr>
+  <tr><td>77</td><td>Mod 10 offset</td><td>Mod 10</td></tr>
+  <tr><td>78</td><td>Mod 10 LFO rate</td><td>Mod 10</td></tr>
+  <tr><td>79</td><td>Mod 11 amount</td><td>Mod 11</td></tr>
+  <tr><td>80</td><td>Mod 11 offset</td><td>Mod 11</td></tr>
+  <tr><td>81</td><td>Mod 11 LFO rate</td><td>Mod 11</td></tr>
+  <tr><td>82</td><td>Mod 12 amount</td><td>Mod 12</td></tr>
+  <tr><td>83</td><td>Mod 12 offset</td><td>Mod 12</td></tr>
+  <tr><td>84</td><td>Mod 12 LFO rate</td><td>Mod 12</td></tr>
+  </table></div>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+<!-- appendix:end -->
+</section>
+<footer>Stand: Perseids-core für den disting NT, 10. Oktober 2026 · Quelltext und Tests: <code>nt/</code> im Perseids-Repo · <a href="#inhalt">↑ zum Inhalt</a></footer>
+</div>
+</body>
+</html>

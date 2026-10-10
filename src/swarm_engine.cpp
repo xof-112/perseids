@@ -1,7 +1,5 @@
 #include "swarm_engine.h"
 
-#include "daisy.h"
-
 #include <cmath>
 
 namespace perseids
@@ -57,8 +55,9 @@ constexpr float kGovRelease = 0.72f;
 constexpr uint32_t kGovRecoverBlocks = 8;
 } // namespace
 
-void SwarmEngine::Init(float sample_rate)
+void SwarmEngine::Init(float sample_rate, const CaptureEngine* capture)
 {
+    capture_         = capture;
     sample_rate_     = sample_rate > 1.f ? sample_rate : 48000.f;
     sample_rate_inv_ = 1.f / sample_rate_;
     params_          = SwarmParamValues{};
@@ -84,21 +83,31 @@ void SwarmEngine::Init(float sample_rate)
     // BuildWindowTable always fills the whole back buffer before flipping the
     // index, so the audio thread never sees a partially written table.
     win_index_.store(0, std::memory_order_relaxed);
-    win_blur_     = 0.f;
-    win_build_ms_ = 0;
+    win_blur_       = 0.f;
+    win_build_ms_   = 0;
+    win_slicing_    = false;
+    win_slice_blur_ = 0.f;
+    win_slice_pos_  = 0;
     BuildWindowTable(0.f);
 }
 
 void SwarmEngine::BuildWindowTable(float blur)
 {
     const uint32_t back = win_index_.load(std::memory_order_relaxed) ^ 1u;
-    float* const   tab  = window_tab_[back];
+    BuildWindowRange(window_tab_[back], blur, 0, kWindowLut + 1);
+    win_index_.store(back, std::memory_order_release);
+}
 
+void SwarmEngine::BuildWindowRange(float* tab,
+                                   float  blur,
+                                   size_t begin,
+                                   size_t end) const
+{
     const float powv = Lerp(1.f, 0.05f, blur);
     const float inv  = 1.f / static_cast<float>(kWindowLut);
     const bool  flat_mix = blur >= 0.001f;
 
-    for(size_t i = 0; i <= kWindowLut; ++i)
+    for(size_t i = begin; i < end; ++i)
     {
         const float x = static_cast<float>(i) * inv;
         // Hann at center Atmosphere.
@@ -117,28 +126,58 @@ void SwarmEngine::BuildWindowTable(float blur)
         const float t    = blur * blur; // bias travel toward full wash
         tab[i]           = Lerp(hann, flat, t);
     }
-
-    win_index_.store(back, std::memory_order_release);
 }
 
-void SwarmEngine::SyncFromUi(const SwarmParamValues& params)
+float SwarmEngine::TargetBlur() const
+{
+    const float atmo = BipolarNorm(params_.atmosphere, -1.f, 1.f);
+    const float blur = atmo < 0.f ? -atmo : 0.f;
+    return static_cast<float>(static_cast<int>(blur * kBlurSteps + 0.5f))
+           / kBlurSteps;
+}
+
+void SwarmEngine::WindowSlice()
+{
+    if(!win_slicing_)
+    {
+        const float target = TargetBlur();
+        if(target == win_blur_)
+            return;
+        win_slicing_    = true;
+        win_slice_blur_ = target;
+        win_slice_pos_  = 0;
+    }
+
+    // Same thread as Process here, so writing the back buffer is safe; the
+    // audio path keeps reading the front table until the flip.
+    const uint32_t back = win_index_.load(std::memory_order_relaxed) ^ 1u;
+    size_t         end  = win_slice_pos_ + kWindowSlice;
+    if(end > kWindowLut + 1)
+        end = kWindowLut + 1;
+    BuildWindowRange(window_tab_[back], win_slice_blur_, win_slice_pos_, end);
+    win_slice_pos_ = end;
+    if(win_slice_pos_ >= kWindowLut + 1)
+    {
+        win_index_.store(back, std::memory_order_release);
+        win_blur_    = win_slice_blur_;
+        win_slicing_ = false;
+    }
+}
+
+void SwarmEngine::SyncFromUi(const SwarmParamValues& params, uint32_t now_ms)
 {
     params_ = params;
 
     // Atmosphere holds still for whole blocks at a time, so the exact blur
     // curve is tabulated here (main loop) rather than evaluated with pow() per
     // grain per sample in the callback.
-    const float atmo = BipolarNorm(params_.atmosphere, -1.f, 1.f);
-    const float blur = atmo < 0.f ? -atmo : 0.f;
-    const float quantised
-        = static_cast<float>(static_cast<int>(blur * kBlurSteps + 0.5f))
-          / kBlurSteps;
+    const float quantised = TargetBlur();
     if(quantised == win_blur_)
         return;
 
     // Leaving win_blur_ untouched means the next UI iteration retries, so the
     // final pot position always lands even if this one is thrown away.
-    const uint32_t now = daisy::System::GetNow();
+    const uint32_t now = now_ms;
     if(now - win_build_ms_ < kBlurRebuildMs)
         return;
 
@@ -225,9 +264,9 @@ float SwarmEngine::ReadInterp(size_t trail, float pos, float play_f) const
     const float  frac = pos - static_cast<float>(i0);
     // Direct buffer read: CaptureEngine::ReadLooped is a cross-TU call the
     // compiler cannot inline, and play_f already bounds both indices.
-    const float* buf = trail_buffer[trail];
-    const float  a   = buf[i0];
-    const float  b   = buf[i1];
+    const TrailSample* buf = capture_->TrailData(trail);
+    const float        a   = TrailToFloat(buf[i0]);
+    const float        b   = TrailToFloat(buf[i1]);
     return a + (b - a) * frac;
 }
 
@@ -295,7 +334,7 @@ void SwarmEngine::SpawnGrain(size_t trail,
     // so soft-replace fades mute grains without a hard cut.
     g.amp     = 1.f;
 
-    const CaptureEngine::SwarmTrailView& v = CaptureEngine::SwarmViews()[trail];
+    const CaptureEngine::SwarmTrailView& v = capture_->SwarmViews()[trail];
     float       el = g.pan_l * v.pan_l;
     float       er = g.pan_r * v.pan_r;
     const float en = 1.f / std::sqrt(el * el + er * er + 1e-6f);
@@ -305,7 +344,7 @@ void SwarmEngine::SpawnGrain(size_t trail,
 
 void SwarmEngine::Process(float* out_l, float* out_r, size_t size)
 {
-    const CaptureEngine::SwarmTrailView* views = CaptureEngine::SwarmViews();
+    const CaptureEngine::SwarmTrailView* views = capture_->SwarmViews();
     const float* const win
         = window_tab_[win_index_.load(std::memory_order_acquire)];
 
