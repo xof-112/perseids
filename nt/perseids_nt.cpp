@@ -154,6 +154,11 @@ constexpr int kNumModTargets = static_cast<int>(sizeof(kModTargets));
 static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kModTargets) + 1,
               "every mod target needs a name");
 
+// Plug-in version, shown in the display header and the algorithm description.
+// History in README.md (Versionen).
+#define PERSEIDS_NT_VERSION "0.7"
+const char* const kVersion = "v" PERSEIDS_NT_VERSION;
+
 // Hold: the top value means "infinite" (engine: > 30 s).
 constexpr int kHoldInf = 31;
 
@@ -1436,6 +1441,8 @@ bool draw(_NT_algorithm* self)
 
     // Header: name, recording state, input meter.
     NT_drawText(0, 8, "PERSEIDS", 15);
+    // Plug-in version, so it is obvious which build is loaded.
+    NT_drawText(48, 8, kVersion, 5, kNT_textLeft, kNT_textTiny);
     const int count = Count(a);
     if(e.capture.RecActive())
     {
@@ -1522,34 +1529,35 @@ bool draw(_NT_algorithm* self)
         NT_drawText(x0 + 46, 48, buff, active ? 8 : 2, kNT_textRight, kNT_textTiny);
     }
 
-    // Footer: what the pots do, and the current values.
-    if(a->pot_l_mix)
-    {
-        FormatPercent(buff, ParamValue(a, kParamDryWet), false);
-        NT_drawText(2, 61, "DRY/WET", 6, kNT_textLeft, kNT_textTiny);
-        NT_drawText(34, 61, buff, 15, kNT_textLeft, kNT_textTiny);
-    }
-    else
-    {
-        FormatPercent(buff, ParamValue(a, kParamBlend), false);
-        NT_drawText(2, 61, "BLEND", 6, kNT_textLeft, kNT_textTiny);
-        NT_drawText(26, 61, buff, 15, kNT_textLeft, kNT_textTiny);
-    }
+    // Footer: what the pots do, and the current values. In nt_emu, where pot
+    // presses never arrive, each label carries the button that switches it.
+#ifdef NT_EMU_WIN
+    const char* const lbl_l = a->pot_l_mix ? "1 DRY/WET" : "1 BLEND";
+    const char* const lbl_c = a->pot_c_reso ? "2 RESO" : "2 SCAN";
+    const char* const lbl_r = a->pot_r_atmo ? "2 ATMO" : "2 SIZE";
+#else
+    const char* const lbl_l = a->pot_l_mix ? "DRY/WET" : "BLEND";
+    const char* const lbl_c = a->pot_c_reso ? "RESO" : "SCAN";
+    const char* const lbl_r = a->pot_r_atmo ? "ATMO" : "SIZE";
+#endif
+    // Tiny font: 4 px per character; the value follows one blank later.
+    auto ValueX = [](int x, const char* label) {
+        return x + 4 * static_cast<int>(std::strlen(label)) + 4;
+    };
+
+    FormatPercent(buff, ParamValue(a, a->pot_l_mix ? kParamDryWet : kParamBlend), false);
+    NT_drawText(2, 61, lbl_l, 6, kNT_textLeft, kNT_textTiny);
+    NT_drawText(ValueX(2, lbl_l), 61, buff, 15, kNT_textLeft, kNT_textTiny);
 
     FormatPercent(buff, ParamValue(a, a->pot_c_reso ? kParamResoMix : kParamScan), false);
-    NT_drawText(100, 61, a->pot_c_reso ? "RESO" : "SCAN", 6, kNT_textLeft, kNT_textTiny);
-    NT_drawText(120, 61, buff, 15, kNT_textLeft, kNT_textTiny);
+    NT_drawText(100, 61, lbl_c, 6, kNT_textLeft, kNT_textTiny);
+    NT_drawText(ValueX(100, lbl_c), 61, buff, 15, kNT_textLeft, kNT_textTiny);
 
     if(a->pot_r_atmo)
-    {
         FormatPercent(buff, ParamValue(a, kParamAtmosphere), true);
-        NT_drawText(196, 61, "ATMO", 6, kNT_textLeft, kNT_textTiny);
-    }
     else
-    {
         NT_intToString(buff, ParamValue(a, kParamSize));
-        NT_drawText(196, 61, "SIZE", 6, kNT_textLeft, kNT_textTiny);
-    }
+    NT_drawText(196, 61, lbl_r, 6, kNT_textLeft, kNT_textTiny);
     NT_drawText(254, 61, buff, 15, kNT_textRight, kNT_textTiny);
 
     if(ParamValue(a, kParamHold) == kHoldInf)
@@ -1570,7 +1578,7 @@ bool draw(_NT_algorithm* self)
 const _NT_factory kFactory = {
     .guid                        = NT_MULTICHAR('X', 'o', 'P', 's'),
     .name                        = "Perseids",
-    .description                 = "Ambient resynthesizer: 5 Trails, Spectra + Swarm",
+    .description                 = "Ambient resynthesizer: 5 Trails, Spectra + Swarm (v" PERSEIDS_NT_VERSION ")",
     .numSpecifications           = kNumSpecs,
     .specifications              = kSpecs,
     .calculateStaticRequirements = nullptr,

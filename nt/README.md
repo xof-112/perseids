@@ -27,7 +27,7 @@ Gebaut gegen distingNT_API v14 (Submodul `distingNT_API`, Stand 6975a63). GPL-3.
 
 Tasten 1/2 bleiben beim NT. Ein Encoder-Klick zählt nur ohne Drehen.
 
-**In nt_emu (VCV Rack)** kommen bei Plug-ins mit eigener Oberfläche nur Poti- und Encoder-Drehungen und die Tasten 1–4 an, kein Druck auf Potis oder Encoder (so ist nt_emu gebaut, Stand ad2aa4b). Die Windows-DLL legt deshalb das Umschalten auf die freien Tasten: **Taste 1** = Poti L Blend ↔ Dry/Wet, **Taste 2** = Poti C und Poti R gemeinsam (Scan/Size ↔ Reso mix/Atmosphere). Solo und Lock gehen in nt_emu nur über die Parameterseite *Mixer*. Tasten wirken in nt_emu beim Loslassen.
+**In nt_emu (VCV Rack)** kommen bei Plug-ins mit eigener Oberfläche nur Poti- und Encoder-Drehungen und die Tasten 1–4 an, kein Druck auf Potis oder Encoder (so ist nt_emu gebaut, Stand ad2aa4b). Die Windows-DLL legt deshalb das Umschalten auf die freien Tasten: **Taste 1** = Poti L Blend ↔ Dry/Wet, **Taste 2** = Poti C und Poti R gemeinsam (Scan/Size ↔ Reso mix/Atmosphere). Solo und Lock gehen in nt_emu nur über die Parameterseite *Mixer*. Tasten wirken in nt_emu beim Loslassen. Die Fußzeile der nt_emu-Fassung zeigt vor jedem Poti-Ziel die zuständige Taste (`1 BLEND`, `2 SCAN`, `2 SIZE`).
 
 Display: Kopfzeile mit REC-Anzeige (bzw. dem nächsten Ziel-Trail), Eingangspegel L/R mit Threshold-Marke und Blend-Stellung. Darunter fünf Spalten: Trail-Nummer, Zustand (`REC`, `IN`, Sekunden bis zum Ausblenden, `INF`, `OUT`), Lebensbalken, Level-Balken, `L`/`S` und Level in %. Der gewählte Trail ist umrahmt, Trails über *Count* sind dunkel. Fußzeile: was die drei Potis gerade tun, `HOLD` bei unendlichem Hold, `CPU`, wenn der Swarm-Governor Grains spart, `MOD n`, wenn n Mod-Slots arbeiten.
 
@@ -128,6 +128,20 @@ make render     # render/perseids-screens.png
 Die Hörproben landen in `test/out/` (Eingang, Spectra, Swarm, Blend, Blur, Radiation, Umbra+Fold, Aurora+Saw). **Eigenes Material:** `./test/sim aufnahme.wav` schickt eine WAV-Datei (16/24/32 Bit oder Float) mit Blend 0/50/100 % durch das Plug-in und schreibt `test/out/yours_blend*.wav`.
 
 Der Klick-Detektor hat in der Firmware-Engine einen echten Fehler gefunden: Spectra brach Partials ab, wenn ihre Anzahl schrumpfte (Commit „Spectra: Partials beim Schrumpfen der Anzahl ausblenden“). Behoben in `src/`, gilt also auch für den Daisy.
+
+## Versionen
+
+Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschreibung, so ist sofort zu sehen, welche Fassung geladen ist.
+
+| Version | Inhalt |
+|---|---|
+| 0.1 | Capture, Spectra, Swarm, Blend, Bedienung, Display |
+| 0.2 | Aufnahme-Funken im Lebensbalken, Rec style |
+| 0.3 | vier Mod-Slots |
+| 0.4 | Dry/Wet auf Poti L |
+| 0.5 | nt_emu: Taste 1/2 schalten die Poti-Ziele |
+| 0.6 | Resonator (Spectral Resonator, Block 7) mit V/Oct |
+| 0.7 | Versionsanzeige; nt_emu: Fußzeile zeigt die Taste je Poti-Ziel |
 
 ## Stand
 
