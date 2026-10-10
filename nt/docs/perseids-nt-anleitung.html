@@ -96,7 +96,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <p class="eyebrow">disting NT · Plug-in · Perseids-core</p>
   <h1>Perseids – Anleitung</h1>
   <p class="lede">Perseids-core ist der Kern des Perseids-Moduls als Algorithmus für den Expert Sleepers disting NT: Audio in fünf Trails aufnehmen und daraus mit Spectra (additive Resynthese) und Swarm (Granular) eine Stereo-Wolke formen. Diese Anleitung erklärt Installation, den ersten Patch, Bedienung, Display und alle Parameter.</p>
-  <div class="facts"><span>In L/R · Out L/R</span><span>5 Trails, 1–30 s</span><span>Spectra ↔ Swarm</span><span>Rec trig per CV</span><span>4 Mod-Slots</span><span>68 Parameter</span><span>Bedienung wie am Modul</span></div>
+  <div class="facts"><span>In L/R · Out L/R</span><span>5 Trails, 1–30 s</span><span>Spectra ↔ Swarm</span><span>Rec trig per CV</span><span>4 Mod-Slots</span><span>Dry/Wet auf Poti L</span><span>69 Parameter</span><span>Bedienung wie am Modul</span></div>
   <span class="chip chip-now">Stand 10.10.2026 · läuft in nt_emu, am NT noch nicht getestet</span>
 </header>
 
@@ -139,7 +139,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <tr><td>Reverb</td><td>einen NT-Reverb hinter Perseids setzen, oder Milky Way</td></tr>
   <tr><td>Filter</td><td>NT-Filter, Wasp, SEM</td></tr>
   <tr><td>Pan Drift, Crossfade</td><td>NT-Mixer mit LFO, Four Play; die Stereobreite kommt aus Swarm (<i>Spread</i>)</td></tr>
-  <tr><td>Multi Dry/Wet</td><td>Ausgang mit <i>Add</i> auf den Eingangsbus legen, Anteil über <i>Output level</i></td></tr>
+  <tr><td>Multi Dry/Wet</td><td>eingebaut als <i>Dry/Wet</i>, auf Poti L (drücken)</td></tr>
   <tr><td>Mod-System</td><td>vier Mod-Slots sind eingebaut (siehe 08), dazu das CV-/MIDI-Mapping des NT; Auto-Mod Age/Pitch fehlt noch</td></tr>
   <tr><td>Resonator</td><td>noch nicht enthalten</td></tr>
   </table></div>
@@ -176,6 +176,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
     <li>Etwas spielen. Sobald der Pegel die <b>Threshold</b> überschreitet (Marke im Pegelmeter oben), nimmt Trail 1 auf: im Display steht <code>REC 1</code>, im Lebensbalken ziehen Funken.</li>
     <li>Nach der Aufnahme (Standard 2 s) blendet der Trail ein und klingt <b>Hold</b> lang (Standard 15 s), dann blendet er aus. Die nächste Phrase landet in Trail 2, dann 3.</li>
     <li><b>Poti L</b> (Blend) langsam drehen: links nur Spectra, rechts nur Swarm.</li>
+    <li>Soll das Original mitklingen: <b>Poti L drücken</b>, die Fußzeile zeigt <code>DRY/WET</code>. Nach links drehen mischt den sauberen Eingang dazu. Ab Werk steht Dry/Wet auf 100 % (nur Wolke).</li>
   </ol>
   <p>Für einen dauerhaften Teppich: <b>Taste 4</b> (Hold unendlich), dann ein paar Phrasen spielen. Für eine Wolke aus allem, was kommt: <i>Cont. Rec</i> auf On und <i>Count</i> auf 5.</p>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
@@ -186,7 +187,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <div class="pb">
   <p>Im Algorithmus-Bildschirm übernimmt Perseids Potis, Encoder und die Tasten 3 und 4. Die Tasten 1 und 2 bleiben beim NT.</p>
   <div class="tbl"><table><tr><th>Element</th><th>Drehen</th><th>Drücken</th></tr>
-  <tr><td>Poti L</td><td><b>Blend</b> Spectra ↔ Swarm</td><td>–</td></tr>
+  <tr><td>Poti L</td><td><b>Blend</b> Spectra ↔ Swarm oder <b>Dry/Wet</b></td><td>schaltet zwischen Blend und Dry/Wet</td></tr>
   <tr><td>Poti C</td><td><b>Scan</b>: wie schnell Swarm durch die Trails wandert, ganz links = Freeze</td><td>–</td></tr>
   <tr><td>Poti R</td><td><b>Size</b> (4–24 Grains) oder <b>Atmosphere</b></td><td>schaltet zwischen Size und Atmosphere</td></tr>
   <tr><td>Encoder L</td><td>Trail wählen (der gewählte ist umrahmt)</td><td><b>Solo</b> für diesen Trail</td></tr>
@@ -279,7 +280,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <p>Vier Slots wie am Modul, je eine Parameterseite <i>Mod 1</i> bis <i>Mod 4</i>:</p>
   <div class="tbl"><table><tr><th>Parameter</th><th>Wirkung</th></tr>
   <tr><td>Mod in</td><td>CV-Eingang oder Bus als Quelle; ±5 V entsprechen ±100 %. <b>Leer</b> = internes LFO (Dreieck/Sinus wie am Modul), so wie eine unbelegte Mod-Buchse.</td></tr>
-  <tr><td>Mod dest</td><td>Ziel: einer von 39 Parametern (Trails, Time, Engines, Spectra, Swarm, Level/Lock/Solo je Trail), oder Off</td></tr>
+  <tr><td>Mod dest</td><td>Ziel: einer von 40 Parametern (Trails, Time, Engines, Spectra, Swarm, Level/Lock/Solo je Trail), oder Off</td></tr>
   <tr><td>Mod amount</td><td>Abschwächer und Inverter, −100 … +100 %</td></tr>
   <tr><td>Mod offset</td><td>Verschiebung nach dem Abschwächer, −100 … +100 %</td></tr>
   <tr><td>Mod LFO rate</td><td>Tempo des internen LFO, 0,01–20 Hz (nur ohne Kabel)</td></tr></table></div>
@@ -308,6 +309,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <tr><td></td><td>Hold</td><td>0–30 s, INF (15 s)</td></tr>
   <tr><td></td><td>Fade in · Fade out</td><td>0–5 s (3,0 s)</td></tr>
   <tr><td>Engines</td><td>Blend</td><td>0–100 % (50 %)</td></tr>
+  <tr><td></td><td>Dry/Wet</td><td>0–100 % (100 % = nur Wolke)</td></tr>
   <tr><td></td><td>Pitch Spectra · Pitch Swarm</td><td>±24 Halbtöne (0)</td></tr>
   <tr><td></td><td>Output level</td><td>−24 … +24 dB (+12 dB)</td></tr>
   <tr><td>Spectra</td><td>Partials</td><td>4–32 (16)</td></tr>
@@ -320,7 +322,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <tr><td>Mixer</td><td>Level 1–5</td><td>0–100 % (50 %)</td></tr>
   <tr><td></td><td>Lock 1–5 · Solo 1–5</td><td>Off/On (Off)</td></tr>
   <tr><td>Mod 1–4</td><td>Mod in</td><td>CV-Eingang oder keiner (keiner = LFO)</td></tr>
-  <tr><td></td><td>Mod dest</td><td>Off oder einer von 39 Parametern (Off)</td></tr>
+  <tr><td></td><td>Mod dest</td><td>Off oder einer von 40 Parametern (Off)</td></tr>
   <tr><td></td><td>Mod amount · Mod offset</td><td>−100 … +100 % (0)</td></tr>
   <tr><td></td><td>Mod LFO rate</td><td>0,01–20 Hz (0,25 Hz)</td></tr>
   <tr><td>Display</td><td>Rec style</td><td>PRS/PLR/CTR (PLR)</td></tr>
@@ -365,7 +367,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
     <li>Wie viel DRAM der NT einem Plug-in gibt, ist nicht dokumentiert; 30 s pro Trail erst ausprobieren.</li>
   </ul>
   <h3>Stand</h3>
-  <p>In einer Simulation getestet (85 Prüfungen: Tonhöhe, Klicks, Blockgrößen, Modulation, Bedienung, Display) und unter Wine mit einem nt_emu-artigen Host. Die DLL läuft in nt_emu (VCV Rack). <b>Am NT selbst noch nicht getestet.</b> Rückmeldungen dazu, besonders zum Nachglimmen der Funken und zur CPU-Last, fließen in die nächste Fassung.</p>
+  <p>In einer Simulation getestet (93 Prüfungen: Tonhöhe, Klicks, Blockgrößen, Modulation, Dry/Wet, Bedienung, Display) und unter Wine mit einem nt_emu-artigen Host. Die DLL läuft in nt_emu (VCV Rack). <b>Am NT selbst noch nicht getestet.</b> Rückmeldungen dazu, besonders zum Nachglimmen der Funken und zur CPU-Last, fließen in die nächste Fassung.</p>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 </section>

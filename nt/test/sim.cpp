@@ -668,6 +668,39 @@ int main(int argc, char** argv)
         g_alg = A.a;
     }
 
+    // --- Dry/Wet ---------------------------------------------------------------------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        SetP(I, kParamCapture, 0); // no cloud: only the dry side is heard
+        Signal s = Tone(220.f, 0.5f, 2.f);
+        for(size_t i = 0; i < s.r.size(); ++i)
+            s.r[i] = -0.5f * s.l[i]; // distinct right channel
+        Signal o = Run(I, s, 24);
+        CHECK(Peak(o.l) < 1e-6f, "Dry/Wet 100 %% (default): cloud only, no dry signal");
+
+        SetP(I, kParamDryWet, 0);
+        o = Run(I, s, 24);
+        float err = 0.f;
+        for(size_t i = 0; i < s.l.size(); ++i)
+        {
+            const float xl = s.l[i] * 0.2f * 0.85f, xr = s.r[i] * 0.2f * 0.85f;
+            const float el = SoftLimit(xl) * 5.f - o.l[i], er = SoftLimit(xr) * 5.f - o.r[i];
+            err = std::max(err, std::max(std::fabs(el), std::fabs(er)));
+        }
+        CHECK(err < 1e-4f, "Dry/Wet 0 %%: clean stereo input at −1,4 dB (error %.1e V)", err);
+
+        SetP(I, kParamDryWet, 50);
+        Signal o50 = Run(I, s, 24);
+        const float ratio = Rms(o50.l) / Rms(o.l);
+        CHECK(std::fabs(ratio - 0.7071f) < 0.03f, "Dry/Wet 50 %%: dry at −3 dB (equal power, %.3f)", ratio);
+
+        SetP(I, kParamInR, 0);
+        Signal om = Run(I, s, 24);
+        CHECK(std::fabs(Rms(om.r) - Rms(om.l)) < 1e-4f, "In R unpatched: dry In L on both outputs");
+        g_alg = A.a;
+    }
+
     // --- two instances share nothing -------------------------------------------
     {
         static int16_t v2[256];
@@ -799,6 +832,19 @@ int main(int argc, char** argv)
         customUi(I.a, d);
         CHECK(I.v[kParamAtmosphere] == -100 && I.v[kParamSize] == 24,
               "%s: Pot R press switches to Atmosphere (%d)", host, I.v[kParamAtmosphere]);
+        Press(I, kNT_potButtonL, emu);
+        d.controls = kNT_potL;
+        d.pots[0]  = 0.6f;
+        customUi(I.a, d);
+        CHECK(I.v[kParamDryWet] == 60 && I.v[kParamBlend] == 30,
+              "%s: Pot L press switches to Dry/Wet (%d %%), Blend stays %d %%", host,
+              I.v[kParamDryWet], I.v[kParamBlend]);
+        g_textOob = g_shapeOob = 0;
+        draw(I.a);
+        CHECK(g_textOob == 0 && g_shapeOob == 0, "%s: footer DRY/WET on screen", host);
+        Press(I, kNT_potButtonL, emu);
+        d.controls = kNT_potL;
+        d.pots[0]  = 0.3f;
         _NT_float3 pots;
         setupUi(I.a, pots);
         CHECK(std::fabs(pots[0] - 0.3f) < 1e-6f && std::fabs(pots[2]) < 1e-6f,

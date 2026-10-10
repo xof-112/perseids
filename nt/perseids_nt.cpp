@@ -86,7 +86,10 @@ enum
     // Mod slots 1–4 (ARCHITECTURE 4.3), five parameters each
     kParamMod1,
 
-    kNumParams = kParamMod1 + 4 * 5,
+    // Added after the mod slots so their indices stay put.
+    kParamDryWet = kParamMod1 + 4 * 5,
+
+    kNumParams,
 };
 
 // Mod slot layout: kParamMod1 + slot * kModParams + field.
@@ -100,7 +103,7 @@ enum
     kModRate,   // internal LFO rate, 0.01–20 Hz
     kModParams,
 };
-static_assert(kNumParams == kParamMod1 + kNumModSlots * kModParams, "mod slot layout");
+static_assert(kParamDryWet == kParamMod1 + kNumModSlots * kModParams, "mod slot layout");
 
 // Everything a slot can modulate: all sound and Trail parameters. Not routing,
 // not Clear trails (a held mod would clear forever), not the display or the
@@ -116,6 +119,7 @@ const uint8_t kModTargets[] = {
     kParamTrailLevel1 + 4,
     kParamLock1, kParamLock1 + 1, kParamLock1 + 2, kParamLock1 + 3, kParamLock1 + 4,
     kParamSolo1, kParamSolo1 + 1, kParamSolo1 + 2, kParamSolo1 + 3, kParamSolo1 + 4,
+    kParamDryWet,
 };
 const char* const kModTargetNames[] = {
     "Off",
@@ -127,6 +131,7 @@ const char* const kModTargetNames[] = {
     "Level 1", "Level 2", "Level 3", "Level 4", "Level 5",
     "Lock 1", "Lock 2", "Lock 3", "Lock 4", "Lock 5",
     "Solo 1", "Solo 2", "Solo 3", "Solo 4", "Solo 5",
+    "Dry/Wet",
     nullptr,
 };
 constexpr int kNumModTargets = static_cast<int>(sizeof(kModTargets));
@@ -204,14 +209,18 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     P_NUM("Mod " n " offset", -100, 100, 0, kNT_unitPercent, 0)        \
     P_NUM("Mod " n " LFO rate", 1, 2000, 25, kNT_unitHz, kNT_scaling100)
     P_MOD_SLOT("1") P_MOD_SLOT("2") P_MOD_SLOT("3") P_MOD_SLOT("4")
+
+    // Like the firmware's Multi Dry/Wet: clean input ↔ cloud, equal power.
+    // 100 % = cloud only, which is what the plug-in did before this existed.
+    P_NUM("Dry/Wet", 0, 100, 100, kNT_unitPercent, 0)
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
                                 kParamOverwrite, kParamCapture, kParamPlay,
                                 kParamClear};
 const uint8_t kPageTime[]    = {kParamBuffer, kParamHold, kParamFadeIn, kParamFadeOut};
-const uint8_t kPageEngines[] = {kParamBlend, kParamPitchSpectra, kParamPitchSwarm,
-                                kParamOutLevel};
+const uint8_t kPageEngines[] = {kParamBlend, kParamDryWet, kParamPitchSpectra,
+                                kParamPitchSwarm, kParamOutLevel};
 const uint8_t kPageSpectra[] = {kParamPartials, kParamWaveshape, kParamUmbra,
                                 kParamEnsemble};
 const uint8_t kPageSwarm[]   = {kParamSize, kParamSpread, kParamScan, kParamScatter,
@@ -340,6 +349,7 @@ struct PerseidsAlgorithm : public _NT_algorithm
     volatile bool dirty;
     float         blend;
     float         out_gain;
+    float         dry_wet;
     bool          playing;
 
     CaptureParamValues capture_p;
@@ -359,6 +369,7 @@ struct PerseidsAlgorithm : public _NT_algorithm
 
     // Controls
     int   selected;    // Trail 0…4
+    bool  pot_l_mix;   // Pot L: false = Blend, true = Dry/Wet
     bool  pot_r_atmo;  // Pot R: false = Size, true = Atmosphere
     int   hold_before; // Hold value to restore when Hold is toggled off
     Click click_l;
@@ -494,6 +505,7 @@ void ReadParams(PerseidsAlgorithm* a)
     w.direction         = static_cast<float>(PvI(a, kParamDirection));
 
     a->out_gain = std::pow(10.f, Pv(a, kParamOutLevel) / 20.f);
+    a->dry_wet  = Pv(a, kParamDryWet) * 0.01f;
 }
 
 // ---------------------------------------------------------------------------
@@ -608,7 +620,9 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->gov_acc      = 0;
     a->gov_cycles   = 0;
     a->selected     = 0;
+    a->pot_l_mix    = false;
     a->pot_r_atmo   = false;
+    a->dry_wet      = 1.f;
     a->hold_before  = 15;
     a->click_l      = Click{false, false};
     a->click_r      = Click{false, false};
@@ -815,6 +829,14 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
         if(run_swarm)
             e.swarm.Process(e.sw_l, e.sw_r, n);
 
+        // Dry/Wet as in the firmware's Multi stage: equal power, dry trimmed
+        // to 0.85 so the clean signal does not dominate at the middle. The
+        // dry side is the clean stereo input (In R unpatched → In L on both).
+        const float dw    = Clampf(a->dry_wet, 0.f, 1.f);
+        const float dry_g = dw >= 0.999f ? 0.f : std::cos(dw * 1.5707964f) * 0.85f;
+        const float wet_g = (dw >= 0.999f ? 1.f : std::sin(dw * 1.5707964f)) * a->out_gain;
+        const bool  dry_r = in_r != nullptr;
+
         for(int i = 0; i < n; ++i)
         {
             float l = 0.f;
@@ -829,8 +851,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
                 l += e.sw_l[i] * wet_swarm;
                 r += e.sw_r[i] * wet_swarm;
             }
-            l = SoftLimit(l * a->out_gain) * kUnitToVolts;
-            r = SoftLimit(r * a->out_gain) * kUnitToVolts;
+            const float dl = e.in_l[i];
+            const float dr = dry_r ? e.in_r[i] : dl;
+            l = SoftLimit(l * wet_g + dl * dry_g) * kUnitToVolts;
+            r = SoftLimit(r * wet_g + dr * dry_g) * kUnitToVolts;
             if(out_l)
             {
                 if(replace_l)
@@ -886,11 +910,11 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
 // ---------------------------------------------------------------------------
 // Controls
 //
-// Pot L Blend · Pot C Scan · Pot R Size (press: Atmosphere)
+// Pot L Blend (press: Dry/Wet) · Pot C Scan · Pot R Size (press: Atmosphere)
 // Encoder L: choose Trail, click: Solo · Encoder R: Trail level, click: Lock
 // Button 3: Rec · Button 4: Hold (infinite on/off)
 
-constexpr uint32_t kCustomControls = kNT_potL | kNT_potC | kNT_potR | kNT_potButtonR
+constexpr uint32_t kCustomControls = kNT_potL | kNT_potC | kNT_potR | kNT_potButtonL | kNT_potButtonR
                                      | kNT_encoderL | kNT_encoderR | kNT_encoderButtonL
                                      | kNT_encoderButtonR | kNT_button3 | kNT_button4;
 
@@ -935,7 +959,13 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data)
         return;
 
     if(data.controls & kNT_potL)
-        SetParamUi(a, kParamBlend, static_cast<int>(data.pots[0] * 100.f + 0.5f));
+        SetParamUi(a, a->pot_l_mix ? kParamDryWet : kParamBlend,
+                   static_cast<int>(data.pots[0] * 100.f + 0.5f));
+    if(Pressed(data, kNT_potButtonL))
+    {
+        a->pot_l_mix = !a->pot_l_mix;
+        NT_requestSetupUi(); // re-sync soft takeover for the new target
+    }
     if(data.controls & kNT_potC)
         SetParamUi(a, kParamScan, static_cast<int>(data.pots[1] * 100.f + 0.5f));
     if(data.controls & kNT_potR)
@@ -998,7 +1028,7 @@ void setupUi(_NT_algorithm* self, _NT_float3& pots)
     PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
     if(!a->v)
         return;
-    pots[0] = ParamValue(a, kParamBlend) * 0.01f;
+    pots[0] = ParamValue(a, a->pot_l_mix ? kParamDryWet : kParamBlend) * 0.01f;
     pots[1] = ParamValue(a, kParamScan) * 0.01f;
     pots[2] = a->pot_r_atmo ? (ParamValue(a, kParamAtmosphere) + 100) * 0.005f
                             : (ParamValue(a, kParamSize) - 4) * 0.05f;
@@ -1388,9 +1418,18 @@ bool draw(_NT_algorithm* self)
     }
 
     // Footer: what the pots do, and the current values.
-    FormatPercent(buff, ParamValue(a, kParamBlend), false);
-    NT_drawText(2, 61, "BLEND", 6, kNT_textLeft, kNT_textTiny);
-    NT_drawText(26, 61, buff, 15, kNT_textLeft, kNT_textTiny);
+    if(a->pot_l_mix)
+    {
+        FormatPercent(buff, ParamValue(a, kParamDryWet), false);
+        NT_drawText(2, 61, "DRY/WET", 6, kNT_textLeft, kNT_textTiny);
+        NT_drawText(34, 61, buff, 15, kNT_textLeft, kNT_textTiny);
+    }
+    else
+    {
+        FormatPercent(buff, ParamValue(a, kParamBlend), false);
+        NT_drawText(2, 61, "BLEND", 6, kNT_textLeft, kNT_textTiny);
+        NT_drawText(26, 61, buff, 15, kNT_textLeft, kNT_textTiny);
+    }
 
     FormatPercent(buff, ParamValue(a, kParamScan), false);
     NT_drawText(100, 61, "SCAN", 6, kNT_textLeft, kNT_textTiny);

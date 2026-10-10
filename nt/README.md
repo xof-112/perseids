@@ -17,7 +17,7 @@ Gebaut gegen distingNT_API v14 (Submodul `distingNT_API`, Stand 6975a63). GPL-3.
 
 | Element | Funktion |
 |---|---|
-| Poti L | **Blend** Spectra ↔ Swarm |
+| Poti L | **Blend** Spectra ↔ Swarm; Poti L drücken schaltet auf **Dry/Wet** und zurück |
 | Poti C | **Scan** (0 = Freeze) |
 | Poti R | **Size** (Grain-Anzahl 4–24); Poti R drücken schaltet auf **Atmosphere** (Blur ← 0 → Radiation) und zurück |
 | Encoder L drehen / klicken | Trail wählen / **Solo** für den gewählten Trail |
@@ -41,13 +41,15 @@ Alle Regler sind normale NT-Parameter, also per CV oder MIDI steuerbar.
 |---|---|
 | Trails | Count 1–5 · Threshold % · Cont. Rec · Overwrite · Capture · Play · Clear trails (bestätigen; auch per Gate) |
 | Time | Buffer 0,1–30 s (Obergrenze = *Trail seconds*) · Hold 0–30 s / INF · Fade in · Fade out (0–5 s) |
-| Engines | Blend % · Pitch Spectra ±24 HT · Pitch Swarm ±24 HT · Output level −24…+24 dB |
+| Engines | Blend % · Dry/Wet % · Pitch Spectra ±24 HT · Pitch Swarm ±24 HT · Output level −24…+24 dB |
 | Spectra | Partials 4–32 · Waveshape (Saw ← 0 → Fold) · Umbra/Aurora · Ensemble |
 | Swarm | Size · Spread · Scan · Scatter · Atmosphere · Direction (Fwd/Rev/Rnd) |
 | Mixer | Level 1–5 · Lock 1–5 · Solo 1–5 |
 | Mod 1–4 | Mod in (CV-Eingang, leer = internes LFO) · Mod dest · Mod amount ±100 % · Mod offset ±100 % · Mod LFO rate 0,01–20 Hz |
 | Display | Rec style PLR / PRS / CTR |
 | Routing | In L · In R (optional) · Rec trig in (Flanke über 1 V) · Out L/R mit Add/Replace |
+
+**Dry/Wet** wie der Multi der Firmware: überblendet gleichlaut zwischen dem sauberen Stereo-Eingang (In R leer → In L auf beiden Seiten) und der Wolke, das trockene Signal mit 0,85 wie in der Firmware. Ab Werk 100 % = nur Wolke, wie vor diesem Parameter. Unter 100 % die Ausgänge auf *Replace* oder auf eigene Busse legen, sonst kommt das Original doppelt. Auch Mod-Ziel.
 
 Unterschiede zur Firmware, alle durch den NT bedingt:
 
@@ -72,7 +74,7 @@ Typisch: Slot ohne Kabel, Amount 30 %, LFO 0,05 Hz auf *Scan* – die Wolke wand
 | Reverb | NT-Reverbs, Milky Way |
 | Filter | NT-Filter, Wasp, SEM |
 | Pan Drift, Crossfade | NT-Mixer/LFO, Four Play (Trails stehen in der Mitte, Swarm bringt die Breite über *Spread*) |
-| Multi Dry/Wet | NT-Routing: Out mit *Add* auf den Eingangsbus legen, Pegel über *Output level* |
+| Multi-Makros, Settings | – (Dry/Wet selbst ist drin: Parameter *Dry/Wet*, Poti L drücken) |
 | Mod-System: Auto-Mod Age/Pitch (4.10) | noch offen; die vier Mod-Slots selbst sind drin (siehe Modulation) |
 | VU, Life-Bars, Settings-Seiten | stark vereinfacht im Display |
 | Resonator | noch offen, siehe unten |
@@ -102,7 +104,7 @@ make render     # render/perseids-screens.png
 
 ## Tests
 
-`test/sim.cpp` läuft ohne Hardware und prüft 85 Punkte, u. a.:
+`test/sim.cpp` läuft ohne Hardware und prüft 93 Punkte, u. a.:
 
 - Speicherbedarf je *Trail seconds*, Stille rein = Stille raus
 - Spectra trifft 220 Hz, *Pitch Spectra* +12 → 440 Hz; Swarm mit *Pitch Swarm* +12 → 440 Hz und stereo
@@ -119,7 +121,7 @@ Der Klick-Detektor hat in der Firmware-Engine einen echten Fehler gefunden: Spec
 
 ## Stand
 
-- Nativ getestet (85 Prüfungen), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
+- Nativ getestet (93 Prüfungen), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
 - Läuft in nt_emu (VCV Rack, Windows), bestätigt am 10.10.2026. **Am NT selbst noch nicht getestet.**
 - Firmware: Umbau der Engines bitgleich (Golden-Test vor/nach, 40 s Audio), Firmware-Link mit libDaisy geprüft.
 

@@ -97,7 +97,7 @@ the 4 mod CV inputs only). Pin assignments in `hw_pins.h`, matching `PANEL_and_P
 
 - `nt/perseids_nt.cpp` is the NT platform layer; it compiles Capture/Spectra/Swarm from `src/`
   with `-DPERSEIDS_TRAIL_INT16`. `cd nt && make` (ARM .o), `make win` (nt_emu DLL),
-  `make test` (native simulation, 85 checks), `make wintest` (Wine), `make render` (screens).
+  `make test` (native simulation, 93 checks), `make wintest` (Wine), `make render` (screens).
 - Platform seams used by the engines: `CaptureEngine::TrailBank` (Trail storage),
   `SpectraEngine::Buffers`, `include/platform/trail_sample.h` (float on Daisy, int16 on NT),
   `SwarmEngine::SyncFromUi(params, now_ms)`. Engines no longer include libDaisy headers.
