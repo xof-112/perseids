@@ -246,7 +246,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.23"
+#define PERSEIDS_NT_VERSION "0.24"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -448,7 +448,7 @@ constexpr int kModPageParams = kModParams + 3;
 // Overview: built per instance (BuildModOverview) — the reset, then the
 // destination and amount of every slot in use (named "Mod n dest / amount").
 // New slots are set up, and everything else changed, on the slot's own page.
-constexpr int kModOverviewMax = 1 + 2 * kNumModSlots;
+constexpr int kModOverviewMax = 1 + kNumModSlots;
 const uint8_t kPageModOverview[] = {kParamModReset, ModParam(0, kModDest)}; // initial
 const uint8_t kPageMod[kNumModSlots][kModPageParams] = {
     MOD_PAGE(0), MOD_PAGE(1), MOD_PAGE(2), MOD_PAGE(3), MOD_PAGE(4),  MOD_PAGE(5),
@@ -1850,7 +1850,16 @@ int parameterString(_NT_algorithm* self, int p, int v, char* buff)
         if(p != ModParam(m, kModAmount))
             continue;
         const PerseidsAlgorithm* a = static_cast<const PerseidsAlgorithm*>(self);
-        int n = NT_intToString(buff, v);
+        int n = 0;
+        // Destination first, so one line says it all (Mod overview).
+        if(a && a->v && a->v[ModParam(m, kModDest)] != 0)
+        {
+            const char* d = kModTargetNames[a->v[ModParam(m, kModDest)]];
+            std::strcpy(buff, d);
+            n = static_cast<int>(std::strlen(d));
+            buff[n++] = ' ';
+        }
+        n += NT_intToString(buff + n, v);
         std::strcpy(buff + n, " %");
         n += 2;
         if(a && a->v && a->mod_armed[m][kArmDest] != 0 && (v != 0 || a->v[ModParam(m, kModOffset)] != 0))
@@ -2342,10 +2351,7 @@ bool BuildModOverview(PerseidsAlgorithm* a)
     for(int m = 0; m < kNumModSlots; ++m)
     {
         if(a->v && a->v[ModParam(m, kModDest)] != 0)
-        {
-            list[n++] = static_cast<uint8_t>(ModParam(m, kModDest));
-            list[n++] = static_cast<uint8_t>(ModParam(m, kModAmount));
-        }
+            list[n++] = static_cast<uint8_t>(ModParam(m, kModAmount)); // one line: "Mod n amount  Dest 40 % > +12 %"
     }
     if(a->overview_count == n && !std::memcmp(a->overview, list, static_cast<size_t>(n)))
         return false;
@@ -2550,8 +2556,13 @@ bool draw(_NT_algorithm* self)
         buff[len] = 0;
         NT_drawText(76, 61, buff, 12, kNT_textLeft, kNT_textTiny);
     }
+    bool wants_clock = false;
+    for(int m = 0; m < kNumModSlots; ++m)
+        wants_clock = wants_clock || (a->mod_armed[m][kArmSync] != 0 && a->mod_armed[m][kArmDest] != 0);
     if(a->clock_valid)
         NT_drawText(179, 61, "CLK", 12, kNT_textLeft, kNT_textTiny);
+    else if(wants_clock)
+        NT_drawText(179, 61, "CLK?", 6, kNT_textLeft, kNT_textTiny); // synced slot, no clock arriving
     return true;
 }
 

@@ -513,7 +513,7 @@ int main(int argc, char** argv)
             const _NT_parameterPage& pg = pp->pages[i];
             if(i == static_cast<uint32_t>(OverviewPageIndex(L.a)))
             {
-                printf("P\t%s\t(Reset all mods, dann je aktivem Slot: Mod n dest, Mod n amount)\n", pg.name);
+                printf("P\t%s\t(Reset all mods, dann je aktivem Slot eine Zeile: Mod n amount mit Ziel, Amount, Ausgabe)\n", pg.name);
                 continue;
             }
             for(int k = 0; k < pg.numParams; ++k)
@@ -1305,10 +1305,12 @@ int main(int argc, char** argv)
         g_pageUpdates = 0;
         SetMenu(I, ModParam(0, kModDest), 11); // from the menu, no draw() in between
         SetMenu(I, ModParam(3, kModDest), 12);
-        const bool ok = pg.numParams == 5 && pg.params[1] == ModParam(0, kModDest) && pg.params[2] == ModParam(0, kModAmount)
-                        && pg.params[3] == ModParam(3, kModDest) && pg.params[4] == ModParam(3, kModAmount);
-        CHECK(ok && g_pageUpdates == 2, "Mod overview follows the menu at once: active slots 1 and 4, dest + amount (%d entries, %d updates)",
-              pg.numParams, g_pageUpdates);
+        const bool ok = pg.numParams == 3 && pg.params[1] == ModParam(0, kModAmount) && pg.params[2] == ModParam(3, kModAmount);
+        char line[64];
+        parameterString(I.a, ModParam(3, kModAmount), 0, line);
+        CHECK(ok && g_pageUpdates == 2 && !std::strncmp(line, kModTargetNames[12], std::strlen(kModTargetNames[12])),
+              "Mod overview: one line per active slot ('Mod 4 amount  %s'), follows the menu at once (%d updates)", line,
+              g_pageUpdates);
         draw(I.a);
         draw(I.a);
         CHECK(g_pageUpdates == 2, "Mod overview: no host update while nothing changes");
@@ -1333,7 +1335,8 @@ int main(int argc, char** argv)
         Run(I, s, 24);
         Run(I, s, 24);
         parameterString(I.a, ModParam(2, kModAmount), 40, b2);
-        CHECK(!std::strncmp(b1, "40 % > ", 7) && std::strcmp(b1, b2) != 0,
+        CHECK(!std::strncmp(b1, (std::string(kModTargetNames[11]) + " 40 % > ").c_str(), std::strlen(kModTargetNames[11]) + 7)
+                  && std::strcmp(b1, b2) != 0,
               "amount of a working slot shows its output live: '%s' … '%s'", b1, b2);
         g_alg = A.a;
     }
@@ -1458,7 +1461,7 @@ int main(int argc, char** argv)
             Run(I, s, 24); // 2 s
         CHECK(I.a->mod_armed[0][kArmDest] == 11 && I.a->mod_armed[0][kArmSync] == 3 && I.a->mod_active == 1,
               "slot settings take effect without parameterChanged() too (after the pause)");
-        CHECK(I.a->parameterPages->pages[OverviewPageIndex(I.a)].numParams == 3
+        CHECK(I.a->parameterPages->pages[OverviewPageIndex(I.a)].numParams == 2
                   && !std::strcmp(I.a->parameters[kModTargets[11]].name, (std::string(kModTargetNames[11]) + " ~").c_str()),
               "… and the Mod overview and the menu mark follow (%s)", I.a->parameters[kModTargets[11]].name);
         // Random steps at /4 on a 4 Hz clock: one new value every 4 pulses (1 s).
