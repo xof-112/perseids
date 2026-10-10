@@ -8,3 +8,4 @@ render/render
 render/frames.txt
 render/screen_*.png
 emu/*.exe
+test/sim_emu

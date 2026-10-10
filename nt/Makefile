@@ -106,8 +106,14 @@ build/host/%.c.o: %.c
 test/sim: test/sim.cpp test/stubs.cpp test/stubs.h $(PLUGIN_SRC) $(ENGINE_SRC) $(HOST_C)
 	g++ -std=c++17 -Wall $(HOST_FLAGS) -o $@ test/sim.cpp test/stubs.cpp $(ENGINE_SRC) $(HOST_C)
 
-test: test/sim
+# Same simulation built like the nt_emu DLL (NT_EMU_WIN: own v[] writes,
+# buttons 1/2 switch the pot targets).
+test/sim_emu: test/sim.cpp test/stubs.cpp test/stubs.h $(PLUGIN_SRC) $(ENGINE_SRC) $(HOST_C)
+	g++ -std=c++17 -Wall -DNT_EMU_WIN $(HOST_FLAGS) -o $@ test/sim.cpp test/stubs.cpp $(ENGINE_SRC) $(HOST_C)
+
+test: test/sim test/sim_emu
 	./test/sim
+	./test/sim_emu
 
 render/render: render/render.cpp test/stubs.h $(PLUGIN_SRC) $(ENGINE_SRC) $(HOST_C)
 	g++ -std=c++17 $(HOST_FLAGS) -DRENDER_LOG -o $@ render/render.cpp $(ENGINE_SRC) $(HOST_C)
@@ -116,6 +122,6 @@ render: render/render
 	cd render && ./render > frames.txt && python3 render.py frames.txt perseids-screens.png
 
 clean:
-	rm -rf build plugins emu/*.dll emu/*.exe test/sim render/render render/frames.txt
+	rm -rf build plugins emu/*.dll emu/*.exe test/sim test/sim_emu render/render render/frames.txt
 
 .PHONY: all win wintest test render clean

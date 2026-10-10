@@ -25,7 +25,9 @@ Gebaut gegen distingNT_API v14 (Submodul `distingNT_API`, Stand 6975a63). GPL-3.
 | Taste 3 | **Rec**: sofort in den nächsten Trail aufnehmen |
 | Taste 4 | **Hold** unendlich ein/aus (gilt ab der nächsten Aufnahme; laufende Trails hält **Lock** fest) |
 
-Tasten 1/2 bleiben beim NT. Ein Encoder-Klick zählt nur ohne Drehen; in nt_emu drückt jedes Ziehen am Encoder ihn mit, das wird als Drehen gewertet (wie bei Duett).
+Tasten 1/2 bleiben beim NT. Ein Encoder-Klick zählt nur ohne Drehen.
+
+**In nt_emu (VCV Rack)** kommen bei Plug-ins mit eigener Oberfläche nur Poti- und Encoder-Drehungen und die Tasten 1–4 an, kein Druck auf Potis oder Encoder (so ist nt_emu gebaut, Stand ad2aa4b). Die Windows-DLL legt deshalb das Umschalten auf die freien Tasten: **Taste 1** = Poti L Blend ↔ Dry/Wet, **Taste 2** = Poti R Size ↔ Atmosphere. Solo und Lock gehen in nt_emu nur über die Parameterseite *Mixer*. Tasten wirken in nt_emu beim Loslassen.
 
 Display: Kopfzeile mit REC-Anzeige (bzw. dem nächsten Ziel-Trail), Eingangspegel L/R mit Threshold-Marke und Blend-Stellung. Darunter fünf Spalten: Trail-Nummer, Zustand (`REC`, `IN`, Sekunden bis zum Ausblenden, `INF`, `OUT`), Lebensbalken, Level-Balken, `L`/`S` und Level in %. Der gewählte Trail ist umrahmt, Trails über *Count* sind dunkel. Fußzeile: was die drei Potis gerade tun, `HOLD` bei unendlichem Hold, `CPU`, wenn der Swarm-Governor Grains spart, `MOD n`, wenn n Mod-Slots arbeiten.
 
@@ -104,7 +106,7 @@ make render     # render/perseids-screens.png
 
 ## Tests
 
-`test/sim.cpp` läuft ohne Hardware und prüft 93 Punkte, u. a.:
+`test/sim.cpp` läuft ohne Hardware und prüft 94 Punkte (NT-Fassung) bzw. 98 (nt_emu-Fassung, `test/sim_emu`), u. a.:
 
 - Speicherbedarf je *Trail seconds*, Stille rein = Stille raus
 - Spectra trifft 220 Hz, *Pitch Spectra* +12 → 440 Hz; Swarm mit *Pitch Swarm* +12 → 440 Hz und stereo
@@ -121,7 +123,7 @@ Der Klick-Detektor hat in der Firmware-Engine einen echten Fehler gefunden: Spec
 
 ## Stand
 
-- Nativ getestet (93 Prüfungen), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
+- Nativ getestet (94 + 98 Prüfungen, NT- und nt_emu-Fassung), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
 - Läuft in nt_emu (VCV Rack, Windows), bestätigt am 10.10.2026. **Am NT selbst noch nicht getestet.**
 - Firmware: Umbau der Engines bitgleich (Golden-Test vor/nach, 40 s Audio), Firmware-Link mit libDaisy geprüft.
 

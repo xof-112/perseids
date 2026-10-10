@@ -913,8 +913,20 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
 // Pot L Blend (press: Dry/Wet) · Pot C Scan · Pot R Size (press: Atmosphere)
 // Encoder L: choose Trail, click: Solo · Encoder R: Trail level, click: Lock
 // Button 3: Rec · Button 4: Hold (infinite on/off)
+//
+// nt_emu (NT_EMU_WIN) hands a custom-UI plug-in only pot turns, encoder turns
+// and buttons 1–4 — pot and encoder presses never arrive. There buttons 1 and
+// 2 (which stay with the NT on the hardware) switch the pot targets instead:
+// Button 1 = Pot L Blend ↔ Dry/Wet, Button 2 = Pot R Size ↔ Atmosphere.
+#ifdef NT_EMU_WIN
+constexpr uint32_t kPotLSwitch = kNT_potButtonL | kNT_button1;
+constexpr uint32_t kPotRSwitch = kNT_potButtonR | kNT_button2;
+#else
+constexpr uint32_t kPotLSwitch = kNT_potButtonL;
+constexpr uint32_t kPotRSwitch = kNT_potButtonR;
+#endif
 
-constexpr uint32_t kCustomControls = kNT_potL | kNT_potC | kNT_potR | kNT_potButtonL | kNT_potButtonR
+constexpr uint32_t kCustomControls = kNT_potL | kNT_potC | kNT_potR | kPotLSwitch | kPotRSwitch
                                      | kNT_encoderL | kNT_encoderR | kNT_encoderButtonL
                                      | kNT_encoderButtonR | kNT_button3 | kNT_button4;
 
@@ -945,9 +957,12 @@ bool ClickEdge(Click& c, const _NT_uiData& d, uint32_t bit, bool turn)
     return !c.turned;
 }
 
-inline bool Pressed(const _NT_uiData& d, uint32_t bit)
+// A press of any control in `bits`: changed now and not down before. In nt_emu
+// a button reports its press with the bit already in lastButtons and its
+// release without it, so there this fires once, on release.
+inline bool Pressed(const _NT_uiData& d, uint32_t bits)
 {
-    return (d.controls & bit) && !(d.lastButtons & bit);
+    return (d.controls & bits & ~d.lastButtons) != 0;
 }
 
 int Count(const PerseidsAlgorithm* a) { return ParamValue(a, kParamCount); }
@@ -961,7 +976,7 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data)
     if(data.controls & kNT_potL)
         SetParamUi(a, a->pot_l_mix ? kParamDryWet : kParamBlend,
                    static_cast<int>(data.pots[0] * 100.f + 0.5f));
-    if(Pressed(data, kNT_potButtonL))
+    if(Pressed(data, kPotLSwitch))
     {
         a->pot_l_mix = !a->pot_l_mix;
         NT_requestSetupUi(); // re-sync soft takeover for the new target
@@ -975,7 +990,7 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data)
         else
             SetParamUi(a, kParamSize, 4 + static_cast<int>(data.pots[2] * 20.f + 0.5f));
     }
-    if(Pressed(data, kNT_potButtonR))
+    if(Pressed(data, kPotRSwitch))
     {
         a->pot_r_atmo = !a->pot_r_atmo;
         NT_requestSetupUi(); // re-sync soft takeover for the new target

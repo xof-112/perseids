@@ -176,7 +176,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
     <li>Etwas spielen. Sobald der Pegel die <b>Threshold</b> überschreitet (Marke im Pegelmeter oben), nimmt Trail 1 auf: im Display steht <code>REC 1</code>, im Lebensbalken ziehen Funken.</li>
     <li>Nach der Aufnahme (Standard 2 s) blendet der Trail ein und klingt <b>Hold</b> lang (Standard 15 s), dann blendet er aus. Die nächste Phrase landet in Trail 2, dann 3.</li>
     <li><b>Poti L</b> (Blend) langsam drehen: links nur Spectra, rechts nur Swarm.</li>
-    <li>Soll das Original mitklingen: <b>Poti L drücken</b>, die Fußzeile zeigt <code>DRY/WET</code>. Nach links drehen mischt den sauberen Eingang dazu. Ab Werk steht Dry/Wet auf 100 % (nur Wolke).</li>
+    <li>Soll das Original mitklingen: <b>Poti L drücken</b> (in nt_emu: <b>Taste 1</b>), die Fußzeile zeigt <code>DRY/WET</code>. Nach links drehen mischt den sauberen Eingang dazu. Ab Werk steht Dry/Wet auf 100 % (nur Wolke).</li>
   </ol>
   <p>Für einen dauerhaften Teppich: <b>Taste 4</b> (Hold unendlich), dann ein paar Phrasen spielen. Für eine Wolke aus allem, was kommt: <i>Cont. Rec</i> auf On und <i>Count</i> auf 5.</p>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
@@ -186,6 +186,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <div class="ph"><div class="num">04</div><div class="ph-main"><h2>Bedienung</h2></div></div>
   <div class="pb">
   <p>Im Algorithmus-Bildschirm übernimmt Perseids Potis, Encoder und die Tasten 3 und 4. Die Tasten 1 und 2 bleiben beim NT.</p>
+  <p><b>In VCV Rack (nt_emu)</b> kommt ein Druck auf Poti oder Encoder nicht beim Plug-in an. Dort schaltet <b>Taste 1</b> Poti L zwischen Blend und Dry/Wet und <b>Taste 2</b> Poti R zwischen Size und Atmosphere. Solo und Lock stellst du in nt_emu auf der Parameterseite <i>Mixer</i> ein. Tasten reagieren in nt_emu beim Loslassen.</p>
   <div class="tbl"><table><tr><th>Element</th><th>Drehen</th><th>Drücken</th></tr>
   <tr><td>Poti L</td><td><b>Blend</b> Spectra ↔ Swarm oder <b>Dry/Wet</b></td><td>schaltet zwischen Blend und Dry/Wet</td></tr>
   <tr><td>Poti C</td><td><b>Scan</b>: wie schnell Swarm durch die Trails wandert, ganz links = Freeze</td><td>–</td></tr>
@@ -367,7 +368,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
     <li>Wie viel DRAM der NT einem Plug-in gibt, ist nicht dokumentiert; 30 s pro Trail erst ausprobieren.</li>
   </ul>
   <h3>Stand</h3>
-  <p>In einer Simulation getestet (93 Prüfungen: Tonhöhe, Klicks, Blockgrößen, Modulation, Dry/Wet, Bedienung, Display) und unter Wine mit einem nt_emu-artigen Host. Die DLL läuft in nt_emu (VCV Rack). <b>Am NT selbst noch nicht getestet.</b> Rückmeldungen dazu, besonders zum Nachglimmen der Funken und zur CPU-Last, fließen in die nächste Fassung.</p>
+  <p>In einer Simulation getestet (94 Prüfungen, in der nt_emu-Fassung 98: Tonhöhe, Klicks, Blockgrößen, Modulation, Dry/Wet, Bedienung, Display) und unter Wine mit einem nt_emu-artigen Host. Die DLL läuft in nt_emu (VCV Rack). <b>Am NT selbst noch nicht getestet.</b> Rückmeldungen dazu, besonders zum Nachglimmen der Funken und zur CPU-Last, fließen in die nächste Fassung.</p>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 </section>

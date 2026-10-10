@@ -905,6 +905,53 @@ int main(int argc, char** argv)
         g_alg = A.a;
     }
 
+#ifdef NT_EMU_WIN
+    // --- nt_emu: buttons 1/2 switch the pot targets ------------------------------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        // nt_emu's own button events: press = bit in controls and lastButtons,
+        // release = bit in controls only.
+        auto EmuButton = [&](uint32_t bit) {
+            _NT_uiData d  = Ui();
+            d.controls    = static_cast<uint16_t>(bit);
+            d.lastButtons = static_cast<uint16_t>(bit);
+            customUi(I.a, d);
+            d.lastButtons = 0;
+            customUi(I.a, d);
+        };
+        CHECK((hasCustomUi(I.a) & (kNT_button1 | kNT_button2)) == (kNT_button1 | kNT_button2),
+              "nt_emu build claims buttons 1/2");
+        EmuButton(kNT_button1);
+        _NT_uiData d = Ui();
+        d.controls   = kNT_potL | kNT_potR;
+        d.pots[0]    = 0.2f;
+        d.pots[2]    = 1.f;
+        customUi(I.a, d);
+        CHECK(I.a->pot_l_mix && I.v[kParamDryWet] == 20 && I.v[kParamBlend] == 50,
+              "nt_emu: button 1 → Pot L sets Dry/Wet (%d %%)", I.v[kParamDryWet]);
+        EmuButton(kNT_button2);
+        customUi(I.a, d);
+        CHECK(I.a->pot_r_atmo && I.v[kParamAtmosphere] == 100,
+              "nt_emu: button 2 → Pot R sets Atmosphere (%d %%)", I.v[kParamAtmosphere]);
+        EmuButton(kNT_button1);
+        EmuButton(kNT_button2);
+        CHECK(!I.a->pot_l_mix && !I.a->pot_r_atmo, "nt_emu: buttons 1/2 switch back");
+        EmuButton(kNT_button3);
+        Signal s = Tone(200.f, 0.2f, 2.f);
+        SetP(I, kParamThreshold, 100);
+        Run(I, s, 24);
+        CHECK(I.a->eng->capture.RecActive(), "nt_emu: button 3 (on release) starts recording");
+        g_alg = A.a;
+    }
+#else
+    {
+        Inst I = Make(4, g_params);
+        CHECK((hasCustomUi(I.a) & (kNT_button1 | kNT_button2)) == 0,
+              "NT build leaves buttons 1/2 to the NT");
+    }
+#endif
+
     // --- display -----------------------------------------------------------------
     {
         Inst I = Make(10, g_params);
