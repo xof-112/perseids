@@ -1045,9 +1045,13 @@ already existed on Cycle.
 - **Overwrite** (Block 1 toggle, OLED `OVR`, default **ON**):
   - **ON** — current behaviour: prefer Empty, else steal the oldest unlocked Playing /
     FadingOut Trail (including mid finite Hold), with soft-replace before overwrite
-  - **OFF** — Hold-Lock: only Empty slots (plus **INF** Hold Trails, still stealable);
-    finite Hold and Fade-Out are protected until the slot becomes Empty; triggers are
-    ignored while the pool is full. Same rule for Threshold, Cont. Rec, and Rec/Trig
+  - **OFF** — Hold-Lock: only Empty slots; finite Hold, **INF** Hold and Fade-Out are
+    protected until the slot becomes Empty, and Threshold / Cont. Rec triggers are ignored
+    while the pool is full. Exception: **Rec/Trig** may replace the oldest unlocked **INF**
+    Trail (soft-replace as above) — otherwise an INF pool could only be renewed via
+    Delete-all. Finite Hold / Fade-Out stay protected from Rec/Trig as well
+    (decided 2026-10-10: with INF stealable by Threshold, every new phrase re-recorded the
+    oldest INF Trail, often before it had faded in — INF felt like "never plays")
   - User **Lock** remains stronger: never round-robin, never Hold fade-out
 - **Single write-head (verified in dev-phase3v001):** at most one Trail may be in the
   `Recording` state at any given time. A new trigger (Threshold / Cont. Rec / Rec button /
@@ -1069,7 +1073,7 @@ already existed on Cycle.
   (trail_mix → Spectra, trail_buffer → Swarm). Spectra `MagToAmp` stays coherent-only;
   Swarm grain amp stays overlap-tamed; raw `trail_mix` is analysis-only (never mixed out).
 - **Soft replace before overwrite (anti-click):** when round-robin steals a still-playing
-  Trail (Overwrite ON, or INF under Overwrite OFF), the engine fades that voice out
+  Trail (Overwrite ON, or Rec/Trig on an INF Trail under Overwrite OFF), the engine fades that voice out
   (BBD-style ~60 ms τ) before `Recording` begins. Hard-muting an audible Trail at the
   moment the previous take finished was the click heard only while Play was on (inaudible
   in Pause because `play_gain`=0). Swarm grains follow the live Trail gain so they mute
@@ -1080,12 +1084,19 @@ already existed on Cycle.
   otherwise Overwrite ON would immediately re-arm the just-finished take and Trails would
   never reach audible playback.
 - **On/Off**: global bypass/enable for the capture system
-- **Manual trigger** (Rec button/Trig): same round-robin logic
+- **Manual trigger** (Rec button/Trig): same round-robin logic (plus the INF exception under
+  Overwrite OFF, above)
 - **Hold** (Block 2): countdown up to max. 30s; any higher value logically snaps to infinite.
   **✔ Conflict resolved: 15 seconds stands as the boot default**, not infinite — this document
   previously said infinite, the implemented code's 15s boot default is now the decided value.
   Infinite remains reachable by turning Hold above 30s, it's just no longer the default at
   startup.
+  **Changes apply to Trails already playing** (decided 2026-10-10, see also 4.1a): Hold
+  counts from the start of each Trail's Hold phase (fade-in included; paused while
+  Locked). Turning Hold to INF stops every running countdown; a value below the time a Trail
+  has already held starts its Fade-Out at once; a longer value (or INF) during a Hold
+  Fade-Out fades the Trail back in. The change is applied in the audio callback at block
+  start, never per Trail from the UI thread
 - **Fade In / Fade Out:** pot range in the implemented code currently goes up to **5 seconds**
   (not the 2s some earlier notes assumed) — Play/Pause performs a global crossfade over these
   times (see the Phase 3 prompt).

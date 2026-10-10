@@ -88,10 +88,6 @@ class CaptureEngine
                     const SpatialParamValues& spatial);
 
     void RequestManualTrigger();
-    // Overwrite OFF and INF Hold: true = automatic triggers (Threshold,
-    // Cont. Rec) leave INF Trails alone too; only Rec/Trig replaces the
-    // oldest one. false (default, ARCHITECTURE 4.8) = INF stays stealable.
-    void SetProtectInfiniteHold(bool on) { protect_inf_hold_ = on; }
     void ClearAll(); // Delete-all confirmed
 
     // Dashboard / Rec indicator (UI-safe snapshots).
@@ -204,7 +200,6 @@ class CaptureEngine
     bool       was_above_;
     float      envelope_follower_;
     float      applied_hold_s_;   // Hold value the voices were last set up with
-    bool       protect_inf_hold_;
 
     // Global Play/Pause crossfade (ARCHITECTURE: over Fade In / Fade Out times).
     float play_gain_;

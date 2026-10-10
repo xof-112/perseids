@@ -49,7 +49,6 @@ void CaptureEngine::Init(float sample_rate, const TrailBank& bank)
     was_above_       = false;
     envelope_follower_ = 0.f;
     applied_hold_s_  = CaptureParamValues{}.hold_s;
-    protect_inf_hold_ = false;
     play_gain_       = 1.f;
     want_playing_    = true;
     manual_trig_count_.store(0, std::memory_order_relaxed);
@@ -176,8 +175,9 @@ size_t CaptureEngine::PickRoundRobinTarget(bool manual) const
            || voices_[idx].state == TrailState::ArmingRecord)
             continue;
 
-        // Overwrite OFF: finish finite Hold + Fade-Out before replace (INF still
-        // stealable). Empty preferred either way.
+        // Overwrite OFF (4.8): finite Hold, INF Hold and Fade-Out finish before
+        // replace; only Rec/Trig may take the oldest INF Trail. Empty preferred
+        // either way.
         if(!allow_steal)
         {
             if(voices_[idx].state == TrailState::FadingOut)
@@ -185,8 +185,7 @@ size_t CaptureEngine::PickRoundRobinTarget(bool manual) const
             if(voices_[idx].state == TrailState::Playing
                && !voices_[idx].infinite_hold)
                 continue;
-            if(voices_[idx].state == TrailState::Playing && protect_inf_hold_
-               && !manual)
+            if(voices_[idx].state == TrailState::Playing && !manual)
                 continue;
         }
 

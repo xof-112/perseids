@@ -657,9 +657,6 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
         bank.data[t] = trails + t * l.capacity;
     bank.capacity = l.capacity;
     a->eng->capture.Init(sr, bank);
-    // Overwrite Off + Hold INF: Threshold / Cont. Rec keep INF Trails, only
-    // Rec (button 3, Rec trig in) replaces the oldest one.
-    a->eng->capture.SetProtectInfiniteHold(true);
 
     a->eng->spectra.Init(sr,
                          SpectraEngine::Buffers{reinterpret_cast<float*>(base + l.window),

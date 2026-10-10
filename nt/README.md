@@ -144,7 +144,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.7 | Versionsanzeige; nt_emu: Fußzeile zeigt die Taste je Poti-Ziel |
 | 0.8 | nt_emu: Poti-Drücke werden ignoriert (nt_emu meldet beim Anfassen eines Potis einen Druck, Drehen schaltete das Ziel zurück); umgeschaltet wird nur mit Taste 1/2 |
 | 0.9 | REC-Anzeige im Kopf nach rechts, verdeckt die Versionsnummer nicht mehr; Version heller |
-| 0.10 | Hold wirkt sofort auf laufende Trails (INF stoppt den Countdown, kürzer als schon gespielt → Fade out, länger während des Fade out → Trail kommt zurück); Overwrite Off + INF: Threshold/Cont. Rec lassen INF-Trails stehen, nur Rec ersetzt den ältesten; Makefile mit Header-Abhängigkeiten |
+| 0.10 | Hold wirkt sofort auf laufende Trails (INF stoppt den Countdown, kürzer als schon gespielt → Fade out, länger während des Fade out → Trail kommt zurück); Overwrite Off + INF: Threshold/Cont. Rec lassen INF-Trails stehen, nur Rec ersetzt den ältesten; Makefile mit Header-Abhängigkeiten; beides gilt auch in der Firmware (ARCHITECTURE §4.8) |
 
 ## Stand
 
@@ -156,5 +156,4 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 
 - **DRAM-Grenze des NT** für Plug-ins ist nicht dokumentiert; 5 × 30 s (14,5 MB) erst am Gerät ausprobieren.
 - **Taste 4:** Hold INF (jetzt, wirkt sofort auf alle laufenden Trails) oder „alles festhalten“ wie Imprint in der Firmware (alle aktiven Trails locken)?
-- **Overwrite Off + INF:** Auf dem NT sind INF-Trails vor Threshold/Cont. Rec geschützt (nur Rec ersetzt den ältesten), ARCHITECTURE §4.8 sagt „INF still stealable“. Die Firmware hält sich weiter an §4.8 (`CaptureEngine::SetProtectInfiniteHold`, Standard aus). Soll die Firmware das übernehmen?
 - **CPU-Budget** des Governors (Hälfte des NT) ist geschätzt, am Gerät nachmessen.
