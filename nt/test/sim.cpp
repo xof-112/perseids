@@ -483,6 +483,7 @@ int main(int argc, char** argv)
     mkdir(g_out.c_str(), 0755);
 
 
+
     // --- construction ------------------------------------------------------
     {
         _NT_algorithmRequirements req{};
@@ -620,6 +621,85 @@ int main(int argc, char** argv)
         }
         CHECK(std::fabs(rms[0] / rms[2] - 1.f) < 0.15f && std::fabs(rms[1] / rms[2] - 1.f) < 0.15f,
               "same level at 4 / 24 / 128 frames per step: %.3f %.3f %.3f V", rms[0], rms[1], rms[2]);
+        g_alg = A.a;
+    }
+
+    // --- Level match: Spectra and Swarm equally loud ------------------------------
+    {
+        // Glock-like bell hits and a soft sine pad, Blend 0 vs 100.
+        auto Glock = [](float secs) {
+            Signal s;
+            const size_t n = static_cast<size_t>(secs * kSr);
+            s.l.assign(n, 0.f);
+            const float notes[] = {1046.5f, 1318.5f, 1568.f, 1174.7f};
+            for(int k = 0; k * 0.6f + 0.2f < secs; ++k)
+            {
+                const size_t at = static_cast<size_t>((0.2f + k * 0.6f) * kSr);
+                const float  f  = notes[k % 4];
+                for(size_t i = 0; at + i < n && i < kSr * 1.5f; ++i)
+                {
+                    const float t = i / kSr;
+                    s.l[at + i] += 3.f * (std::exp(-3.f * t) * std::sin(6.2831853f * f * t)
+                                          + 0.4f * std::exp(-7.f * t) * std::sin(6.2831853f * f * 2.76f * t)
+                                          + 0.2f * std::exp(-12.f * t) * std::sin(6.2831853f * f * 5.4f * t));
+                }
+            }
+            s.r = s.l;
+            return s;
+        };
+        auto Pad = [](float secs) {
+            Signal s;
+            const size_t n = static_cast<size_t>(secs * kSr);
+            s.l.assign(n, 0.f);
+            for(size_t i = 0; i < n; ++i)
+            {
+                const float t = i / kSr;
+                const float env = std::min(1.f, t / 0.5f);
+                s.l[i] = 2.f * env * (std::sin(6.2831853f * 220.f * t) + 0.5f * std::sin(6.2831853f * 330.f * t)
+                                      + 0.3f * std::sin(6.2831853f * 440.f * t));
+            }
+            s.r = s.l;
+            return s;
+        };
+        const char* names[2] = {"glock", "pad"};
+        for(int m = 0; m < 2; ++m)
+        for(int match = 1; match >= 0; --match)
+        {
+            Signal in = m == 0 ? Glock(12.f) : Pad(12.f);
+            float  p90[2];
+            int    slot = 0;
+            for(int blend : {0, 100})
+            {
+                Inst I = Make(10, g_params);
+                g_alg  = I.a;
+                SetP(I, kParamLevelMatch, match);
+                SetP(I, kParamBlend, 50);
+                Signal half;
+                half.l.assign(in.l.begin(), in.l.begin() + 48000 * 6);
+                half.r = half.l;
+                Run(I, half, 24); // learn at Blend 50
+                SetP(I, kParamBlend, blend);
+                Signal o = Run(I, in, 24);
+                std::vector<float> tail(o.l.begin() + 48000 * 6, o.l.end());
+                // short-term loudness: 90th percentile of 50 ms RMS windows
+                std::vector<float> w;
+                for(size_t i = 0; i + 2400 <= tail.size(); i += 2400)
+                {
+                    double e = 0;
+                    for(size_t j = 0; j < 2400; ++j) e += tail[i + j] * tail[i + j];
+                    w.push_back(std::sqrt(e / 2400));
+                }
+                std::sort(w.begin(), w.end());
+                p90[slot++] = w[w.size() * 9 / 10];
+                CHECK(Finite(o.l) && Peak(o.l) < 5.5f, "%s, Level match %s, Blend %d: finite, peak %.2f V",
+                      names[m], match ? "on" : "off", blend, Peak(o.l));
+            }
+            const float db = 20.f * std::log10(p90[1] / p90[0]);
+            if(match)
+                CHECK(std::fabs(db) < 1.5f, "%s: Level match on, Swarm vs Spectra %+.1f dB", names[m], db);
+            else
+                printf("     %s: Level match off, Swarm vs Spectra %+.1f dB (unmatched, for reference)\n", names[m], db);
+        }
         g_alg = A.a;
     }
 

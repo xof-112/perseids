@@ -45,7 +45,7 @@ Alle Regler sind normale NT-Parameter, also per CV oder MIDI steuerbar.
 |---|---|
 | Trails | Count 1–5 · Threshold % · Cont. Rec · Overwrite · Capture · Play · Clear trails (bestätigen; auch per Gate) |
 | Time | Buffer 0,1–30 s (Obergrenze = *Trail seconds*) · Hold 0–30 s / INF (wirkt sofort auf laufende Trails) · Fade in · Fade out (0–5 s) |
-| Engines | Blend % · Dry/Wet % · Pitch Spectra ±24 HT · Pitch Swarm ±24 HT · Output level −24…+24 dB |
+| Engines | Blend % · Dry/Wet % · Level match Off/On (On) · Pitch Spectra ±24 HT · Pitch Swarm ±24 HT · Output level −24…+24 dB |
 | Spectra | Partials 4–32 · Waveshape (Saw ← 0 → Fold) · Umbra/Aurora · Ensemble |
 | Swarm | Size · Spread · Scan · Scatter · Atmosphere · Direction (Fwd/Rev/Rnd) |
 | Resonator | Reso mix (25 %) · Reso decay · Reso damping · Reso spread · Reso pitch ±12 HT · Reso quantize · Reso scale (Major/Minor/Pentatonic) · Reso tuning (Equal/Just) · Reso V/Oct in |
@@ -71,6 +71,12 @@ Zwei Wege, die sich ergänzen:
 - **CV-/MIDI-Mapping des NT:** Jeder Parameter, auch die Mod-Slots selbst, lässt sich zusätzlich im NT auf CV oder MIDI legen. Das verstellt den gespeicherten Wert direkt.
 
 Typisch: Slot ohne Kabel, Amount 30 %, LFO 0,05 Hz auf *Scan* – die Wolke wandert von selbst. Oder ein Hüllkurvenfolger auf *Mod 1 in*, Ziel *Blend*: laute Stellen schieben zu Swarm.
+
+## Level match
+
+Swarm (überlappende Grains) klingt lauter als Spectra (ein ruhiger Satz Teiltöne), am stärksten bei kurzen, perkussiven Takes; in der Simulation 4–8 dB. Dazu wird Spectra lauter, wenn mehrere Trails dieselben Töne halten. Ohne Ausgleich überdeckt Swarm deshalb schon weit vor 50 % Blend.
+
+*Level match* (Seite Engines, ab Werk On) gleicht beide Engines aus, wie ein sehr langsamer Kompressor: Beide werden aus derselben Trail-Summe gespeist, also wird jede gegen diese Summe gemessen. Ein Lautheitsfolger (50 ms Kurzzeit, steigt in 150 ms, fällt über 2,5 s, folgt also den lauten Stellen) auf der Trail-Summe und auf jedem Engine-Ausgang; daraus eine Verstärkung, die in etwa 1,5 s gleitet. Gelernt wird nur, solange die Engine läuft und Signal da ist (über −60 dB), in Pausen bleibt die Verstärkung stehen. Höchstens ±12 dB: es gleicht die Balance an, die Dynamik einzelner Anschläge bleibt. Swarm bekommt −2 dB auf sein Ziel, weil seine Grains bei gleichem Messwert spitzer klingen. Ergebnis in der Simulation: Glocke und Pad je unter 1 dB Unterschied zwischen Blend 0 und 100 %. Kosten: ein paar Rechenschritte je 64 Samples. Nur im NT-Plug-in, die Firmware ist unverändert.
 
 ## Resonator
 
@@ -149,6 +155,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.10 | Hold wirkt sofort auf laufende Trails (INF stoppt den Countdown, kürzer als schon gespielt → Fade out, länger während des Fade out → Trail kommt zurück); Overwrite Off + INF: Threshold/Cont. Rec lassen INF-Trails stehen, nur Rec ersetzt den ältesten; Makefile mit Header-Abhängigkeiten; beides gilt auch in der Firmware (ARCHITECTURE §4.8) |
 | 0.11 | Parameterseite *Resonator* direkt nach *Swarm*, vor *Mixer* (sie liegt auf dem Swarm-Ausgang) |
 | 0.12 | Catch-up für Poti L/C/R: kein Sprung nach dem Umschalten oder nach einer Menü-Änderung; Wert dunkel, solange das Poti noch nicht übernommen hat |
+| 0.13 | *Level match*: Spectra und Swarm gleich laut (Lautheitsfolger je Engine gegen die Trail-Summe, ±12 dB, ab Werk On) |
 
 ## Stand
 

@@ -100,6 +100,7 @@ enum
     kParamResoScale,
     kParamResoTuning,
     kParamResoVoct,
+    kParamLevelMatch,
 
     kNumParams,
 };
@@ -156,8 +157,28 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.12"
+#define PERSEIDS_NT_VERSION "0.13"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
+
+// Level match. Swarm (overlapping grains) comes out louder than Spectra (one
+// steady partial set), most of all on short, percussive takes: 4–8 dB in the
+// simulation; and Spectra grows when several Trails hold the same notes. Both
+// engines are fed by the same Trail sum, so each one is levelled against it:
+// a loudness follower (50 ms short-term, rises in 150 ms, falls over 2.5 s,
+// so it follows the loud parts) on the Trail sum and on each engine output,
+// and a slow gain (≈1.5 s) that brings the engine to kLevelMatchTarget × the
+// Trail sum. Learns only while that engine runs and there is signal; ±12 dB
+// at most, so it evens out the balance, it does not squash the dynamics.
+constexpr float kLevelMatchTarget = 0.35f; // engine / Trail-sum loudness (≈ −9 dB, typical unmatched level)
+// Swarm's grains are spikier than Spectra's steady partials at the same
+// follower reading; −2 dB on its target makes them sound equally loud.
+constexpr float kLevelMatchSwarmTrim = 0.8f;
+constexpr float kLevelMatchMax    = 4.f;   // ±12 dB
+constexpr float kLevelMatchShortS = 0.05f;
+constexpr float kLevelMatchAtkS   = 0.15f;
+constexpr float kLevelMatchRelS   = 2.5f;
+constexpr float kLevelMatchGainS  = 1.5f;
+constexpr float kLevelMatchFloor  = 1e-6f; // below −60 dB: nothing to learn
 
 // Hold: the top value means "infinite" (engine: > 30 s).
 constexpr int kHoldInf = 31;
@@ -249,13 +270,17 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     P_ENUM("Reso scale", 2, 0, kResoScales)
     P_ENUM("Reso tuning", 1, 0, kResoTunings)
     NT_PARAMETER_CV_INPUT("Reso V/Oct in", 0, 0)
+
+    // Matches Spectra and Swarm in loudness while both are heard, so Blend
+    // crossfades between equally loud engines (NT only, see step()).
+    P_ENUM("Level match", 1, 1, kOffOn)
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
                                 kParamOverwrite, kParamCapture, kParamPlay,
                                 kParamClear};
 const uint8_t kPageTime[]    = {kParamBuffer, kParamHold, kParamFadeIn, kParamFadeOut};
-const uint8_t kPageEngines[] = {kParamBlend, kParamDryWet, kParamPitchSpectra,
+const uint8_t kPageEngines[] = {kParamBlend, kParamDryWet, kParamLevelMatch, kParamPitchSpectra,
                                 kParamPitchSwarm, kParamOutLevel};
 const uint8_t kPageSpectra[] = {kParamPartials, kParamWaveshape, kParamUmbra,
                                 kParamEnsemble};
@@ -393,6 +418,18 @@ struct PerseidsAlgorithm : public _NT_algorithm
     float         out_gain;
     float         dry_wet;
     bool          playing;
+    bool          level_match;
+
+    // Level match: loudness of each engine (mean square, before any gain),
+    // the Swarm/Spectra ratio and the gains applied right now.
+    struct Loudness
+    {
+        float st  = 0.f; // short-term mean square
+        float env = 0.f; // follower on it (fast up, slow down)
+    };
+    Loudness lm_in, lm_sp, lm_sw;
+    float    lm_g_sp; // gains applied right now
+    float    lm_g_sw;
 
     CaptureParamValues capture_p;
     SpatialParamValues spatial_p;
@@ -558,6 +595,7 @@ void ReadParams(PerseidsAlgorithm* a)
 
     a->out_gain = std::pow(10.f, Pv(a, kParamOutLevel) / 20.f);
     a->dry_wet  = Pv(a, kParamDryWet) * 0.01f;
+    a->level_match = ParamValue(a, kParamLevelMatch) != 0;
 
     ResoParamValues& r = a->reso_p;
     r.mix              = Pv(a, kParamResoMix) * 0.01f;
@@ -675,6 +713,12 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
 
     a->dirty        = true;
     a->blend        = 0.5f;
+    a->level_match  = true;
+    a->lm_in        = {};
+    a->lm_sp        = {};
+    a->lm_sw        = {};
+    a->lm_g_sp      = 1.f;
+    a->lm_g_sw      = 1.f;
     a->out_gain     = 1.f;
     a->playing      = true;
     a->rec_gate     = false;
@@ -818,6 +862,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
 
     if(a->dirty)
         ApplyParams(a);
+    const float sr = static_cast<float>(NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000);
 
     // "Clear trails" acts like a button: clear once, then fall back to 0.
     if(a->v[kParamClear])
@@ -909,16 +954,16 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
         e.capture.Process(e.in_l, e.in_r, e.dry_l, e.dry_r, e.trail_mix, n);
         e.spectra.PushInput(e.trail_mix, n);
 
+        float sp_ms = 0.f; // mean squares before any gain, for Level match
+        float sw_ms = 0.f;
+        float g_sp0 = 1.f; // gains at the start of this chunk
+        float g_sw0 = 1.f;
         if(run_spectra)
         {
             e.spectra.Process(e.sp_l, e.sp_l, n);
-            const CaptureEngine::CloudPan cp = e.capture.LastCloudPan();
             for(int i = 0; i < n; ++i)
-            {
-                const float s = e.sp_l[i];
-                e.sp_l[i]     = s * cp.l * wet_spectra;
-                e.sp_r[i]     = s * cp.r * wet_spectra;
-            }
+                sp_ms += e.sp_l[i] * e.sp_l[i];
+            sp_ms /= static_cast<float>(n);
         }
         if(run_swarm)
         {
@@ -926,6 +971,64 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
             // Spectral Resonator sits on the Swarm output (ARCHITECTURE 4.1
             // Block 7), so at Blend 0 % (Spectra only) it is not heard.
             e.reso.Process(e.sw_l, e.sw_r, n);
+            for(int i = 0; i < n; ++i)
+                sw_ms += 0.5f * (e.sw_l[i] * e.sw_l[i] + e.sw_r[i] * e.sw_r[i]);
+            sw_ms /= static_cast<float>(n);
+        }
+
+        // Level match (see kLevelMatch…).
+        {
+            const float fn    = static_cast<float>(n);
+            const float k_st  = 1.f - std::exp(-fn / (kLevelMatchShortS * sr));
+            const float k_atk = 1.f - std::exp(-fn / (kLevelMatchAtkS * sr));
+            const float k_rel = 1.f - std::exp(-fn / (kLevelMatchRelS * sr));
+            const float k_g   = 1.f - std::exp(-fn / (kLevelMatchGainS * sr));
+            auto Follow = [&](PerseidsAlgorithm::Loudness& L, float ms) {
+                L.st += k_st * (ms - L.st);
+                L.env += (L.st > L.env ? k_atk : k_rel) * (L.st - L.env);
+            };
+            float in_ms = 0.f;
+            for(int i = 0; i < n; ++i)
+                in_ms += e.trail_mix[i] * e.trail_mix[i];
+            Follow(a->lm_in, in_ms / fn);
+            auto Learn = [&](PerseidsAlgorithm::Loudness& L, float ms, float& g, float target) {
+                Follow(L, ms);
+                float to = g;
+                if(!a->level_match)
+                    to = 1.f;
+                else if(a->lm_in.env > kLevelMatchFloor && L.env > kLevelMatchFloor * 1e-2f)
+                    to = Clampf(target * std::sqrt(a->lm_in.env / L.env),
+                                1.f / kLevelMatchMax, kLevelMatchMax);
+                g += k_g * (to - g);
+            };
+            g_sp0 = a->lm_g_sp;
+            g_sw0 = a->lm_g_sw;
+            if(run_spectra)
+                Learn(a->lm_sp, sp_ms, a->lm_g_sp, kLevelMatchTarget);
+            if(run_swarm)
+                Learn(a->lm_sw, sw_ms, a->lm_g_sw, kLevelMatchTarget * kLevelMatchSwarmTrim);
+        }
+        const float inv_n    = 1.f / static_cast<float>(n);
+
+        if(run_spectra)
+        {
+            const CaptureEngine::CloudPan cp = e.capture.LastCloudPan();
+            for(int i = 0; i < n; ++i)
+            {
+                const float g = (g_sp0 + (a->lm_g_sp - g_sp0) * (i + 1) * inv_n) * wet_spectra;
+                const float s = e.sp_l[i];
+                e.sp_l[i]     = s * cp.l * g;
+                e.sp_r[i]     = s * cp.r * g;
+            }
+        }
+        if(run_swarm)
+        {
+            for(int i = 0; i < n; ++i)
+            {
+                const float g = g_sw0 + (a->lm_g_sw - g_sw0) * (i + 1) * inv_n;
+                e.sw_l[i] *= g;
+                e.sw_r[i] *= g;
+            }
         }
 
         // Dry/Wet as in the firmware's Multi stage: equal power, dry trimmed
