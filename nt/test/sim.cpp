@@ -700,6 +700,42 @@ int main(int argc, char** argv)
             else
                 printf("     %s: Level match off, Swarm vs Spectra %+.1f dB (unmatched, for reference)\n", names[m], db);
         }
+        // Trail Level stays an accent after Level match: both the Trail sum and
+        // the engines move with it, so the match does not undo it.
+        for(int blend : {0, 50, 100})
+        {
+            Inst I = Make(10, g_params);
+            g_alg  = I.a;
+            SetP(I, kParamCount, 1);
+            SetP(I, kParamHold, kHoldInf);
+            SetP(I, kParamOverwrite, 0);
+            SetP(I, kParamBlend, blend);
+            Signal take = Glock(3.f);
+            Run(I, take, 24);
+            Signal quiet;
+            quiet.l.assign(48000 * 6, 0.f);
+            quiet.r = quiet.l;
+            auto Loud = [&](const Signal& o) {
+                std::vector<float> w;
+                for(size_t i = 48000 * 2; i + 2400 <= o.l.size(); i += 2400)
+                {
+                    double e = 0;
+                    for(size_t k = 0; k < 2400; ++k) e += o.l[i + k] * o.l[i + k];
+                    w.push_back(std::sqrt(e / 2400));
+                }
+                std::sort(w.begin(), w.end());
+                return w[w.size() * 9 / 10];
+            };
+            const float l50 = Loud(Run(I, quiet, 24));
+            const float g_sp = I.a->lm_g_sp, g_sw = I.a->lm_g_sw;
+            SetP(I, kParamTrailLevel1, 20);
+            const float l20 = Loud(Run(I, quiet, 24));
+            const float db  = 20.f * std::log10(l20 / l50);
+            const float dg  = 20.f * std::log10((I.a->lm_g_sp * I.a->lm_g_sw) / (g_sp * g_sw));
+            CHECK(db < -6.5f && db > -9.5f && std::fabs(dg) < 1.f,
+                  "Level match, Blend %d: Trail Level 50 → 20 %% is %.1f dB quieter (−8 expected), gains moved %+.1f dB",
+                  blend, db, dg);
+        }
         g_alg = A.a;
     }
 
