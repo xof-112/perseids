@@ -4,6 +4,10 @@
 
 #include "Effects/wavefolder.h"
 
+extern "C" {
+#include "arm_math.h"
+}
+
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -14,6 +18,8 @@ namespace perseids
 // Phase 4 — additive Spectra engine.
 // FFT analysis runs in the main loop (ProcessAnalysis); oscillator bank runs
 // in the audio callback (Process). Never call arm_rfft_* from AudioCallback.
+// Hosts without a main loop (disting NT) call AnalysisSlice() once per audio
+// block instead: the same work, cut into slices of bounded cost.
 //
 // CMSIS-DSP classic F32 RFFT: arm_rfft_fast_f32(S, p, pOut, ifftFlag) — no tmpBuf.
 class SpectraEngine
@@ -31,7 +37,18 @@ class SpectraEngine
     static constexpr size_t kMinPartials = 4;
     static constexpr size_t kInputRing   = kFftSize * 4; // power-of-two
 
-    void Init(float sample_rate);
+    // Large analysis buffers are owned by the platform layer (Daisy: SDRAM;
+    // disting NT: plug-in DRAM). Sizes: window kFftSize, mags and mag_smooth
+    // kBinCount, input_ring kInputRing floats.
+    struct Buffers
+    {
+        float* window;
+        float* mags;
+        float* mag_smooth;
+        float* input_ring;
+    };
+
+    void Init(float sample_rate, const Buffers& buffers);
 
     void SyncFromUi(const SpectraParamValues& params, float pitch_both = 0.f);
 
@@ -44,6 +61,11 @@ class SpectraEngine
     // Main loop — at most one FFT hop per call; drops backlog if behind.
     void ProcessAnalysis();
 
+    // Audio-thread variant of ProcessAnalysis: advances one analysis hop by
+    // one slice (window, FFT, magnitudes, 4 × Umbra/Aurora, smoothing, peak
+    // pick). Nine calls complete a hop; a hop arrives every kHopSize samples.
+    void AnalysisSlice();
+
   private:
     struct PartialTarget
     {
@@ -51,8 +73,30 @@ class SpectraEngine
         float amp;
     };
 
+    enum class Stage : uint8_t
+    {
+        Idle,
+        Window,
+        Fft,
+        Mags,
+        Shape,
+        Smooth,
+        Pick,
+    };
+
+    // ProcessAnalysis, split at its natural seams.
+    bool  BeginHop();
+    void  RunWindow();
+    void  RunFft();
+    void  RunMags();
+    void  RunSmooth();
+    void  RunPick();
+
     void  BuildWindow();
-    void  ApplyUmbraAurora(float* mags, size_t bins, float f0_hz) const;
+    // Umbra/Aurora: Prepare reads the frame-wide values (macro, peak, formant
+    // centres); ApplyRange shapes bins [begin, end).
+    void  PrepareUmbraAurora(const float* mags, size_t bins, float f0_hz);
+    void  ApplyUmbraAuroraRange(float* mags, size_t begin, size_t end) const;
     void  PickPartials(const float* mags, size_t bins);
     void  PublishTargets();
     void  ConsumeTargets();
@@ -62,6 +106,19 @@ class SpectraEngine
     float sample_rate_;
     float sample_rate_inv_;
     float bin_hz_;
+
+    Buffers                    buf_;
+    arm_rfft_fast_instance_f32 rfft_;
+
+    Stage  stage_;
+    size_t shape_next_;
+    // Umbra/Aurora frame values (set by PrepareUmbraAurora).
+    float  shape_macro_;
+    float  shape_peak_;
+    float  shape_inv_peak_;
+    float  shape_f1_;
+    float  shape_f2_;
+    float  shape_f3_;
 
     SpectraParamValues params_;
     float              pitch_both_; // Engines PB 0..1 → PSP octave span 1×…2×

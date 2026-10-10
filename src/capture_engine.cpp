@@ -5,13 +5,6 @@
 namespace perseids
 {
 
-float DSY_SDRAM_BSS trail_buffer[CaptureEngine::kTrailCount]
-                                [CaptureEngine::kMaxBufferSamples];
-
-CaptureEngine::SwarmTrailView
-    CaptureEngine::swarm_views_[CaptureEngine::kTrailCount];
-CaptureEngine::CloudPan CaptureEngine::cloud_pan_;
-
 namespace
 {
 constexpr float kPi  = 3.14159265f;
@@ -44,8 +37,9 @@ inline float FastSin(float x)
 inline float FastCos(float x) { return FastSin(x + kHalfPi); }
 } // namespace
 
-void CaptureEngine::Init(float sample_rate)
+void CaptureEngine::Init(float sample_rate, const TrailBank& bank)
 {
+    bank_            = bank;
     sample_rate_     = sample_rate > 1.f ? sample_rate : 48000.f;
     sample_rate_inv_ = 1.f / sample_rate_;
     next_generation_ = 1;
@@ -99,8 +93,16 @@ void CaptureEngine::Init(float sample_rate)
     lp_.SetFrequency(Clampf(20000.f * sample_rate_inv_, 0.f, 0.497f));
 
     for(size_t t = 0; t < kTrailCount; ++t)
-        for(size_t s = 0; s < kMaxBufferSamples; ++s)
-            trail_buffer[t][s] = 0.f;
+        for(size_t s = 0; s < bank_.capacity; ++s)
+            bank_.data[t][s] = TrailFromFloat(0.f);
+}
+
+float CaptureEngine::MaxBufferSeconds() const
+{
+    const float secs = static_cast<float>(bank_.capacity) * sample_rate_inv_;
+    return secs < static_cast<float>(kMaxBufferSeconds)
+               ? secs
+               : static_cast<float>(kMaxBufferSeconds);
 }
 
 float CaptureEngine::FilterInput(float x)
@@ -115,8 +117,8 @@ size_t CaptureEngine::BufferLengthSamples() const
     size_t      n    = static_cast<size_t>(secs * sample_rate_ + 0.5f);
     if(n < 64)
         n = 64;
-    if(n > kMaxBufferSamples)
-        n = kMaxBufferSamples;
+    if(n > bank_.capacity)
+        n = bank_.capacity;
     return n;
 }
 
@@ -125,13 +127,13 @@ size_t CaptureEngine::BufferLengthSamples() const
 // continuous *in the buffer*. Playback then hard-wraps the full length —
 // no shortened play length / runtime CF (those fought the baked seam and
 // left level-proportional crackle on both Spectra and Swarm).
-size_t CaptureEngine::LoopXfadeSamples(size_t length)
+size_t CaptureEngine::LoopXfadeSamples(size_t length) const
 {
-    size_t xf = static_cast<size_t>(0.040f * static_cast<float>(kSampleRate) + 0.5f);
+    size_t xf = static_cast<size_t>(0.040f * sample_rate_ + 0.5f);
     if(xf > length / 4)
         xf = length / 4;
-    if(length + xf > kMaxBufferSamples)
-        xf = kMaxBufferSamples - length;
+    if(length + xf > bank_.capacity)
+        xf = bank_.capacity - length;
     return xf;
 }
 
@@ -141,13 +143,13 @@ size_t CaptureEngine::LoopPlayLength(size_t length)
     return length;
 }
 
-float CaptureEngine::ReadLooped(size_t trail, size_t pos, size_t length)
+float CaptureEngine::ReadLooped(size_t trail, size_t pos, size_t length) const
 {
     if(length < 2 || trail >= kTrailCount)
         return 0.f;
     if(pos >= length)
         pos %= length;
-    return trail_buffer[trail][pos];
+    return TrailToFloat(bank_.data[trail][pos]);
 }
 
 int CaptureEngine::ActiveCount() const
@@ -440,14 +442,16 @@ void CaptureEngine::FinishRecording(size_t index)
             // fades to the original head. Hard wrap length−1→0 is then clean
             // for every reader (trail_mix → Spectra, buffer → Swarm).
             const size_t xf  = v.write_pos - v.length;
-            float*       buf = trail_buffer[index];
+            TrailSample* buf = bank_.data[index];
             const float  inv = 1.f / static_cast<float>(xf);
             for(size_t k = 0; k < xf; ++k)
             {
                 const float t      = static_cast<float>(k) * inv;
                 const float w_head = std::sin(1.5707964f * t);
                 const float w_ovf  = std::cos(1.5707964f * t);
-                buf[k] = buf[k] * w_head + buf[v.length + k] * w_ovf;
+                buf[k] = TrailFromFloat(TrailToFloat(buf[k]) * w_head
+                                        + TrailToFloat(buf[v.length + k])
+                                              * w_ovf);
             }
         }
         else
@@ -842,7 +846,8 @@ void CaptureEngine::Process(const float* in_l,
             TrailVoice& v = voices_[active_record_index_];
             if(v.state == TrailState::Recording)
             {
-                trail_buffer[active_record_index_][v.write_pos] = filtered;
+                bank_.data[active_record_index_][v.write_pos]
+                    = TrailFromFloat(filtered);
                 ++v.write_pos;
                 // Keep writing past the loop end for the seam crossfade.
                 if(v.write_pos >= v.length + LoopXfadeSamples(v.length))

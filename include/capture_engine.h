@@ -4,7 +4,8 @@
 #include "record_source.h"
 #include "spatial_params.h"
 
-#include "dev/sdram.h"
+#include "platform/trail_sample.h"
+
 #include "Filters/onepole.h"
 
 #include <atomic>
@@ -28,7 +29,8 @@ class CaptureEngine
     static constexpr size_t kMaxBufferSamples = kMaxBufferSeconds * kSampleRate;
     static constexpr float  kHoldInfiniteAbove = 30.f;
 
-    // 5 Trails × 30 s × 48 kHz × float ≈ 28.8 MB of 64 MB SDRAM.
+    // Daisy: 5 Trails × 30 s × 48 kHz × float ≈ 28.8 MB of 64 MB SDRAM.
+    // Other platforms size the bank themselves (see TrailBank).
     static constexpr size_t kTrailSdramBytes
         = kTrailCount * kMaxBufferSamples * sizeof(float);
     static_assert(kTrailSdramBytes < 64u * 1024u * 1024u,
@@ -50,7 +52,17 @@ class CaptureEngine
         float r = 0.70710678f;
     };
 
-    void Init(float sample_rate);
+    // Trail storage is owned by the platform layer and handed in at Init:
+    // the Daisy firmware passes its SDRAM array, the disting NT plug-in a
+    // DRAM block sized by its specification. `capacity` is the number of
+    // samples per Trail (recording length plus loop-seam overflow).
+    struct TrailBank
+    {
+        TrailSample* data[kTrailCount];
+        size_t       capacity;
+    };
+
+    void Init(float sample_rate, const TrailBank& bank);
 
     // Audio thread — non-blocking.
     // Writes dry monitor to out_l/out_r and the Trail VCA sum (× play_gain)
@@ -64,8 +76,8 @@ class CaptureEngine
                  size_t       size);
 
     // Same-callback reader for Swarm (after Capture::Process).
-    static const SwarmTrailView* SwarmViews() { return swarm_views_; }
-    static CloudPan              LastCloudPan() { return cloud_pan_; }
+    const SwarmTrailView* SwarmViews() const { return swarm_views_; }
+    CloudPan              LastCloudPan() const { return cloud_pan_; }
 
     float PlayGain() const { return play_gain_; }
 
@@ -106,9 +118,15 @@ class CaptureEngine
     }
 
     // Seamless loop read — used by Capture playback and Swarm grain reads.
-    static size_t LoopXfadeSamples(size_t length);
+    size_t        LoopXfadeSamples(size_t length) const;
     static size_t LoopPlayLength(size_t length);
-    static float  ReadLooped(size_t trail, size_t pos, size_t length);
+    float         ReadLooped(size_t trail, size_t pos, size_t length) const;
+
+    // Raw Trail storage for Swarm's interpolating grain reads.
+    const TrailSample* TrailData(size_t trail) const { return bank_.data[trail]; }
+    size_t             TrailCapacity() const { return bank_.capacity; }
+    // Longest recording the bank can hold, in seconds (Buffer upper bound).
+    float MaxBufferSeconds() const;
 
   private:
     enum class TrailState : uint8_t
@@ -162,6 +180,8 @@ class CaptureEngine
     float sample_rate_;
     float sample_rate_inv_;
 
+    TrailBank bank_;
+
     CaptureParamValues params_;
     SpatialParamValues spatial_;
     TrailMixerState    mixer_[kTrailCount];
@@ -204,12 +224,9 @@ class CaptureEngine
     daisysp::OnePole hp_;
     daisysp::OnePole lp_;
 
-    static SwarmTrailView swarm_views_[kTrailCount];
-    static CloudPan       cloud_pan_;
+    // Per instance, so several plug-in instances never share Trail state.
+    SwarmTrailView swarm_views_[kTrailCount];
+    CloudPan       cloud_pan_;
 };
-
-// External SDRAM storage — Section 2 point 2.
-extern float DSY_SDRAM_BSS trail_buffer[CaptureEngine::kTrailCount]
-                                       [CaptureEngine::kMaxBufferSamples];
 
 } // namespace perseids

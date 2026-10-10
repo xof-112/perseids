@@ -11,8 +11,8 @@ namespace perseids
 {
 
 // Phase 5 — granular Swarm on Trail SDRAM buffers.
-// Audio callback only for Process; reads CaptureEngine::SwarmViews() filled
-// in the same callback after Capture::Process (no atomics needed).
+// Audio callback only for Process; reads the capture engine's SwarmViews()
+// filled in the same callback after Capture::Process (no atomics needed).
 class SwarmEngine
 {
   public:
@@ -28,10 +28,12 @@ class SwarmEngine
     // cos/sin/pow evaluation it replaces.
     static constexpr size_t kWindowLut = 1024;
 
-    void Init(float sample_rate);
+    // `capture` supplies the Trail buffers and per-block Trail views.
+    void Init(float sample_rate, const CaptureEngine* capture);
 
     // Main loop — also retabulates the grain envelope when Atmosphere moved.
-    void SyncFromUi(const SwarmParamValues& params);
+    // `now_ms` is the platform's millisecond tick (rebuild rate limit).
+    void SyncFromUi(const SwarmParamValues& params, uint32_t now_ms);
 
     // Audio thread — grain cloud stereo out.
     void Process(float* out_l, float* out_r, size_t size);
@@ -77,6 +79,8 @@ class SwarmEngine
 
     float sample_rate_;
     float sample_rate_inv_;
+
+    const CaptureEngine* capture_;
 
     SwarmParamValues params_;
 

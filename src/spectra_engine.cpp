@@ -1,11 +1,5 @@
 #include "spectra_engine.h"
 
-#include "daisy.h"
-
-extern "C" {
-#include "arm_math.h"
-}
-
 #include <cmath>
 #include <cstring>
 
@@ -16,7 +10,8 @@ namespace
 {
 constexpr float kTwoPi = 6.28318530718f;
 
-arm_rfft_fast_instance_f32 g_rfft;
+// Umbra/Aurora bins shaped per AnalysisSlice() call (4 slices per frame).
+constexpr size_t kShapeSliceBins = SpectraEngine::kBinCount / 4;
 
 inline float Clampf(float x, float lo, float hi)
 {
@@ -83,12 +78,9 @@ inline float LoudnessWeight(float f_hz)
 }
 } // namespace
 
-// SDRAM: at FFT 2048 these four are 48 KB and would push DTCM past 95%.
-// One SpectraEngine instance exists (g_spectra), same pattern as trail_buffer.
-float DSY_SDRAM_BSS g_spec_window[SpectraEngine::kFftSize];
-float DSY_SDRAM_BSS g_spec_mags[SpectraEngine::kBinCount];
-float DSY_SDRAM_BSS g_spec_mag_smooth[SpectraEngine::kBinCount];
-float DSY_SDRAM_BSS g_spec_input_ring[SpectraEngine::kInputRing];
+// Window / magnitudes / smoothed magnitudes / input ring come from the
+// platform layer (Buffers): on the Daisy at FFT 2048 these four are 48 KB in
+// SDRAM, which would otherwise push DTCM past 95%.
 
 float SpectraEngine::FastSin(float phase01)
 {
@@ -101,8 +93,15 @@ float SpectraEngine::FastSin(float phase01)
     return x * (1.f - 0.25f * x * x);
 }
 
-void SpectraEngine::Init(float sample_rate)
+void SpectraEngine::Init(float sample_rate, const Buffers& buffers)
 {
+    buf_             = buffers;
+    stage_           = Stage::Idle;
+    shape_next_      = 1;
+    shape_macro_     = 0.f;
+    shape_peak_      = 1e-6f;
+    shape_inv_peak_  = 1.f;
+    shape_f1_ = shape_f2_ = shape_f3_ = 0.f;
     sample_rate_     = sample_rate > 1.f ? sample_rate : 48000.f;
     sample_rate_inv_ = 1.f / sample_rate_;
     bin_hz_          = sample_rate_ / static_cast<float>(kFftSize);
@@ -119,11 +118,11 @@ void SpectraEngine::Init(float sample_rate)
     waveshape_morph_   = 0.f;
     fold_gain_         = 1.f;
 
-    std::memset(g_spec_input_ring, 0, sizeof(g_spec_input_ring));
+    std::memset(buf_.input_ring, 0, kInputRing * sizeof(float));
     std::memset(fft_time_, 0, sizeof(fft_time_));
     std::memset(fft_freq_, 0, sizeof(fft_freq_));
-    std::memset(g_spec_mags, 0, sizeof(g_spec_mags));
-    std::memset(g_spec_mag_smooth, 0, sizeof(g_spec_mag_smooth));
+    std::memset(buf_.mags, 0, kBinCount * sizeof(float));
+    std::memset(buf_.mag_smooth, 0, kBinCount * sizeof(float));
     mag_smooth_valid_ = false;
     f0_smooth_hz_     = 110.f;
     f0_smooth_valid_  = false;
@@ -134,7 +133,7 @@ void SpectraEngine::Init(float sample_rate)
     std::memset(prev_targets_, 0, sizeof(prev_targets_));
 
     BuildWindow();
-    arm_rfft_fast_init_f32(&g_rfft, static_cast<uint16_t>(kFftSize));
+    arm_rfft_fast_init_f32(&rfft_, static_cast<uint16_t>(kFftSize));
 
     folder_.Init();
     folder_.SetGain(1.f);
@@ -157,7 +156,7 @@ void SpectraEngine::BuildWindow()
     for(size_t i = 0; i < kFftSize; ++i)
     {
         const float t    = static_cast<float>(i) / denom;
-        g_spec_window[i] = 0.5f * (1.f - std::cos(kTwoPi * t));
+        buf_.window[i] = 0.5f * (1.f - std::cos(kTwoPi * t));
     }
 }
 
@@ -180,27 +179,52 @@ void SpectraEngine::PushInput(const float* samples, size_t size)
     uint32_t w = input_write_.load(std::memory_order_relaxed);
     for(size_t i = 0; i < size; ++i)
     {
-        g_spec_input_ring[w & (kInputRing - 1)] = samples[i];
+        buf_.input_ring[w & (kInputRing - 1)] = samples[i];
         ++w;
     }
     input_write_.store(w, std::memory_order_release);
 }
 
-void SpectraEngine::ApplyUmbraAurora(float* mags, size_t bins, float f0_hz) const
+void SpectraEngine::PrepareUmbraAurora(const float* mags,
+                                       size_t       bins,
+                                       float        f0_hz)
 {
-    const float macro = BipolarNorm(params_.umbra_aurora, -1.f, 1.f);
+    shape_macro_ = BipolarNorm(params_.umbra_aurora, -1.f, 1.f);
+    if(std::fabs(shape_macro_) < 0.001f)
+        return;
+
+    if(shape_macro_ < 0.f)
+    {
+        float peak = 1e-6f;
+        for(size_t i = 1; i < bins; ++i)
+            if(mags[i] > peak)
+                peak = mags[i];
+        shape_peak_     = peak;
+        shape_inv_peak_ = 1.f / peak;
+    }
+    else
+    {
+        const float f0 = f0_hz > 40.f ? f0_hz : 110.f;
+        shape_f1_      = 500.f * (f0 / 110.f);
+        shape_f2_      = 1500.f * (f0 / 110.f);
+        shape_f3_      = 2500.f * (f0 / 110.f);
+    }
+}
+
+void SpectraEngine::ApplyUmbraAuroraRange(float* mags,
+                                          size_t begin,
+                                          size_t end) const
+{
+    const float macro = shape_macro_;
     if(std::fabs(macro) < 0.001f)
         return;
 
     if(macro < 0.f)
     {
-        const float depth = -macro;
-        float       peak  = 1e-6f;
-        for(size_t i = 1; i < bins; ++i)
-            if(mags[i] > peak)
-                peak = mags[i];
-        const float inv_peak = 1.f / peak;
-        for(size_t i = 1; i < bins; ++i)
+        const float depth    = -macro;
+        const float peak     = shape_peak_;
+        const float inv_peak = shape_inv_peak_;
+        for(size_t i = begin; i < end; ++i)
         {
             const float hz   = static_cast<float>(i) * bin_hz_;
             const float low  = Clampf(1.f - hz / 2000.f, 0.f, 1.f);
@@ -212,11 +236,10 @@ void SpectraEngine::ApplyUmbraAurora(float* mags, size_t bins, float f0_hz) cons
     else
     {
         const float depth = macro;
-        const float f0    = f0_hz > 40.f ? f0_hz : 110.f;
-        const float f1    = 500.f * (f0 / 110.f);
-        const float f2    = 1500.f * (f0 / 110.f);
-        const float f3    = 2500.f * (f0 / 110.f);
-        for(size_t i = 1; i < bins; ++i)
+        const float f1    = shape_f1_;
+        const float f2    = shape_f2_;
+        const float f3    = shape_f3_;
+        for(size_t i = begin; i < end; ++i)
         {
             const float hz = static_cast<float>(i) * bin_hz_;
             const float d1 = (hz - f1) / (f1 * 0.35f + 30.f);
@@ -723,7 +746,7 @@ void SpectraEngine::PublishTargets()
         prev_targets_[i] = analysis_targets_[i];
 }
 
-void SpectraEngine::ProcessAnalysis()
+bool SpectraEngine::BeginHop()
 {
     const uint32_t w         = input_write_.load(std::memory_order_acquire);
     uint32_t       r         = input_read_.load(std::memory_order_relaxed);
@@ -738,30 +761,41 @@ void SpectraEngine::ProcessAnalysis()
     if(available < kHopSize)
     {
         input_read_.store(r, std::memory_order_relaxed);
-        return;
+        return false;
     }
 
     r += kHopSize;
     if(w < kFftSize || r < kFftSize)
     {
         input_read_.store(r, std::memory_order_relaxed);
-        return;
+        return false;
     }
 
     const uint32_t start = r - kFftSize;
     for(size_t i = 0; i < kFftSize; ++i)
-        fft_time_[i] = g_spec_input_ring[(start + static_cast<uint32_t>(i))
-                                         & (kInputRing - 1)];
+        fft_time_[i] = buf_.input_ring[(start + static_cast<uint32_t>(i))
+                                       & (kInputRing - 1)];
     input_read_.store(r, std::memory_order_relaxed);
+    return true;
+}
 
+void SpectraEngine::RunWindow()
+{
     arm_mult_f32(
-        fft_time_, g_spec_window, fft_time_, static_cast<uint32_t>(kFftSize));
-    arm_rfft_fast_f32(&g_rfft, fft_time_, fft_freq_, 0);
+        fft_time_, buf_.window, fft_time_, static_cast<uint32_t>(kFftSize));
+}
 
-    g_spec_mags[0] = std::fabs(fft_freq_[0]);
-    arm_cmplx_mag_f32(&fft_freq_[2],
-                      &g_spec_mags[1],
-                      static_cast<uint32_t>(kBinCount - 1));
+void SpectraEngine::RunFft()
+{
+    arm_rfft_fast_f32(&rfft_, fft_time_, fft_freq_, 0);
+}
+
+void SpectraEngine::RunMags()
+{
+    float* const mags = buf_.mags;
+    mags[0]           = std::fabs(fft_freq_[0]);
+    arm_cmplx_mag_f32(
+        &fft_freq_[2], &mags[1], static_cast<uint32_t>(kBinCount - 1));
 
     float        f0     = 110.f;
     float        best_m = 0.f;
@@ -769,33 +803,95 @@ void SpectraEngine::ProcessAnalysis()
         Clampf(1000.f / bin_hz_, 2.f, static_cast<float>(kBinCount - 1)));
     for(size_t i = 2; i < f0_max; ++i)
     {
-        if(g_spec_mags[i] > best_m)
+        if(mags[i] > best_m)
         {
-            best_m = g_spec_mags[i];
+            best_m = mags[i];
             f0     = static_cast<float>(i) * bin_hz_;
         }
     }
 
-    ApplyUmbraAurora(g_spec_mags, kBinCount, f0);
+    PrepareUmbraAurora(mags, kBinCount, f0);
+}
 
+void SpectraEngine::RunSmooth()
+{
     // Smooth magnitudes across analysis frames before peak pick — multi-Trail
     // / Elements spectra hop less between frames (fewer flea births).
     constexpr float kMagSmooth = 0.28f; // slightly stickier — multi-Trail beat
+    const float*    mags       = buf_.mags;
+    float*          smooth     = buf_.mag_smooth;
     if(!mag_smooth_valid_)
     {
         for(size_t i = 0; i < kBinCount; ++i)
-            g_spec_mag_smooth[i] = g_spec_mags[i];
+            smooth[i] = mags[i];
         mag_smooth_valid_ = true;
     }
     else
     {
         for(size_t i = 0; i < kBinCount; ++i)
-            g_spec_mag_smooth[i]
-                += kMagSmooth * (g_spec_mags[i] - g_spec_mag_smooth[i]);
+            smooth[i] += kMagSmooth * (mags[i] - smooth[i]);
     }
+}
 
-    PickPartials(g_spec_mag_smooth, kBinCount);
+void SpectraEngine::RunPick()
+{
+    PickPartials(buf_.mag_smooth, kBinCount);
     PublishTargets();
+}
+
+void SpectraEngine::ProcessAnalysis()
+{
+    if(!BeginHop())
+        return;
+    RunWindow();
+    RunFft();
+    RunMags();
+    ApplyUmbraAuroraRange(buf_.mags, 1, kBinCount);
+    RunSmooth();
+    RunPick();
+}
+
+void SpectraEngine::AnalysisSlice()
+{
+    switch(stage_)
+    {
+        case Stage::Idle:
+            if(BeginHop())
+                stage_ = Stage::Window;
+            break;
+        case Stage::Window:
+            RunWindow();
+            stage_ = Stage::Fft;
+            break;
+        case Stage::Fft:
+            RunFft();
+            stage_ = Stage::Mags;
+            break;
+        case Stage::Mags:
+            RunMags();
+            shape_next_ = 1;
+            stage_      = Stage::Shape;
+            break;
+        case Stage::Shape:
+        {
+            size_t end = shape_next_ + kShapeSliceBins;
+            if(end > kBinCount)
+                end = kBinCount;
+            ApplyUmbraAuroraRange(buf_.mags, shape_next_, end);
+            shape_next_ = end;
+            if(shape_next_ >= kBinCount)
+                stage_ = Stage::Smooth;
+            break;
+        }
+        case Stage::Smooth:
+            RunSmooth();
+            stage_ = Stage::Pick;
+            break;
+        case Stage::Pick:
+            RunPick();
+            stage_ = Stage::Idle;
+            break;
+    }
 }
 
 void SpectraEngine::ConsumeTargets()

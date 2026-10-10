@@ -441,7 +441,7 @@ void UiController::SyncEngines()
     trails_.FillMixerState(mixer);
     capture_->SyncFromUi(*capture_params_, mixer, playing_, *spatial_params_);
     spectra_->SyncFromUi(*spectra_params_, swarm_params_->pitch_both);
-    swarm_->SyncFromUi(*swarm_params_);
+    swarm_->SyncFromUi(*swarm_params_, daisy::System::GetNow());
 }
 
 void UiController::TouchActivity()
