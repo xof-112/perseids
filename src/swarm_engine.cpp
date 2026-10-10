@@ -83,21 +83,31 @@ void SwarmEngine::Init(float sample_rate, const CaptureEngine* capture)
     // BuildWindowTable always fills the whole back buffer before flipping the
     // index, so the audio thread never sees a partially written table.
     win_index_.store(0, std::memory_order_relaxed);
-    win_blur_     = 0.f;
-    win_build_ms_ = 0;
+    win_blur_       = 0.f;
+    win_build_ms_   = 0;
+    win_slicing_    = false;
+    win_slice_blur_ = 0.f;
+    win_slice_pos_  = 0;
     BuildWindowTable(0.f);
 }
 
 void SwarmEngine::BuildWindowTable(float blur)
 {
     const uint32_t back = win_index_.load(std::memory_order_relaxed) ^ 1u;
-    float* const   tab  = window_tab_[back];
+    BuildWindowRange(window_tab_[back], blur, 0, kWindowLut + 1);
+    win_index_.store(back, std::memory_order_release);
+}
 
+void SwarmEngine::BuildWindowRange(float* tab,
+                                   float  blur,
+                                   size_t begin,
+                                   size_t end) const
+{
     const float powv = Lerp(1.f, 0.05f, blur);
     const float inv  = 1.f / static_cast<float>(kWindowLut);
     const bool  flat_mix = blur >= 0.001f;
 
-    for(size_t i = 0; i <= kWindowLut; ++i)
+    for(size_t i = begin; i < end; ++i)
     {
         const float x = static_cast<float>(i) * inv;
         // Hann at center Atmosphere.
@@ -116,8 +126,42 @@ void SwarmEngine::BuildWindowTable(float blur)
         const float t    = blur * blur; // bias travel toward full wash
         tab[i]           = Lerp(hann, flat, t);
     }
+}
 
-    win_index_.store(back, std::memory_order_release);
+float SwarmEngine::TargetBlur() const
+{
+    const float atmo = BipolarNorm(params_.atmosphere, -1.f, 1.f);
+    const float blur = atmo < 0.f ? -atmo : 0.f;
+    return static_cast<float>(static_cast<int>(blur * kBlurSteps + 0.5f))
+           / kBlurSteps;
+}
+
+void SwarmEngine::WindowSlice()
+{
+    if(!win_slicing_)
+    {
+        const float target = TargetBlur();
+        if(target == win_blur_)
+            return;
+        win_slicing_    = true;
+        win_slice_blur_ = target;
+        win_slice_pos_  = 0;
+    }
+
+    // Same thread as Process here, so writing the back buffer is safe; the
+    // audio path keeps reading the front table until the flip.
+    const uint32_t back = win_index_.load(std::memory_order_relaxed) ^ 1u;
+    size_t         end  = win_slice_pos_ + kWindowSlice;
+    if(end > kWindowLut + 1)
+        end = kWindowLut + 1;
+    BuildWindowRange(window_tab_[back], win_slice_blur_, win_slice_pos_, end);
+    win_slice_pos_ = end;
+    if(win_slice_pos_ >= kWindowLut + 1)
+    {
+        win_index_.store(back, std::memory_order_release);
+        win_blur_    = win_slice_blur_;
+        win_slicing_ = false;
+    }
 }
 
 void SwarmEngine::SyncFromUi(const SwarmParamValues& params, uint32_t now_ms)
@@ -127,11 +171,7 @@ void SwarmEngine::SyncFromUi(const SwarmParamValues& params, uint32_t now_ms)
     // Atmosphere holds still for whole blocks at a time, so the exact blur
     // curve is tabulated here (main loop) rather than evaluated with pow() per
     // grain per sample in the callback.
-    const float atmo = BipolarNorm(params_.atmosphere, -1.f, 1.f);
-    const float blur = atmo < 0.f ? -atmo : 0.f;
-    const float quantised
-        = static_cast<float>(static_cast<int>(blur * kBlurSteps + 0.5f))
-          / kBlurSteps;
+    const float quantised = TargetBlur();
     if(quantised == win_blur_)
         return;
 
