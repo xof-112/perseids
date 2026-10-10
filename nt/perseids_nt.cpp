@@ -109,8 +109,9 @@ enum
     kParamMod5,
     kParamModReset = kParamMod5 + 8 * 6, // Mod overview: all slots back to off
     kParamModMode1,                      // per slot: around the base value or override it
+    kParamModView = kParamModMode1 + 12, // Display: Mod view as graphics or numbers
 
-    kNumParams = kParamModMode1 + 12,
+    kNumParams,
 };
 
 // Mod slot layout: slots 1–4 at kParamMod1 + slot × 5 (+ sync at
@@ -219,12 +220,13 @@ const char* const kModTargetMarked[] = {
 static_assert(sizeof(kModTargetMarked) / sizeof(kModTargetMarked[0]) == sizeof(kModTargets),
               "every mod target needs a marked name");
 const char* const kModModes[] = {"Around base", "Override", nullptr};
+const char* const kModViews[] = {"Graphic", "Numbers", nullptr};
 static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kModTargets) + 1,
               "every mod target needs a name");
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.18"
+#define PERSEIDS_NT_VERSION "0.19"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -387,6 +389,10 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     P_ENUM("Mod 7 mode", 1, 0, kModModes) P_ENUM("Mod 8 mode", 1, 0, kModModes)
     P_ENUM("Mod 9 mode", 1, 0, kModModes) P_ENUM("Mod 10 mode", 1, 0, kModModes)
     P_ENUM("Mod 11 mode", 1, 0, kModModes) P_ENUM("Mod 12 mode", 1, 0, kModModes)
+
+    // Mod view (Encoder L past the last Trail): tiles with a small scope
+    // trace of each destination, or the same as numbers.
+    P_ENUM("Mod view", 1, 0, kModViews)
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
@@ -404,7 +410,7 @@ const uint8_t kPageMixer[]   = {
     kParamTrailLevel1 + 3, kParamTrailLevel1 + 4,
     kParamLock1, kParamLock1 + 1, kParamLock1 + 2, kParamLock1 + 3, kParamLock1 + 4,
     kParamSolo1, kParamSolo1 + 1, kParamSolo1 + 2, kParamSolo1 + 3, kParamSolo1 + 4};
-const uint8_t kPageDisplay[] = {kParamRecStyle};
+const uint8_t kPageDisplay[] = {kParamRecStyle, kParamModView};
 const uint8_t kPageReso[]    = {kParamResoMix,   kParamResoDecay, kParamResoDamping,
                                 kParamResoSpread, kParamResoPitch, kParamResoQuant,
                                 kParamResoScale,  kParamResoTuning, kParamResoVoct};
@@ -499,6 +505,13 @@ struct Engines
     float sp_r[kChunk];
     float sw_l[kChunk];
     float sw_r[kChunk];
+
+    // Mod view: recent destination values per slot (0…255 of the travel),
+    // written by draw() about 25 times a second, ~2 s shown.
+    static constexpr int kModHist = 48;
+    uint8_t  mod_hist[kNumModSlots][kModHist];
+    uint8_t  mod_hist_pos;
+    uint32_t mod_hist_ms;
 };
 
 // Encoder-button click, for the NT and for nt_emu (same scheme as Duett):
@@ -580,6 +593,8 @@ struct PerseidsAlgorithm : public _NT_algorithm
 
     // Controls
     int   selected;    // Trail 0…4
+    bool  mod_view;    // Encoder L turned past the last Trail: the Mod view
+    int   mod_sel;     // selected tile there (index among the active slots)
     bool  pot_l_mix;   // Pot L: false = Blend, true = Dry/Wet
     bool  pot_c_reso;  // Pot C: false = Scan, true = Reso mix
     bool  pot_r_atmo;  // Pot R: false = Size, true = Atmosphere
@@ -602,6 +617,8 @@ struct PerseidsAlgorithm : public _NT_algorithm
     _NT_parameterPage  pages[kNumPages];
     _NT_parameterPages pages_desc;
     uint8_t            overview[kModOverviewMax];
+    uint8_t            overview_count;
+    bool               pages_mod_first; // Mod view open: Mod overview is the first page
 
     float   mod_sum[kNumParams];
     uint8_t mod_over[kNumParams];  // an Override slot aims at this parameter
@@ -835,6 +852,7 @@ void calculateRequirements(_NT_algorithmRequirements& req, const int32_t* specif
 }
 
 bool BuildModOverview(struct PerseidsAlgorithm* a);
+void LayoutPages(struct PerseidsAlgorithm* a, bool mod_first);
 
 _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
                          const _NT_algorithmRequirements& /*req*/,
@@ -854,12 +872,11 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     if(a->params[kParamBuffer].def > a->params[kParamBuffer].max)
         a->params[kParamBuffer].def = a->params[kParamBuffer].max;
     a->parameters     = a->params;
-    for(int i = 0; i < kNumPages; ++i)
-        a->pages[i] = kPages[i];
     a->pages_desc.numPages = kNumPages;
     a->pages_desc.pages    = a->pages;
-    a->pages[kModOverviewPage].params    = a->overview;
-    a->pages[kModOverviewPage].numParams = 0;
+    a->overview_count      = 0;
+    a->pages_mod_first     = false;
+    LayoutPages(a, false);
     a->parameterPages = &a->pages_desc;
     BuildModOverview(a);
 
@@ -906,6 +923,8 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->gov_acc      = 0;
     a->gov_cycles   = 0;
     a->selected     = 0;
+    a->mod_view     = false;
+    a->mod_sel      = 0;
     a->pot_l_mix    = false;
     a->pot_c_reso   = false;
     a->pot_r_atmo   = false;
@@ -1590,6 +1609,16 @@ void PotMoved(PerseidsAlgorithm* a, int k, float pos)
     SetParamUi(a, p, v);
 }
 
+// Slots aimed at something (same rule as the Mod overview), in slot order.
+int ActiveModSlots(const PerseidsAlgorithm* a, int out[kNumModSlots])
+{
+    int n = 0;
+    for(int m = 0; m < kNumModSlots; ++m)
+        if(a->v && a->v[ModParam(m, kModDest)] != 0)
+            out[n++] = m;
+    return n;
+}
+
 void customUi(_NT_algorithm* self, const _NT_uiData& data)
 {
     PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
@@ -1632,27 +1661,56 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data)
         a->selected = Count(a) - 1;
 
     const bool turned = data.encoders[0] || data.encoders[1];
+    int        active[kNumModSlots];
+    const int  n_active = ActiveModSlots(a, active);
     if(data.encoders[0])
     {
-        int s = a->selected + data.encoders[0];
-        const int n = Count(a);
-        if(s < 0)
-            s = 0;
-        if(s > n - 1)
-            s = n - 1;
-        a->selected = s;
+        if(!a->mod_view)
+        {
+            // Trails 1…Count; one step past the last Trail opens the Mod view.
+            int       s = a->selected + data.encoders[0];
+            const int n = Count(a);
+            if(s > n - 1)
+            {
+                a->mod_view = true;
+                a->mod_sel  = 0;
+                s           = n - 1;
+            }
+            a->selected = s < 0 ? 0 : s;
+        }
+        else
+        {
+            // Through the tiles; left of the first one back to the Trails.
+            int m = a->mod_sel + data.encoders[0];
+            if(m < 0)
+                a->mod_view = false;
+            else
+                a->mod_sel = n_active > 0 ? (m > n_active - 1 ? n_active - 1 : m) : 0;
+        }
     }
+    if(a->mod_view && a->mod_sel > (n_active > 0 ? n_active - 1 : 0))
+        a->mod_sel = n_active > 0 ? n_active - 1 : 0;
     if(data.encoders[1])
     {
-        const int p = kParamTrailLevel1 + a->selected;
-        SetParamUi(a, p, ParamValue(a, p) + 2 * data.encoders[1]);
+        if(!a->mod_view)
+        {
+            const int p = kParamTrailLevel1 + a->selected;
+            SetParamUi(a, p, ParamValue(a, p) + 2 * data.encoders[1]);
+        }
+        else if(n_active > 0)
+        {
+            // Mod view: Encoder R sets the selected slot's amount, 1 % a step.
+            const int p = ModParam(active[a->mod_sel], kModAmount);
+            SetParamUi(a, p, ParamValue(a, p) + data.encoders[1]);
+        }
     }
-    if(ClickEdge(a->click_l, data, kNT_encoderButtonL, turned))
+    // Encoder clicks: Solo / Lock in the Trail view (none in the Mod view).
+    if(ClickEdge(a->click_l, data, kNT_encoderButtonL, turned) && !a->mod_view)
     {
         const int p = kParamSolo1 + a->selected;
         SetParamUi(a, p, ParamValue(a, p) ? 0 : 1);
     }
-    if(ClickEdge(a->click_r, data, kNT_encoderButtonR, turned))
+    if(ClickEdge(a->click_r, data, kNT_encoderButtonR, turned) && !a->mod_view)
     {
         const int p = kParamLock1 + a->selected;
         SetParamUi(a, p, ParamValue(a, p) ? 0 : 1);
@@ -1989,6 +2047,182 @@ void DrawTrailLifeBar(LifeBarAnim&       anim,
     }
 }
 
+// Mod view -----------------------------------------------------------------
+
+// Where a slot's destination stands right now, 0…1 of its travel; and where
+// it would stand without modulation (the stored value, or the middle with an
+// Override slot on it).
+float ModDestNow(const PerseidsAlgorithm* a, int dest)
+{
+    const float lo = a->params[dest].min;
+    const float hi = a->params[dest].max;
+    return hi > lo ? (Pv(a, dest) - lo) / (hi - lo) : 0.f;
+}
+float ModDestBase(const PerseidsAlgorithm* a, int dest)
+{
+    const float lo = a->params[dest].min;
+    const float hi = a->params[dest].max;
+    const float b  = ModValue(static_cast<float>(ParamValue(a, dest)), lo, hi, 0.f, a->mod_over[dest] != 0);
+    return hi > lo ? (b - lo) / (hi - lo) : 0.f;
+}
+
+// ~25 samples a second into each slot's scope trace.
+void SampleModHistory(PerseidsAlgorithm* a, uint32_t now_ms)
+{
+    Engines& e = *a->eng;
+    if(now_ms - e.mod_hist_ms < 40u && e.mod_hist_ms != 0)
+        return;
+    e.mod_hist_ms  = now_ms ? now_ms : 1;
+    e.mod_hist_pos = static_cast<uint8_t>((e.mod_hist_pos + 1) % Engines::kModHist);
+    for(int m = 0; m < kNumModSlots; ++m)
+    {
+        const int d = kModTargets[a->mod_armed[m][kArmDest]];
+        const float x = d ? ModDestNow(a, d) : 0.f;
+        e.mod_hist[m][e.mod_hist_pos] = static_cast<uint8_t>(Clampf(x, 0.f, 1.f) * 255.f + 0.5f);
+    }
+}
+
+// Value of a parameter as text in its own units (scaling 10 / 100 shown as
+// decimals), for the numeric Mod view.
+void FormatParamValue(const PerseidsAlgorithm* a, int p, float v, char* buff)
+{
+    const int sc  = a->params[p].scaling;
+    const int div = sc == kNT_scaling10 ? 10 : (sc == kNT_scaling100 ? 100 : 1);
+    int       iv  = static_cast<int>(v >= 0.f ? v + 0.5f : v - 0.5f);
+    int       n   = 0;
+    if(iv < 0)
+    {
+        buff[n++] = '-';
+        iv        = -iv;
+    }
+    n += NT_intToString(buff + n, iv / div);
+    if(div > 1)
+    {
+        buff[n++] = '.';
+        n += NT_intToString(buff + n, (iv % div) / (div / 10));
+    }
+    if(a->params[p].unit == kNT_unitPercent || a->params[p].unit == kNT_unitHasStrings)
+        buff[n++] = '%';
+    buff[n] = 0;
+}
+
+// Tiles, 4 × 2, one per active slot: number, destination, amount, and a
+// small scope trace of the destination over ~2 s with the base value dotted
+// (graphic), or base / now / offset as numbers. More than 8: pages of 8.
+void DrawModView(PerseidsAlgorithm* a)
+{
+    int       active[kNumModSlots];
+    const int n = ActiveModSlots(a, active);
+    char      buff[40];
+    if(n == 0)
+    {
+        NT_drawText(128, 30, "No active mods", 12, kNT_textCentre);
+        NT_drawText(128, 42, "set one up on a Mod page (Mod n dest)", 6, kNT_textCentre, kNT_textTiny);
+        NT_drawText(128, 50, "Encoder L left: back to the Trails", 6, kNT_textCentre, kNT_textTiny);
+        return;
+    }
+    const Engines& e       = *a->eng;
+    const bool     numbers = ParamValue(a, kParamModView) != 0;
+    const int      page    = a->mod_sel / 8;
+    for(int k = page * 8; k < n && k < page * 8 + 8; ++k)
+    {
+        const int m   = active[k];
+        const int col = (k % 8) % 4;
+        const int row = (k % 8) / 4;
+        const int x0  = 1 + col * 64;
+        const int y0  = 11 + row * 22;
+        const int x1  = x0 + 61;
+        const int y1  = y0 + 20;
+        const bool sel = k == a->mod_sel;
+        NT_drawShapeI(kNT_box, x0, y0, x1, y1, sel ? 12 : 3);
+
+        // Line 1: slot, destination (cut to fit), amount.
+        const int  di   = a->v[ModParam(m, kModDest)];
+        const int  dest = kModTargets[di];
+        const bool armed = a->mod_armed[m][kArmDest] == di;
+        NT_intToString(buff, m + 1);
+        NT_drawText(x0 + 2, y0 + 7, buff, 15, kNT_textLeft, kNT_textTiny);
+        const int amt = ParamValue(a, ModParam(m, kModAmount));
+        NT_intToString(buff, amt);
+        std::strcat(buff, "%");
+        NT_drawText(x1 - 2, y0 + 7, buff, sel ? 15 : 12, kNT_textRight, kNT_textTiny);
+        // Destination name, cut to the room left of the amount (4 px a character).
+        const int room = (x1 - 2 - 4 * static_cast<int>(std::strlen(buff)) - 4 - (x0 + 11)) / 4;
+        char      name[16];
+        std::strncpy(name, kModTargetNames[di], sizeof(name) - 1);
+        name[sizeof(name) - 1] = 0;
+        if(room >= 0 && room < static_cast<int>(sizeof(name)))
+            name[room] = 0;
+        NT_drawText(x0 + 11, y0 + 7, name, armed ? 10 : 5, kNT_textLeft, kNT_textTiny);
+
+        if(!numbers)
+        {
+            // Scope: 0…100 % of the destination's travel, bottom to top.
+            const int gx0 = x0 + 2, gx1 = x1 - 2, gy0 = y0 + 9, gy1 = y1 - 2;
+            const int gh  = gy1 - gy0;
+            const int by  = gy1 - static_cast<int>(ModDestBase(a, dest) * gh + 0.5f);
+            for(int x = gx0; x <= gx1; x += 3)
+                NT_drawShapeI(kNT_point, x, by, x, by, 5);
+            const int w   = gx1 - gx0;
+            int       px  = -1, py = 0;
+            for(int i = 0; i <= w; ++i)
+            {
+                // Newest sample at the right edge.
+                const int h   = (Engines::kModHist - 1) * i / (w > 0 ? w : 1);
+                const int idx = (e.mod_hist_pos + 1 + h) % Engines::kModHist;
+                const int y   = gy1 - (e.mod_hist[m][idx] * gh + 127) / 255;
+                const int x   = gx0 + i;
+                if(px >= 0)
+                    NT_drawShapeI(kNT_line, px, py, x, y, armed ? 15 : 6);
+                px = x;
+                py = y;
+            }
+        }
+        else
+        {
+            // Numbers: base → now, offset and mode.
+            const float lo = a->params[dest].min, hi = a->params[dest].max;
+            char        b1[16], b2[16];
+            FormatParamValue(a, dest, lo + ModDestBase(a, dest) * (hi - lo), b1);
+            FormatParamValue(a, dest, lo + ModDestNow(a, dest) * (hi - lo), b2);
+            std::strcpy(buff, b1);
+            std::strcat(buff, " > ");
+            std::strcat(buff, b2);
+            NT_drawText(x0 + 2, y0 + 13, buff, armed ? 15 : 6, kNT_textLeft, kNT_textTiny);
+            std::strcpy(buff, "off ");
+            NT_intToString(buff + 4, ParamValue(a, ModParam(m, kModOffset)));
+            std::strcat(buff, ParamValue(a, ModModeParam(m)) ? "% ovr" : "%");
+            NT_drawText(x0 + 2, y0 + 19, buff, 8, kNT_textLeft, kNT_textTiny);
+        }
+    }
+    if(n > 8)
+    {
+        std::strcpy(buff, "page ");
+        NT_intToString(buff + 5, page + 1);
+        NT_drawText(254, 53, buff, 6, kNT_textRight, kNT_textTiny);
+    }
+}
+
+// Where the Mod overview sits in the page list right now.
+int OverviewPageIndex(const PerseidsAlgorithm* a) { return a->pages_mod_first ? 0 : kModOverviewPage; }
+
+// Page order: the usual one, or — while the Mod view is on screen — the Mod
+// overview first, so the menu opens there (nt_emu and, as far as known, the
+// NT start a menu visit on the first page).
+void LayoutPages(PerseidsAlgorithm* a, bool mod_first)
+{
+    int k = 0;
+    if(mod_first)
+        a->pages[k++] = kPages[kModOverviewPage];
+    for(int i = 0; i < kNumPages; ++i)
+        if(!(mod_first && i == kModOverviewPage))
+            a->pages[k++] = kPages[i];
+    a->pages_mod_first = mod_first;
+    _NT_parameterPage& ov = a->pages[OverviewPageIndex(a)];
+    ov.params             = a->overview;
+    ov.numParams          = a->overview_count;
+}
+
 // Rebuilds the Mod overview page from the slots in use; tells the host only
 // when it changed. Returns true then.
 bool BuildModOverview(PerseidsAlgorithm* a)
@@ -2004,11 +2238,11 @@ bool BuildModOverview(PerseidsAlgorithm* a)
             list[n++] = static_cast<uint8_t>(ModParam(m, kModAmount));
         }
     }
-    _NT_parameterPage& pg = a->pages[kModOverviewPage];
-    if(static_cast<int>(pg.numParams) == n && !std::memcmp(a->overview, list, static_cast<size_t>(n)))
+    if(a->overview_count == n && !std::memcmp(a->overview, list, static_cast<size_t>(n)))
         return false;
     std::memcpy(a->overview, list, static_cast<size_t>(n));
-    pg.numParams = static_cast<uint8_t>(n);
+    a->overview_count = static_cast<uint8_t>(n);
+    a->pages[OverviewPageIndex(a)].numParams = static_cast<uint8_t>(n);
     return true;
 }
 
@@ -2041,7 +2275,13 @@ bool draw(_NT_algorithm* self)
     a->mod_reset_ui  = false;
     // After a reset the host is told even if the page looks the same, so
     // the menus show the cleared slots (nt_emu redraws on this).
-    if(BuildModOverview(a) || reset)
+    bool pages_changed = BuildModOverview(a) || reset;
+    if(a->mod_view != a->pages_mod_first)
+    {
+        LayoutPages(a, a->mod_view);
+        pages_changed = true;
+    }
+    if(pages_changed)
         NT_updateParameterPages(NT_algorithmIndex(a));
     const Engines& e = *a->eng;
     char           buff[24];
@@ -2083,6 +2323,10 @@ bool draw(_NT_algorithm* self)
     e.capture.GetTrailLifeUi(life);
     const uint32_t now_ms = static_cast<uint32_t>(
         a->sample_clock * 1000u / (NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000u));
+    SampleModHistory(a, now_ms);
+    if(a->mod_view)
+        DrawModView(a);
+    else
     for(int t = 0; t < static_cast<int>(kTrailCount); ++t)
     {
         const int  x0     = 1 + t * 51;
@@ -2134,6 +2378,15 @@ bool draw(_NT_algorithm* self)
         NT_intToString(buff, level);
         std::strcat(buff, "%");
         NT_drawText(x0 + 46, 48, buff, active ? 8 : 2, kNT_textRight, kNT_textTiny);
+    }
+
+    // Hint at the right edge: Encoder L further right opens the Mod view
+    // (bright when the next step gets there, i.e. on the last active Trail).
+    if(!a->mod_view)
+    {
+        const int c = a->selected >= count - 1 ? 12 : 4;
+        NT_drawShapeI(kNT_line, 253, 26, 255, 29, c);
+        NT_drawShapeI(kNT_line, 253, 32, 255, 29, c);
     }
 
     // Footer: what the pots do, and the current values. In nt_emu, where pot

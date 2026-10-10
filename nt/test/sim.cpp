@@ -499,7 +499,7 @@ int main(int argc, char** argv)
         for(uint32_t i = 0; i < pp->numPages; ++i)
         {
             const _NT_parameterPage& pg = pp->pages[i];
-            if(i == static_cast<uint32_t>(kModOverviewPage))
+            if(i == static_cast<uint32_t>(OverviewPageIndex(L.a)))
             {
                 printf("P\t%s\t(Reset all mods, dann je aktivem Slot: Mod n dest, Mod n amount)\n", pg.name);
                 continue;
@@ -1285,7 +1285,7 @@ int main(int argc, char** argv)
     {
         Inst I = Make(4, g_params);
         g_alg  = I.a;
-        const _NT_parameterPage& pg = I.a->parameterPages->pages[kModOverviewPage];
+        const _NT_parameterPage& pg = I.a->parameterPages->pages[OverviewPageIndex(I.a)];
         CHECK(!std::strcmp(pg.name, "Mod overview"), "Mod overview page index (%s)", pg.name);
         draw(I.a);
         CHECK(pg.numParams == 1 && pg.params[0] == kParamModReset,
@@ -1323,6 +1323,66 @@ int main(int argc, char** argv)
         parameterString(I.a, ModParam(2, kModAmount), 40, b2);
         CHECK(!std::strncmp(b1, "40 % > ", 7) && std::strcmp(b1, b2) != 0,
               "amount of a working slot shows its output live: '%s' … '%s'", b1, b2);
+        g_alg = A.a;
+    }
+
+    // --- Mod view: Encoder L past the last Trail ------------------------------------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        auto EncL = [&](int d) { _NT_uiData u = Ui(); u.encoders[0] = static_cast<int8_t>(d); customUi(I.a, u); };
+        auto EncR = [&](int d) { _NT_uiData u = Ui(); u.encoders[1] = static_cast<int8_t>(d); customUi(I.a, u); };
+        SetP(I, kParamCount, 2);
+        EncL(1);
+        EncL(1); // past Trail 2
+        CHECK(I.a->mod_view && I.a->selected == 1, "Encoder L past the last Trail opens the Mod view");
+        draw(I.a);
+        CHECK(!std::strcmp(I.a->parameterPages->pages[0].name, "Mod overview"),
+              "Mod view on screen: the menu starts at Mod overview (first page '%s')", I.a->parameterPages->pages[0].name);
+        g_textOob = g_shapeOob = 0;
+        draw(I.a);
+        CHECK(g_textOob == 0 && g_shapeOob == 0, "Mod view without active slots: hint on screen");
+        for(int m : {0, 3, 7})
+        {
+            SetP(I, ModParam(m, kModDest), 11 + m);
+            SetP(I, ModParam(m, kModAmount), 20);
+            SetP(I, ModParam(m, kModRate), 300);
+        }
+        Signal s;
+        s.l.assign(2400, 0.f);
+        s.r = s.l;
+        for(int k = 0; k < 40; ++k) // 2 s with redraws: scope traces fill
+        {
+            Run(I, s, 24);
+            I.a->sample_clock += 0; // draw() uses the audio clock
+            draw(I.a);
+        }
+        EncL(1);
+        EncR(5); // amount of the second active slot (slot 4)
+        CHECK(I.a->mod_sel == 1 && I.v[ModParam(3, kModAmount)] == 25 && I.v[ModParam(0, kModAmount)] == 20,
+              "Mod view: Encoder L picks the tile, Encoder R sets its amount (%d %%)", I.v[ModParam(3, kModAmount)]);
+        EncL(5);
+        CHECK(I.a->mod_sel == 2, "Mod view: selection stops at the last active slot");
+        for(int view = 0; view < 2; ++view)
+        {
+            SetP(I, kParamModView, view);
+            g_textOob = g_shapeOob = 0;
+            draw(I.a);
+            CHECK(g_textOob == 0 && g_shapeOob == 0, "Mod view %s: everything on screen", view ? "numbers" : "graphic");
+        }
+        int  mn = 255, mx = 0;
+        for(int i = 0; i < Engines::kModHist; ++i)
+        {
+            mn = std::min(mn, static_cast<int>(I.a->eng->mod_hist[0][i]));
+            mx = std::max(mx, static_cast<int>(I.a->eng->mod_hist[0][i]));
+        }
+        CHECK(mx - mn > 40, "Mod view: the scope trace of slot 1 moves (%d…%d of 255)", mn, mx);
+        EncL(-3); // left past the first tile
+        CHECK(!I.a->mod_view && I.a->selected == 1, "Encoder L left of the first tile: back to the Trails");
+        draw(I.a);
+        CHECK(!std::strcmp(I.a->parameterPages->pages[0].name, "Trails")
+                  && !std::strcmp(I.a->parameterPages->pages[OverviewPageIndex(I.a)].name, "Mod overview"),
+              "back on the Trails: usual page order again");
         g_alg = A.a;
     }
 
@@ -1521,7 +1581,11 @@ int main(int argc, char** argv)
             d.encoders[0] = 1;
             customUi(I.a, d);
         }
-        CHECK(I.a->selected == 2, "%s: selection stops at Count (Trail %d)", host, I.a->selected + 1);
+        CHECK(I.a->selected == 2 && I.a->mod_view, "%s: selection stops at Count (Trail %d), then the Mod view", host,
+              I.a->selected + 1);
+        d             = Ui();
+        d.encoders[0] = -1;
+        customUi(I.a, d); // back to Trail 3
 
         Press(I, kNT_encoderButtonR, emu);
         CHECK(I.v[kParamLock1 + 2] == 1, "%s: Encoder R click locks the Trail", host);

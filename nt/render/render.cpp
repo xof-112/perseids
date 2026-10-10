@@ -120,5 +120,39 @@ int main()
     A->eng->capture.RequestManualTrigger();
     Run(0.9f, true);
     Frame("Rec style CTR: solid bar from the centre");
+
+    // Mod view: Encoder L turned past the last Trail.
+    auto Dest = [](int param) {
+        for(int k = 0; k < kNumModTargets; ++k)
+            if(kModTargets[k] == param)
+                return k;
+        return 0;
+    };
+    SetP(ModParam(0, kModDest), Dest(kParamBlend));
+    SetP(ModParam(0, kModAmount), 40);
+    SetP(ModParam(0, kModRate), 50);
+    SetP(kParamScan, 100); // one-sided: from 100 % down to about 40 %
+    SetP(ModParam(1, kModDest), Dest(kParamScan));
+    SetP(ModParam(1, kModOffset), -30);
+    SetP(ModParam(1, kModAmount), 30);
+    SetP(ModParam(1, kModRate), 120);
+    SetP(ModParam(2, kModDest), Dest(kParamResoMix));
+    SetP(ModParam(2, kModAmount), 25);
+    SetP(ModParam(2, kModRate), 300);
+    SetP(ModParam(4, kModDest), Dest(kParamPitchSwarm));
+    SetP(ModParam(4, kModAmount), 10);
+    SetP(ModParam(4, kModRate), 20);
+    SetP(ModParam(6, kModDest), Dest(kParamAtmosphere));
+    SetP(ModModeParam(6), 1);
+    SetP(ModParam(6, kModAmount), 80);
+    SetP(ModParam(6, kModRate), 70);
+    A->mod_arm_now = true;
+    A->mod_view    = true;
+    A->mod_sel     = 1;
+    Run(2.5f, false);
+    Frame("Mod view (Encoder L past the last Trail): one tile per active slot, scope of the destination, base dotted");
+    SetP(kParamModView, 1);
+    Run(0.2f, false);
+    Frame("Mod view as numbers (Display → Mod view): base > now, offset, ovr = Override");
     return 0;
 }

@@ -20,7 +20,7 @@ Gebaut gegen distingNT_API v14 (Submodul `distingNT_API`, Stand 6975a63). GPL-3.
 | Poti L | **Blend** Spectra ↔ Swarm; Poti L drücken schaltet auf **Dry/Wet** und zurück |
 | Poti C | **Scan** (0 = Freeze); Poti C drücken schaltet auf **Reso mix** und zurück |
 | Poti R | **Size** (Grain-Anzahl 4–24); Poti R drücken schaltet auf **Atmosphere** (Blur ← 0 → Radiation) und zurück |
-| Encoder L drehen / klicken | Trail wählen / **Solo** für den gewählten Trail |
+| Encoder L drehen / klicken | Trail wählen / **Solo** für den gewählten Trail; über den letzten Trail hinaus: **Mod-Ansicht** |
 | Encoder R drehen / klicken | **Level** des gewählten Trails (2 % pro Raste) / **Lock** |
 | Taste 3 | **Rec**: sofort in den nächsten Trail aufnehmen |
 | Taste 4 | **Hold** unendlich ein/aus (wirkt sofort, auch auf laufende Trails) |
@@ -77,6 +77,10 @@ Typisch: Slot ohne Kabel, Amount 30 %, LFO 0,05 Hz auf *Scan* – die Wolke wand
 Swarm (überlappende Grains) klingt lauter als Spectra (ein ruhiger Satz Teiltöne), am stärksten bei kurzen, perkussiven Takes; in der Simulation 4–8 dB. Dazu wird Spectra lauter, wenn mehrere Trails dieselben Töne halten. Ohne Ausgleich überdeckt Swarm deshalb schon weit vor 50 % Blend.
 
 *Level match* (Seite Engines, ab Werk On) gleicht beide Engines aus, wie ein sehr langsamer Kompressor: Beide werden aus derselben Trail-Summe gespeist, also wird jede gegen diese Summe gemessen. Ein Lautheitsfolger (50 ms Kurzzeit, steigt in 150 ms, fällt über 1,2 s, folgt also den lauten Stellen) auf der Trail-Summe und auf jedem Engine-Ausgang; daraus eine Verstärkung, die nachgeführt wird. *Match speed* stellt nur dieses Nachführen ein: **Slow** ≈ 4 s, **Medium** ≈ 1,5 s (ab Werk), **Fast** ≈ 0,4 s. Die Messung selbst bleibt bei jeder Stufe gleich, sonst würde sich mit der Geschwindigkeit auch die Balance verschieben. Die ersten 3 s mit Signal nach dem Laden oder nach *Clear trails* laufen immer auf Fast, damit der Ausgleich sofort einrastet statt nachzuziehen. Gelernt wird nur, solange die Engine läuft und Signal da ist (über −60 dB), in Pausen bleibt die Verstärkung stehen. Höchstens ±12 dB: es gleicht die Balance an, die Dynamik einzelner Anschläge bleibt. Swarm bekommt −2 dB auf sein Ziel, weil seine Grains bei gleichem Messwert spitzer klingen. Ergebnis in der Simulation: Glocke und Pad je unter 1 dB Unterschied zwischen Blend 0 und 100 %. **Trail-Level bleiben Akzente:** Level match vergleicht jede Engine mit der Trail-Summe, und die enthält die Trail-Level schon; dreht man einen Trail leiser, werden Summe und Engine gemeinsam leiser, das Verhältnis bleibt, der Ausgleich greift nicht ein (Test: Level 50 → 20 % ist rund 8 dB leiser, bei jeder Blend-Stellung). Kosten: ein paar Rechenschritte je 64 Samples. Nur im NT-Plug-in, die Firmware ist unverändert.
+
+## Mod-Ansicht
+
+Encoder L über den letzten Trail hinaus (Pfeil am rechten Rand) öffnet statt der Trail-Spalten eine Kachel je aktivem Slot (4 × 2, bei mehr als acht seitenweise): Slot, Ziel, Amount und eine kleine Oszilloskop-Spur des Ziels über gut 2 s, der Grundwert gepunktet (25 Werte/s aus `draw()`, im DRAM). Encoder L wählt die Kachel, Encoder R stellt ihren Amount (1 %/Raste); links von der ersten Kachel zurück zu den Trails. *Mod view* (Seite Display) schaltet auf **Numbers**: Grundwert > aktueller Wert in den Einheiten des Parameters, Offset, `ovr`. Solange die Ansicht offen ist, steht *Mod overview* als erste Parameterseite (`NT_updateParameterPages`), damit das Menü dort öffnet. Menü-Timeout und Startseite des Menüs bestimmt der Host; die API bietet dafür nichts.
 
 ## Resonator
 
@@ -161,6 +165,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.16 | *Mod mode* Around base / Override; Seite *Mod overview* mit *Reset all mods*; „ ~“ an modulierten Parametern im Menü; Mod sync *Rst …* (freies Tempo, Neustart im Takt-Raster); Slot-Eingang/Ziel/Mode/Sync greifen erst nach 1,5 s Stillstand oder beim Zurück auf die Oberfläche (`MOD*`); Clock in ab Werk In 3 |
 | 0.17 | *Mod overview* schlanker: nur aktive Slots mit Namen, Ziel und Amount (Seite wird je Instanz neu gebaut, `NT_updateParameterPages`); Mod dest „Off“ heißt jetzt „None“ wie bei den Eingängen; *Mod n amount* zeigt die aktuelle Ausgabe des Slots live |
 | 0.18 | Anhang „Wo steht was“ in der Anleitung (Seiten + nummerierte Mod-Ziele, erzeugt mit `./test/sim --list | python3 docs/appendix.py`); *Reset all mods* setzt jeden Slot ganz zurück (auch Eingang und Rate) und frischt die Menüs auf |
+| 0.19 | Mod-Ansicht (Encoder L hinter dem letzten Trail): Kacheln mit Oszilloskop-Spur je aktivem Slot, Encoder R = Amount, *Mod view* Graphic/Numbers; Pfeil-Hinweis; Mod overview als erste Menüseite, solange die Ansicht offen ist |
 
 ## Stand
 
@@ -170,7 +175,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 
 ## Offene Fragen
 
-- **Speicher des NT:** Die Plug-in-API kennt vier Bereiche (SRAM für den Algorithmus, DRAM für große Puffer, DTC für zeitkritische Daten, ITC für Code), nennt aber keine Größen. Perseids braucht je Instanz ≈ 5,4 KB SRAM und ≈ 4,9 MB DRAM bei 10 s Trails. **DRAM-Grenze des NT** für Plug-ins ist nicht dokumentiert; 5 × 30 s (14,5 MB) erst am Gerät ausprobieren.
+- **Speicher des NT:** Die Plug-in-API kennt vier Bereiche (SRAM für den Algorithmus, DRAM für große Puffer, DTC für zeitkritische Daten, ITC für Code), nennt aber keine Größen. Perseids braucht je Instanz ≈ 6 KB SRAM und ≈ 4,9 MB DRAM bei 10 s Trails. **DRAM-Grenze des NT** für Plug-ins ist nicht dokumentiert; 5 × 30 s (14,5 MB) erst am Gerät ausprobieren.
 - **Taste 4:** Hold INF (jetzt, wirkt sofort auf alle laufenden Trails) oder „alles festhalten“ wie Imprint in der Firmware (alle aktiven Trails locken)?
 - **Shift-Taste am NT (vorgemerkt):** am Gerät selbst die Poti-Ziele über eine Art Shift-Taste umschalten (gedrückt halten = zweite Belegung von Poti L/C/R) statt per Poti-Druck. Welche Taste, und ob halten oder umschalten, klärt sich am Gerät.
 - **CPU-Budget** des Governors (Hälfte des NT) ist geschätzt, am Gerät nachmessen.

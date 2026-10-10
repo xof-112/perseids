@@ -1,3 +1,4 @@
+#include <utility>
 // NT API stubs for the native simulation. Text widths use nt_emu's font
 // tables (NT_EMU_PATH/fonts), so "fits on the screen" means what nt_emu shows.
 #include "stubs.h"
@@ -77,6 +78,11 @@ void NT_drawShapeI(_NT_shape sh, int x0, int y0, int x1, int y1, int c)
     ++g_draws;
     if(g_logDraw)
         printf("S %d %d %d %d %d %d\n", static_cast<int>(sh), x0, y0, x1, y1, c);
+    if(sh == kNT_line) // lines may run in any direction
+    {
+        if(x1 < x0) std::swap(x0, x1);
+        if(y1 < y0) std::swap(y0, y1);
+    }
     if(x0 < 0 || x1 > 255 || y0 < 0 || y1 > 63 || x1 < x0 || y1 < y0)
     {
         if(!g_logDraw)

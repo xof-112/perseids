@@ -120,7 +120,7 @@ test: test/sim test/sim_emu
 	./test/sim
 	./test/sim_emu
 
-render/render: render/render.cpp test/stubs.h $(PLUGIN_SRC) $(ENGINE_SRC) $(HOST_C)
+render/render: render/render.cpp test/stubs.h test/stubs.cpp $(PLUGIN_SRC) $(ENGINE_SRC) $(HOST_C)
 	g++ -std=c++17 $(HOST_FLAGS) -DRENDER_LOG -o $@ render/render.cpp $(ENGINE_SRC) $(HOST_C)
 
 render: render/render
