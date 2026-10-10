@@ -120,11 +120,11 @@ test: test/sim test/sim_emu
 	./test/sim
 	./test/sim_emu
 
-render/render: render/render.cpp test/stubs.h test/stubs.cpp $(PLUGIN_SRC) $(ENGINE_SRC) $(HOST_C)
+render/render: render/render.cpp render/nt_raster.h test/stubs.h test/stubs.cpp $(PLUGIN_SRC) $(ENGINE_SRC) $(HOST_C)
 	g++ -std=c++17 $(HOST_FLAGS) -DRENDER_LOG -o $@ render/render.cpp $(ENGINE_SRC) $(HOST_C)
 
 render: render/render
-	cd render && ./render > frames.txt && python3 render.py frames.txt perseids-screens.png
+	cd render && ./render > frames.txt && python3 render.py frames.txt perseids-screens.png screens
 
 clean:
 	rm -rf build plugins emu/*.dll emu/*.exe test/sim test/sim_emu render/render render/frames.txt

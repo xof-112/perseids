@@ -35,7 +35,7 @@ Display: Kopfzeile mit REC-Anzeige (bzw. dem nächsten Ziel-Trail), Eingangspege
 
 **Lebensbalken wie am Modul:** Während der Aufnahme ziehen Funken durch den Balken, portiert aus `DrawTrailLifeBar` / `DrawRecSparkleFill` der Firmware (gleicher Hash, gleiche Tempi, gleiche Dichte pro Pixel, 200 ms weiches Erscheinen bzw. Verglühen). Stil über *Rec style* auf der Seite *Display*, wie Settings → REC: **PLR** (Standard, Funken links → rechts bis zur Aufnahme-Front), **PRS** (aus der Mitte), **CTR** (voller Balken aus der Mitte). Danach füllt Fade In den Balken von links, Hold steht voll, Fade Out leert ihn von links. Die Funken sind wie am Modul voll hell; der NT hat 16 Graustufen, deshalb zieht jeder Funke zusätzlich einen schwachen Pixel (Stufe 5) hinter sich her. Sieht man die Abstufung kaum, sieht es aus wie am Modul.
 
-Bildschirm-Renderings: `render/perseids-screens.png` (Schriften angenähert, Positionen echt).
+Bildschirm-Renderings: `render/perseids-screens.png` und `render/screens/*.png`, pixelgenau mit den Schriften und dem Zeichencode von nt_emu (`render/nt_raster.h`).
 
 ## Parameter
 

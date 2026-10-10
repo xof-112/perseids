@@ -6,6 +6,7 @@
 #include "../test/stubs.cpp"
 
 #include <cmath>
+#include <cstring>
 #include <cstdio>
 #include <vector>
 
@@ -46,10 +47,24 @@ static void Run(float secs, bool sound)
     }
 }
 
+// One screen: the draw calls (for checks) and then NT_screen as nt_emu shows
+// it, 64 rows of 256 hex digits (one per pixel, 0–15).
 static void Frame(const char* title)
 {
     printf("F %s\n", title);
+    std::memset(NT_screen, 0, sizeof(NT_screen));
     draw(A);
+    for(int y = 0; y < 64; ++y)
+    {
+        char row[257];
+        for(int x = 0; x < 256; ++x)
+        {
+            const uint8_t b = NT_screen[y * 128 + x / 2];
+            row[x]          = "0123456789abcdef"[(x & 1) ? (b & 15) : (b >> 4)];
+        }
+        row[256] = 0;
+        printf("P %s\n", row);
+    }
 }
 
 int main()
