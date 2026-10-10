@@ -681,6 +681,102 @@ int main(int argc, char** argv)
         CHECK(Peak(oy.l) < 1e-6f, "second instance stays silent while the first plays");
     }
 
+    // --- mod slots ---------------------------------------------------------------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        auto M = [&](int slot, int field) { return kParamMod1 + slot * kModParams + field; };
+        auto Dest = [&](int param) {
+            for(int k = 0; k < kNumModTargets; ++k)
+                if(kModTargets[k] == param)
+                    return k;
+            return 0;
+        };
+        Signal s;
+        s.l.assign(4800, 0.f);
+        s.r = s.l;
+        std::vector<float> cv(s.l.size(), 5.f); // +5 V on bus 3 ("Rec trig in" bus, unused here)
+
+        // CV +5 V, Amount +50 % on Blend (base 50 %) → 100 %; stored value stays.
+        SetP(I, M(0, kModIn), 3);
+        SetP(I, M(0, kModDest), Dest(kParamBlend));
+        SetP(I, M(0, kModAmount), 50);
+        Run(I, s, 24, cv.data());
+        CHECK(std::fabs(I.a->blend - 1.f) < 0.02f && I.v[kParamBlend] == 50,
+              "CV +5 V, amount 50 %% on Blend → %.2f (stored %d %%)", I.a->blend, I.v[kParamBlend]);
+
+        // Inverted: amount −50 % → 0 %.
+        SetP(I, M(0, kModAmount), -50);
+        Run(I, s, 24, cv.data());
+        CHECK(I.a->blend < 0.02f, "amount −50 %% inverts → Blend %.2f", I.a->blend);
+
+        // Offset only (no cable → LFO, amount 0): −50 % on Pitch Spectra → −24 HT.
+        SetP(I, M(0, kModIn), 0);
+        SetP(I, M(0, kModDest), Dest(kParamPitchSpectra));
+        SetP(I, M(0, kModAmount), 0);
+        SetP(I, M(0, kModOffset), -50);
+        Run(I, s, 24);
+        CHECK(std::fabs(I.a->spectra_p.pitch_spectra + 1.f) < 1e-4f && I.a->blend > 0.49f,
+              "offset −50 %% on Pitch Spectra → %.0f HT, Blend back to its stored value",
+              I.a->spectra_p.pitch_spectra * 24.f);
+
+        // Internal LFO, 1 Hz, amount 100 % on Scan (base 20 %): sweeps the range.
+        SetP(I, M(1, kModDest), Dest(kParamScan));
+        SetP(I, M(1, kModAmount), 100);
+        SetP(I, M(1, kModRate), 100);
+        float lo = 1.f, hi = 0.f;
+        for(int k = 0; k < 50; ++k)
+        {
+            Signal b;
+            b.l.assign(960, 0.f);
+            b.r = b.l;
+            Run(I, b, 24);
+            lo = std::min(lo, I.a->swarm_p.scan);
+            hi = std::max(hi, I.a->swarm_p.scan);
+        }
+        CHECK(lo < 0.02f && hi > 0.98f, "LFO 1 Hz on Scan sweeps %.2f … %.2f", lo, hi);
+
+        // Switches and counts: offset +100 % locks Trail 1, +10 % on Size adds 2 grains.
+        SetP(I, M(2, kModDest), Dest(kParamLock1));
+        SetP(I, M(2, kModOffset), 100);
+        SetP(I, M(3, kModDest), Dest(kParamSize));
+        SetP(I, M(3, kModOffset), 10);
+        Run(I, s, 24);
+        CHECK(I.a->mixer[0].locked && I.a->swarm_p.size == 18.f && I.a->mod_active == 4,
+              "switch and count destinations (Lock 1 on, Size %.0f), 4 slots active",
+              I.a->swarm_p.size);
+
+        // Two slots on one destination add up; changing a destination releases the old one.
+        SetP(I, M(3, kModDest), Dest(kParamLock1));
+        SetP(I, M(3, kModOffset), -100);
+        Run(I, s, 24);
+        CHECK(!I.a->mixer[0].locked && I.a->swarm_p.size == 16.f,
+              "two slots sum on Lock 1 (+100 − 100 = off), Size back to 16");
+
+        // All slots off → everything back to the stored values.
+        for(int m = 0; m < kNumModSlots; ++m)
+            SetP(I, M(m, kModDest), 0);
+        Run(I, s, 24);
+        CHECK(std::fabs(I.a->spectra_p.pitch_spectra) < 1e-6f && std::fabs(I.a->swarm_p.scan - 0.2f) < 1e-4f
+                  && I.a->mod_active == 0,
+              "all slots off → stored values again");
+
+        // Destination list: every entry is a real parameter with a name.
+        bool names_ok = true;
+        for(int k = 1; k < kNumModTargets; ++k)
+            names_ok = names_ok && !std::strcmp(kModTargetNames[k], kParameterDefs[kModTargets[k]].name);
+        CHECK(names_ok, "mod destination names match the parameter names (%d targets)", kNumModTargets - 1);
+
+        // Display with MOD indicator.
+        SetP(I, M(0, kModDest), Dest(kParamBlend));
+        SetP(I, M(0, kModOffset), 10);
+        Run(I, s, 24);
+        g_textOob = g_shapeOob = 0;
+        draw(I.a);
+        CHECK(g_textOob == 0 && g_shapeOob == 0, "display with MOD indicator on screen");
+        g_alg = A.a;
+    }
+
     // --- controls --------------------------------------------------------------
     for(int emu = 0; emu < 2; ++emu)
     {

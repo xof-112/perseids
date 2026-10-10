@@ -27,7 +27,7 @@ Gebaut gegen distingNT_API v14 (Submodul `distingNT_API`, Stand 6975a63). GPL-3.
 
 Tasten 1/2 bleiben beim NT. Ein Encoder-Klick zählt nur ohne Drehen; in nt_emu drückt jedes Ziehen am Encoder ihn mit, das wird als Drehen gewertet (wie bei Duett).
 
-Display: Kopfzeile mit REC-Anzeige (bzw. dem nächsten Ziel-Trail), Eingangspegel L/R mit Threshold-Marke und Blend-Stellung. Darunter fünf Spalten: Trail-Nummer, Zustand (`REC`, `IN`, Sekunden bis zum Ausblenden, `INF`, `OUT`), Lebensbalken, Level-Balken, `L`/`S` und Level in %. Der gewählte Trail ist umrahmt, Trails über *Count* sind dunkel. Fußzeile: was die drei Potis gerade tun, `HOLD` bei unendlichem Hold, `CPU`, wenn der Swarm-Governor Grains spart.
+Display: Kopfzeile mit REC-Anzeige (bzw. dem nächsten Ziel-Trail), Eingangspegel L/R mit Threshold-Marke und Blend-Stellung. Darunter fünf Spalten: Trail-Nummer, Zustand (`REC`, `IN`, Sekunden bis zum Ausblenden, `INF`, `OUT`), Lebensbalken, Level-Balken, `L`/`S` und Level in %. Der gewählte Trail ist umrahmt, Trails über *Count* sind dunkel. Fußzeile: was die drei Potis gerade tun, `HOLD` bei unendlichem Hold, `CPU`, wenn der Swarm-Governor Grains spart, `MOD n`, wenn n Mod-Slots arbeiten.
 
 **Lebensbalken wie am Modul:** Während der Aufnahme ziehen Funken durch den Balken, portiert aus `DrawTrailLifeBar` / `DrawRecSparkleFill` der Firmware (gleicher Hash, gleiche Tempi, gleiche Dichte pro Pixel, 200 ms weiches Erscheinen bzw. Verglühen). Stil über *Rec style* auf der Seite *Display*, wie Settings → REC: **PLR** (Standard, Funken links → rechts bis zur Aufnahme-Front), **PRS** (aus der Mitte), **CTR** (voller Balken aus der Mitte). Danach füllt Fade In den Balken von links, Hold steht voll, Fade Out leert ihn von links. Die Funken sind wie am Modul voll hell; der NT hat 16 Graustufen, deshalb zieht jeder Funke zusätzlich einen schwachen Pixel (Stufe 5) hinter sich her. Sieht man die Abstufung kaum, sieht es aus wie am Modul.
 
@@ -45,6 +45,7 @@ Alle Regler sind normale NT-Parameter, also per CV oder MIDI steuerbar.
 | Spectra | Partials 4–32 · Waveshape (Saw ← 0 → Fold) · Umbra/Aurora · Ensemble |
 | Swarm | Size · Spread · Scan · Scatter · Atmosphere · Direction (Fwd/Rev/Rnd) |
 | Mixer | Level 1–5 · Lock 1–5 · Solo 1–5 |
+| Mod 1–4 | Mod in (CV-Eingang, leer = internes LFO) · Mod dest · Mod amount ±100 % · Mod offset ±100 % · Mod LFO rate 0,01–20 Hz |
 | Display | Rec style PLR / PRS / CTR |
 | Routing | In L · In R (optional) · Rec trig in (Flanke über 1 V) · Out L/R mit Add/Replace |
 
@@ -55,6 +56,15 @@ Unterschiede zur Firmware, alle durch den NT bedingt:
 - **Blend** steht ab Werk auf 50 % (Firmware: 0 = nur Spectra), damit beide Engines gleich zu hören sind.
 - **Trails in 16 Bit** (±2,0 Vollaussteuerung, eine Oktave Reserve über dem Codec-Bereich). Gegen die Float-Fassung gemessen liegt der Unterschied am Ausgang unter der 16-Bit-Quantisierung der Test-WAVs (−45 bis −55 dB).
 
+## Modulation
+
+Zwei Wege, die sich ergänzen:
+
+- **Mod-Slots im Plug-in** (Seiten *Mod 1* bis *Mod 4*), wie die vier Mod-Slots des Moduls (ARCHITECTURE 4.3): *Mod in* wählt einen CV-Eingang oder Bus; bleibt er leer, arbeitet das interne LFO (Dreieck/Sinus wie am Modul, *LFO rate* 0,01–20 Hz) – das ist die Normalisierung der Mod-Buchsen. *Mod dest* ist jeder Klang- und Trail-Parameter (39 Ziele: Trails, Time, Engines, Spectra, Swarm, Level/Lock/Solo je Trail). Gerechnet wird wie am Modul: `Beitrag = Offset + Amount × Quelle`, `Ziel = Grundwert + Beitrag × voller Regelweg`, begrenzt. ±5 V = ±100 % Quelle. Mehrere Slots auf dasselbe Ziel addieren sich. Der gespeicherte Wert bleibt stehen, nur der wirksame Wert bewegt sich; Schalter und Zahlen (Lock, Count, Size, Direction …) werden gerundet. Ausgenommen sind Routing, *Clear trails* und *Rec style*.
+- **CV-/MIDI-Mapping des NT:** Jeder Parameter, auch die Mod-Slots selbst, lässt sich zusätzlich im NT auf CV oder MIDI legen. Das verstellt den gespeicherten Wert direkt.
+
+Typisch: Slot ohne Kabel, Amount 30 %, LFO 0,05 Hz auf *Scan* – die Wolke wandert von selbst. Oder ein Hüllkurvenfolger auf *Mod 1 in*, Ziel *Blend*: laute Stellen schieben zu Swarm.
+
 ## Bewusst nicht im Kern
 
 | Weggelassen | Ersatz |
@@ -63,7 +73,7 @@ Unterschiede zur Firmware, alle durch den NT bedingt:
 | Filter | NT-Filter, Wasp, SEM |
 | Pan Drift, Crossfade | NT-Mixer/LFO, Four Play (Trails stehen in der Mitte, Swarm bringt die Breite über *Spread*) |
 | Multi Dry/Wet | NT-Routing: Out mit *Add* auf den Eingangsbus legen, Pegel über *Output level* |
-| Mod-System (Phase 10) | CV-/MIDI-Mapping des NT |
+| Mod-System: Auto-Mod Age/Pitch (4.10) | noch offen; die vier Mod-Slots selbst sind drin (siehe Modulation) |
 | VU, Life-Bars, Settings-Seiten | stark vereinfacht im Display |
 | Resonator | noch offen, siehe unten |
 
@@ -72,7 +82,7 @@ Unterschiede zur Firmware, alle durch den NT bedingt:
 - **Keine Main-Loop:** Auf dem Daisy läuft die FFT-Analyse in der Hauptschleife. Der NT ruft nur `step()` auf (in nt_emu mit 4 Frames, am NT mit größeren Blöcken). Deshalb zerlegt `SpectraEngine::AnalysisSlice()` die Analyse eines Hops in 10 Scheiben (Fenster, FFT, Magnituden, 4 × Umbra/Aurora, Glättung, Peak-Auswahl); `step()` führt alle 32 Samples eine aus. Genauso baut `SwarmEngine::WindowSlice()` die Grain-Hüllkurve nach einer Atmosphere-Änderung in 9 Scheiben neu. So kostet kein einzelner Block mehr als eine Scheibe.
 - **Blockgröße:** Audio läuft in Stücken von höchstens 64 Frames; die Kanalerkennung der Aufnahme (RecordSource) rechnet unabhängig von der Blockgröße alle 256 Samples, der Swarm-Governor ebenso. Getestet: gleicher Pegel bei 4, 24 und 128 Frames pro `step()`.
 - **CPU-Governor:** Am NT misst `step()` seine eigenen Zyklen (`NT_getCpuCycleCount`) und gibt Swarm als Last den Anteil an der Hälfte eines 600-MHz-Kerns. Ab 88 % davon (also ~44 % des NT) dünnt Swarm die Wolke aus, Untergrenze 6 Grains. In nt_emu ist er aus.
-- **Speicher:** SRAM nur für die Instanz (1,4 KB); Engines (31 KB), FFT-Puffer (48 KB) und Trails im DRAM. Keine statischen Variablen, mehrere Instanzen teilen nichts.
+- **Speicher:** SRAM nur für die Instanz (2,3 KB); Engines (31 KB), FFT-Puffer (48 KB) und Trails im DRAM. Keine statischen Variablen, mehrere Instanzen teilen nichts.
 - **FFT:** dieselbe CMSIS-DSP-Teilmenge wie die Firmware (RFFT 2048), als Quelltext mit eingebaut.
 - **Offene Symbole**, die die NT-Firmware auflösen muss: die NT-API, dazu `sinf cosf tanf expf powf tanhf memcpy memset strlen` (gleiche Art wie bei den Airwindows-Beispielen und Duett). `make` listet sie nach jedem Build.
 
@@ -92,7 +102,7 @@ make render     # render/perseids-screens.png
 
 ## Tests
 
-`test/sim.cpp` läuft ohne Hardware und prüft 76 Punkte, u. a.:
+`test/sim.cpp` läuft ohne Hardware und prüft 85 Punkte, u. a.:
 
 - Speicherbedarf je *Trail seconds*, Stille rein = Stille raus
 - Spectra trifft 220 Hz, *Pitch Spectra* +12 → 440 Hz; Swarm mit *Pitch Swarm* +12 → 440 Hz und stereo
@@ -109,8 +119,8 @@ Der Klick-Detektor hat in der Firmware-Engine einen echten Fehler gefunden: Spec
 
 ## Stand
 
-- Nativ getestet (76 Prüfungen), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
-- **Noch nicht auf dem NT und nicht in echtem VCV Rack gelaufen.**
+- Nativ getestet (85 Prüfungen), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
+- Läuft in nt_emu (VCV Rack, Windows), bestätigt am 10.10.2026. **Am NT selbst noch nicht getestet.**
 - Firmware: Umbau der Engines bitgleich (Golden-Test vor/nach, 40 s Audio), Firmware-Link mit libDaisy geprüft.
 
 ## Offene Fragen

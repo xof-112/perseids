@@ -83,8 +83,55 @@ enum
     // Display
     kParamRecStyle = kParamSolo1 + kTrailCount,
 
-    kNumParams,
+    // Mod slots 1–4 (ARCHITECTURE 4.3), five parameters each
+    kParamMod1,
+
+    kNumParams = kParamMod1 + 4 * 5,
 };
+
+// Mod slot layout: kParamMod1 + slot * kModParams + field.
+constexpr int kNumModSlots = 4;
+enum
+{
+    kModIn,     // CV input bus; none = internal LFO (jack normalling, 4.10 "OFF")
+    kModDest,   // destination, index into kModTargets (0 = off)
+    kModAmount, // attenuverter −100…+100 %
+    kModOffset, // bias after the attenuverter −100…+100 %
+    kModRate,   // internal LFO rate, 0.01–20 Hz
+    kModParams,
+};
+static_assert(kNumParams == kParamMod1 + kNumModSlots * kModParams, "mod slot layout");
+
+// Everything a slot can modulate: all sound and Trail parameters. Not routing,
+// not Clear trails (a held mod would clear forever), not the display or the
+// mod slots themselves. Names in kModTargetNames, same order (0 = Off).
+const uint8_t kModTargets[] = {
+    0, // Off
+    kParamCount, kParamThreshold, kParamContRec, kParamOverwrite, kParamCapture, kParamPlay,
+    kParamBuffer, kParamHold, kParamFadeIn, kParamFadeOut,
+    kParamBlend, kParamPitchSpectra, kParamPitchSwarm, kParamOutLevel,
+    kParamPartials, kParamWaveshape, kParamUmbra, kParamEnsemble,
+    kParamSize, kParamSpread, kParamScan, kParamScatter, kParamAtmosphere, kParamDirection,
+    kParamTrailLevel1, kParamTrailLevel1 + 1, kParamTrailLevel1 + 2, kParamTrailLevel1 + 3,
+    kParamTrailLevel1 + 4,
+    kParamLock1, kParamLock1 + 1, kParamLock1 + 2, kParamLock1 + 3, kParamLock1 + 4,
+    kParamSolo1, kParamSolo1 + 1, kParamSolo1 + 2, kParamSolo1 + 3, kParamSolo1 + 4,
+};
+const char* const kModTargetNames[] = {
+    "Off",
+    "Count", "Threshold", "Cont. Rec", "Overwrite", "Capture", "Play",
+    "Buffer", "Hold", "Fade in", "Fade out",
+    "Blend", "Pitch Spectra", "Pitch Swarm", "Output level",
+    "Partials", "Waveshape", "Umbra/Aurora", "Ensemble",
+    "Size", "Spread", "Scan", "Scatter", "Atmosphere", "Direction",
+    "Level 1", "Level 2", "Level 3", "Level 4", "Level 5",
+    "Lock 1", "Lock 2", "Lock 3", "Lock 4", "Lock 5",
+    "Solo 1", "Solo 2", "Solo 3", "Solo 4", "Solo 5",
+    nullptr,
+};
+constexpr int kNumModTargets = static_cast<int>(sizeof(kModTargets));
+static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kModTargets) + 1,
+              "every mod target needs a name");
 
 // Hold: the top value means "infinite" (engine: > 30 s).
 constexpr int kHoldInf = 31;
@@ -149,6 +196,14 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     P_TRAIL_TOGGLE("Solo 4") P_TRAIL_TOGGLE("Solo 5")
 
     P_ENUM("Rec style", 2, 1, kRecStyle)
+
+#define P_MOD_SLOT(n)                                                  \
+    NT_PARAMETER_CV_INPUT("Mod " n " in", 0, 0)                        \
+    P_ENUM("Mod " n " dest", kNumModTargets - 1, 0, kModTargetNames)   \
+    P_NUM("Mod " n " amount", -100, 100, 0, kNT_unitPercent, 0)        \
+    P_NUM("Mod " n " offset", -100, 100, 0, kNT_unitPercent, 0)        \
+    P_NUM("Mod " n " LFO rate", 1, 2000, 25, kNT_unitHz, kNT_scaling100)
+    P_MOD_SLOT("1") P_MOD_SLOT("2") P_MOD_SLOT("3") P_MOD_SLOT("4")
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
@@ -167,6 +222,13 @@ const uint8_t kPageMixer[]   = {
     kParamLock1, kParamLock1 + 1, kParamLock1 + 2, kParamLock1 + 3, kParamLock1 + 4,
     kParamSolo1, kParamSolo1 + 1, kParamSolo1 + 2, kParamSolo1 + 3, kParamSolo1 + 4};
 const uint8_t kPageDisplay[] = {kParamRecStyle};
+#define MOD_PAGE(s) {kParamMod1 + (s) * kModParams, kParamMod1 + (s) * kModParams + 1,      \
+                     kParamMod1 + (s) * kModParams + 2, kParamMod1 + (s) * kModParams + 3, \
+                     kParamMod1 + (s) * kModParams + 4}
+const uint8_t kPageMod1[] = MOD_PAGE(0);
+const uint8_t kPageMod2[] = MOD_PAGE(1);
+const uint8_t kPageMod3[] = MOD_PAGE(2);
+const uint8_t kPageMod4[] = MOD_PAGE(3);
 const uint8_t kPageRouting[] = {kParamInL, kParamInR, kParamRecIn, kParamOutL,
                                 kParamOutLMode, kParamOutR, kParamOutRMode};
 
@@ -177,6 +239,11 @@ const _NT_parameterPage kPages[] = {
     {.name = "Spectra", .numParams = ARRAY_SIZE(kPageSpectra), .group = 4, .unused = {0, 0}, .params = kPageSpectra},
     {.name = "Swarm", .numParams = ARRAY_SIZE(kPageSwarm), .group = 5, .unused = {0, 0}, .params = kPageSwarm},
     {.name = "Mixer", .numParams = ARRAY_SIZE(kPageMixer), .group = 6, .unused = {0, 0}, .params = kPageMixer},
+    // Same group: the cursor keeps its row when stepping Mod 1 → Mod 4.
+    {.name = "Mod 1", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod1},
+    {.name = "Mod 2", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod2},
+    {.name = "Mod 3", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod3},
+    {.name = "Mod 4", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod4},
     {.name = "Display", .numParams = ARRAY_SIZE(kPageDisplay), .group = 8, .unused = {0, 0}, .params = kPageDisplay},
     {.name = "Routing", .numParams = ARRAY_SIZE(kPageRouting), .group = 7, .unused = {0, 0}, .params = kPageRouting},
 };
@@ -299,6 +366,14 @@ struct PerseidsAlgorithm : public _NT_algorithm
 
     // Life-bar animation per Trail (display thread only), as in the firmware.
     LifeBarAnim life_anim[kTrailCount];
+
+    // Mod slots (audio thread): contribution per destination in units of the
+    // destination's full travel, internal LFO phases, smoothed CV.
+    float mod_sum[kNumParams];
+    float lfo_phase[kNumModSlots];
+    float cv_smooth[kNumModSlots];
+    int   mod_active;  // slots currently doing something (display)
+    bool  mod_applied; // modulation was applied in the last chunk
 };
 
 inline float Clampf(float x, float lo, float hi)
@@ -314,6 +389,24 @@ inline int ParamValue(const PerseidsAlgorithm* a, int p)
     if(v > a->params[p].max)
         v = a->params[p].max;
     return v;
+}
+
+// Value a parameter has right now: the stored (base) value plus all mod slot
+// contributions, contrib × the parameter's full travel, clamped (ARCHITECTURE
+// 4.3: dest = clamp(base + contrib × span)). The stored value never moves.
+inline float Pv(const PerseidsAlgorithm* a, int p)
+{
+    const float lo   = a->params[p].min;
+    const float hi   = a->params[p].max;
+    const float base = static_cast<float>(ParamValue(a, p));
+    return Clampf(base + a->mod_sum[p] * (hi - lo), lo, hi);
+}
+
+// Same, rounded — for counts, switches and enums.
+inline int PvI(const PerseidsAlgorithm* a, int p)
+{
+    const float x = Pv(a, p);
+    return static_cast<int>(x >= 0.f ? x + 0.5f : x - 0.5f);
 }
 
 // nt_emu (Windows build, NT_EMU_WIN): NT_setParameterFrom… always lands in the
@@ -355,17 +448,17 @@ void SetParamAudio(PerseidsAlgorithm* a, int p, int value)
 void ReadParams(PerseidsAlgorithm* a)
 {
     CaptureParamValues& c = a->capture_p;
-    c.count      = static_cast<float>(ParamValue(a, kParamCount));
-    c.threshold  = ParamValue(a, kParamThreshold) * 0.01f;
-    c.cont_rec   = static_cast<float>(ParamValue(a, kParamContRec));
-    c.overwrite  = static_cast<float>(ParamValue(a, kParamOverwrite));
-    c.on_off     = static_cast<float>(ParamValue(a, kParamCapture));
-    c.buffer_s   = ParamValue(a, kParamBuffer) * 0.1f;
-    c.hold_s     = static_cast<float>(ParamValue(a, kParamHold));
-    c.fade_in_s  = Clampf(ParamValue(a, kParamFadeIn) * 0.1f, 0.001f, 5.f);
-    c.fade_out_s = Clampf(ParamValue(a, kParamFadeOut) * 0.1f, 0.001f, 5.f);
+    c.count      = static_cast<float>(PvI(a, kParamCount));
+    c.threshold  = Pv(a, kParamThreshold) * 0.01f;
+    c.cont_rec   = static_cast<float>(PvI(a, kParamContRec));
+    c.overwrite  = static_cast<float>(PvI(a, kParamOverwrite));
+    c.on_off     = static_cast<float>(PvI(a, kParamCapture));
+    c.buffer_s   = Pv(a, kParamBuffer) * 0.1f;
+    c.hold_s     = Pv(a, kParamHold);
+    c.fade_in_s  = Clampf(Pv(a, kParamFadeIn) * 0.1f, 0.001f, 5.f);
+    c.fade_out_s = Clampf(Pv(a, kParamFadeOut) * 0.1f, 0.001f, 5.f);
     c.routing    = 0.f; // Stereo; the NT chooses the busses.
-    a->playing   = ParamValue(a, kParamPlay) != 0;
+    a->playing   = PvI(a, kParamPlay) != 0;
 
     // Pan Drift / Crossfade are left to the NT: Trails stay centred.
     a->spatial_p                 = SpatialParamValues{};
@@ -374,33 +467,33 @@ void ReadParams(PerseidsAlgorithm* a)
 
     for(size_t t = 0; t < kTrailCount; ++t)
     {
-        a->mixer[t].level  = ParamValue(a, kParamTrailLevel1 + t) * 0.01f;
-        a->mixer[t].locked = ParamValue(a, kParamLock1 + t) != 0;
-        a->mixer[t].solo   = ParamValue(a, kParamSolo1 + t) != 0;
+        a->mixer[t].level  = Pv(a, static_cast<int>(kParamTrailLevel1 + t)) * 0.01f;
+        a->mixer[t].locked = PvI(a, static_cast<int>(kParamLock1 + t)) != 0;
+        a->mixer[t].solo   = PvI(a, static_cast<int>(kParamSolo1 + t)) != 0;
     }
 
     // Pitch: semitones. The engines map ±1 → ±span octaves; span 2 (Pitch
     // Both = 1) makes ±24 semitones exact.
     SpectraParamValues& s = a->spectra_p;
-    s.pitch_spectra = ParamValue(a, kParamPitchSpectra) / 24.f;
-    s.partials      = static_cast<float>(ParamValue(a, kParamPartials));
-    s.waveshape     = ParamValue(a, kParamWaveshape) * 0.01f;
-    s.umbra_aurora  = ParamValue(a, kParamUmbra) * 0.01f;
-    s.ensemble      = ParamValue(a, kParamEnsemble) * 0.01f;
+    s.pitch_spectra = Pv(a, kParamPitchSpectra) / 24.f;
+    s.partials      = static_cast<float>(PvI(a, kParamPartials));
+    s.waveshape     = Pv(a, kParamWaveshape) * 0.01f;
+    s.umbra_aurora  = Pv(a, kParamUmbra) * 0.01f;
+    s.ensemble      = Pv(a, kParamEnsemble) * 0.01f;
 
     SwarmParamValues& w = a->swarm_p;
-    a->blend            = ParamValue(a, kParamBlend) * 0.01f;
+    a->blend            = Pv(a, kParamBlend) * 0.01f;
     w.blend             = a->blend;
-    w.pitch_swarm       = ParamValue(a, kParamPitchSwarm) / 24.f;
+    w.pitch_swarm       = Pv(a, kParamPitchSwarm) / 24.f;
     w.pitch_both        = 1.f;
-    w.size              = static_cast<float>(ParamValue(a, kParamSize));
-    w.spread            = ParamValue(a, kParamSpread) * 0.01f;
-    w.scan              = ParamValue(a, kParamScan) * 0.01f;
-    w.scatter           = ParamValue(a, kParamScatter) * 0.01f;
-    w.atmosphere        = ParamValue(a, kParamAtmosphere) * 0.01f;
-    w.direction         = static_cast<float>(ParamValue(a, kParamDirection));
+    w.size              = static_cast<float>(PvI(a, kParamSize));
+    w.spread            = Pv(a, kParamSpread) * 0.01f;
+    w.scan              = Pv(a, kParamScan) * 0.01f;
+    w.scatter           = Pv(a, kParamScatter) * 0.01f;
+    w.atmosphere        = Pv(a, kParamAtmosphere) * 0.01f;
+    w.direction         = static_cast<float>(PvI(a, kParamDirection));
 
-    a->out_gain = std::pow(10.f, ParamValue(a, kParamOutLevel) / 20.f);
+    a->out_gain = std::pow(10.f, Pv(a, kParamOutLevel) / 20.f);
 }
 
 // ---------------------------------------------------------------------------
@@ -521,6 +614,15 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->click_r      = Click{false, false};
     for(size_t t = 0; t < kTrailCount; ++t)
         a->life_anim[t] = LifeBarAnim{TrailLifePhase::Empty, RecSoft::Idle, 0, 1.f, false};
+    for(int p = 0; p < kNumParams; ++p)
+        a->mod_sum[p] = 0.f;
+    for(int m = 0; m < kNumModSlots; ++m)
+    {
+        a->lfo_phase[m] = 0.25f * static_cast<float>(m); // slots start spread out
+        a->cv_smooth[m] = 0.f;
+    }
+    a->mod_active  = 0;
+    a->mod_applied = false;
     return a;
 }
 
@@ -540,6 +642,69 @@ inline float SoftLimit(float x)
 {
     const float a = x >= 0.f ? x : -x;
     return x * (27.f + a * a) / (27.f + 9.f * a * a);
+}
+
+// Internal source when a slot has no CV input: the firmware's triangle/sine
+// blend (same shape as the Pan Drift LFO), −1…+1.
+float ModLfo(float phase)
+{
+    float ph = phase - static_cast<float>(static_cast<int>(phase));
+    if(ph < 0.f)
+        ph += 1.f;
+    float tri;
+    if(ph < 0.25f)
+        tri = ph * 4.f;
+    else if(ph < 0.75f)
+        tri = 2.f - ph * 4.f;
+    else
+        tri = ph * 4.f - 4.f;
+    return tri * 0.55f + std::sin(ph * 6.2831853f) * 0.45f;
+}
+
+// Mod slots for one chunk: contrib = Offset + Amount × source, summed per
+// destination (ARCHITECTURE 4.3). CV: ±5 V = ±1, smoothed over ~5 ms.
+// Returns true if any slot is doing something.
+bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int at, int n)
+{
+    for(int p = 0; p < kNumParams; ++p)
+        a->mod_sum[p] = 0.f;
+
+    const float sr     = static_cast<float>(NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000);
+    int         active = 0;
+    for(int m = 0; m < kNumModSlots; ++m)
+    {
+        const int   base   = kParamMod1 + m * kModParams;
+        const int   dest   = kModTargets[ParamValue(a, base + kModDest)];
+        const float amount = ParamValue(a, base + kModAmount) * 0.01f;
+        const float offset = ParamValue(a, base + kModOffset) * 0.01f;
+        const int   bus    = ParamValue(a, base + kModIn);
+
+        float source;
+        if(bus > 0)
+        {
+            const float* cv  = busFrames + (bus - 1) * numFrames + at;
+            float        sum = 0.f;
+            for(int i = 0; i < n; ++i)
+                sum += cv[i];
+            const float target = Clampf(sum / static_cast<float>(n) * 0.2f, -1.f, 1.f);
+            a->cv_smooth[m] += (target - a->cv_smooth[m]) * static_cast<float>(n)
+                               / (static_cast<float>(n) + 0.005f * sr);
+            source = a->cv_smooth[m];
+        }
+        else
+        {
+            a->lfo_phase[m] += ParamValue(a, base + kModRate) * 0.01f * static_cast<float>(n) / sr;
+            a->lfo_phase[m] -= static_cast<float>(static_cast<int>(a->lfo_phase[m]));
+            source = ModLfo(a->lfo_phase[m]);
+        }
+
+        if(!dest || (amount == 0.f && offset == 0.f))
+            continue;
+        a->mod_sum[dest] += offset + amount * source;
+        ++active;
+    }
+    a->mod_active = active;
+    return active > 0;
 }
 
 void ApplyParams(PerseidsAlgorithm* a)
@@ -588,16 +753,28 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
     float*       out_l = out_l_bus > 0 ? busFrames + (out_l_bus - 1) * numFrames : nullptr;
     float*       out_r = out_r_bus > 0 ? busFrames + (out_r_bus - 1) * numFrames : nullptr;
 
-    // Blend: equal-power, the silent engine is skipped (as in the firmware).
-    const float blend       = Clampf(a->blend, 0.f, 1.f);
-    const float wet_spectra = std::cos(blend * 1.5707964f);
-    const float wet_swarm   = std::sin(blend * 1.5707964f);
-    const bool  run_spectra = wet_spectra > 0.001f;
-    const bool  run_swarm   = wet_swarm > 0.001f;
-
     for(int done = 0; done < numFrames; done += kChunk)
     {
         const int n = numFrames - done < kChunk ? numFrames - done : kChunk;
+
+        // Mod slots: re-read every parameter while any slot is active, and
+        // once more after the last one stops (back to the stored values).
+        const bool modulating = UpdateMod(a, busFrames, numFrames, done, n);
+        if(modulating || a->mod_applied || a->dirty)
+        {
+            if(!modulating)
+                for(int p = 0; p < kNumParams; ++p)
+                    a->mod_sum[p] = 0.f;
+            ApplyParams(a);
+            a->mod_applied = modulating;
+        }
+
+        // Blend: equal-power, the silent engine is skipped (as in the firmware).
+        const float blend       = Clampf(a->blend, 0.f, 1.f);
+        const float wet_spectra = std::cos(blend * 1.5707964f);
+        const float wet_swarm   = std::sin(blend * 1.5707964f);
+        const bool  run_spectra = wet_spectra > 0.001f;
+        const bool  run_swarm   = wet_swarm > 0.001f;
 
         for(int i = 0; i < n; ++i)
         {
@@ -1235,6 +1412,12 @@ bool draw(_NT_algorithm* self)
         NT_drawText(160, 61, "HOLD", 15, kNT_textLeft, kNT_textTiny);
     if(e.swarm.GovernorActive())
         NT_drawText(60, 61, "CPU", 15, kNT_textLeft, kNT_textTiny);
+    if(a->mod_active > 0)
+    {
+        std::strcpy(buff, "MOD");
+        NT_intToString(buff + 3, a->mod_active);
+        NT_drawText(76, 61, buff, 12, kNT_textLeft, kNT_textTiny);
+    }
     return true;
 }
 

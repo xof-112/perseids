@@ -96,8 +96,8 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <p class="eyebrow">disting NT · Plug-in · Perseids-core</p>
   <h1>Perseids – Anleitung</h1>
   <p class="lede">Perseids-core ist der Kern des Perseids-Moduls als Algorithmus für den Expert Sleepers disting NT: Audio in fünf Trails aufnehmen und daraus mit Spectra (additive Resynthese) und Swarm (Granular) eine Stereo-Wolke formen. Diese Anleitung erklärt Installation, den ersten Patch, Bedienung, Display und alle Parameter.</p>
-  <div class="facts"><span>In L/R · Out L/R</span><span>5 Trails, 1–30 s</span><span>Spectra ↔ Swarm</span><span>Rec trig per CV</span><span>48 Parameter</span><span>Bedienung wie am Modul</span></div>
-  <span class="chip chip-now">Stand 10.10.2026 · noch nicht am NT getestet</span>
+  <div class="facts"><span>In L/R · Out L/R</span><span>5 Trails, 1–30 s</span><span>Spectra ↔ Swarm</span><span>Rec trig per CV</span><span>4 Mod-Slots</span><span>68 Parameter</span><span>Bedienung wie am Modul</span></div>
+  <span class="chip chip-now">Stand 10.10.2026 · läuft in nt_emu, am NT noch nicht getestet</span>
 </header>
 
 <nav id="inhalt" class="toc" aria-label="Inhalt"><p class="eyebrow">Inhalt</p>
@@ -111,11 +111,12 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
 <li><a class="tl" href="#display"><span class="tn">05</span><span class="tt">Display lesen</span></a><div class="ts"><a class="sl" href="#lebensbalken">Lebensbalken</a> · <a class="sl" href="#rec-style">Rec style</a></div></li>
 <li><a class="tl" href="#trails"><span class="tn">06</span><span class="tt">Wie Trails entstehen und vergehen</span></a></li>
 <li><a class="tl" href="#engines"><span class="tn">07</span><span class="tt">Spectra und Swarm</span></a></li>
+<li><a class="tl" href="#modulation"><span class="tn">08</span><span class="tt">Modulation</span></a><div class="ts"><a class="sl" href="#mod-slots">Mod-Slots</a> · <a class="sl" href="#nt-mapping">CV-Mapping des NT</a></div></li>
 </ol>
 <p class="toc-grp">Nachschlagen</p><ol>
-<li><a class="tl" href="#parameter"><span class="tn">08</span><span class="tt">Parameter</span></a></li>
-<li><a class="tl" href="#rezepte"><span class="tn">09</span><span class="tt">Rezepte</span></a></li>
-<li><a class="tl" href="#grenzen"><span class="tn">10</span><span class="tt">Unterschiede, Grenzen, Stand</span></a></li>
+<li><a class="tl" href="#parameter"><span class="tn">09</span><span class="tt">Parameter</span></a></li>
+<li><a class="tl" href="#rezepte"><span class="tn">10</span><span class="tt">Rezepte</span></a></li>
+<li><a class="tl" href="#grenzen"><span class="tn">11</span><span class="tt">Unterschiede, Grenzen, Stand</span></a></li>
 </ol>
 </nav>
 
@@ -139,7 +140,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <tr><td>Filter</td><td>NT-Filter, Wasp, SEM</td></tr>
   <tr><td>Pan Drift, Crossfade</td><td>NT-Mixer mit LFO, Four Play; die Stereobreite kommt aus Swarm (<i>Spread</i>)</td></tr>
   <tr><td>Multi Dry/Wet</td><td>Ausgang mit <i>Add</i> auf den Eingangsbus legen, Anteil über <i>Output level</i></td></tr>
-  <tr><td>Mod-System</td><td>jeden Parameter im NT auf CV oder MIDI legen</td></tr>
+  <tr><td>Mod-System</td><td>vier Mod-Slots sind eingebaut (siehe 08), dazu das CV-/MIDI-Mapping des NT; Auto-Mod Age/Pitch fehlt noch</td></tr>
   <tr><td>Resonator</td><td>noch nicht enthalten</td></tr>
   </table></div>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
@@ -206,7 +207,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
     <li><b>Fünf Spalten</b>, eine pro Trail. Oben Nummer und Zustand: <code>REC</code>, <code>IN</code> (Fade in), Sekunden bis zum Ausblenden, <code>INF</code> (unendlich oder gelockt), <code>OUT</code> (Fade out), <code>--</code> leer.</li>
     <li>Darunter der <b>Lebensbalken</b> (siehe unten) und der <b>Level-Balken</b>, ganz unten <code>L</code> und <code>S</code> (hell = Lock bzw. Solo an) und der Level in Prozent.</li>
     <li>Trails jenseits von <i>Count</i> sind dunkel.</li>
-    <li><b>Fußzeile:</b> was die drei Potis gerade tun, mit Wert. <code>HOLD</code> bei unendlichem Hold, <code>CPU</code>, wenn Swarm Grains spart, weil der NT knapp wird.</li>
+    <li><b>Fußzeile:</b> was die drei Potis gerade tun, mit Wert. <code>HOLD</code> bei unendlichem Hold, <code>CPU</code>, wenn Swarm Grains spart, weil der NT knapp wird, <code>MOD n</code>, wenn n Mod-Slots arbeiten.</li>
   </ul>
   <h3 id="lebensbalken">Lebensbalken</h3>
   <p>Wie am Modul zeigt der Balken das Leben eines Trails von links nach rechts:</p>
@@ -270,8 +271,32 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 
+<article class="patch-card" id="modulation">
+  <div class="ph"><div class="num">08</div><div class="ph-main"><h2>Modulation</h2></div></div>
+  <div class="pb">
+  <p>Jeder Klang- und Trail-Parameter lässt sich per CV modulieren, auf zwei Wegen, die sich ergänzen.</p>
+  <h3 id="mod-slots">Mod-Slots</h3>
+  <p>Vier Slots wie am Modul, je eine Parameterseite <i>Mod 1</i> bis <i>Mod 4</i>:</p>
+  <div class="tbl"><table><tr><th>Parameter</th><th>Wirkung</th></tr>
+  <tr><td>Mod in</td><td>CV-Eingang oder Bus als Quelle; ±5 V entsprechen ±100 %. <b>Leer</b> = internes LFO (Dreieck/Sinus wie am Modul), so wie eine unbelegte Mod-Buchse.</td></tr>
+  <tr><td>Mod dest</td><td>Ziel: einer von 39 Parametern (Trails, Time, Engines, Spectra, Swarm, Level/Lock/Solo je Trail), oder Off</td></tr>
+  <tr><td>Mod amount</td><td>Abschwächer und Inverter, −100 … +100 %</td></tr>
+  <tr><td>Mod offset</td><td>Verschiebung nach dem Abschwächer, −100 … +100 %</td></tr>
+  <tr><td>Mod LFO rate</td><td>Tempo des internen LFO, 0,01–20 Hz (nur ohne Kabel)</td></tr></table></div>
+  <p>Gerechnet wird wie am Modul: <code>Beitrag = Offset + Amount × Quelle</code>, <code>Ziel = Grundwert + Beitrag × voller Regelweg</code>, an den Grenzen abgeschnitten. Mit dem Offset liegt die Modulation ganz unterhalb, ganz oberhalb oder symmetrisch um den Grundwert: Amount 50 %, Offset −50 % bewegt <i>Pitch Swarm</i> nur nach unten.</p>
+  <ul class="lst">
+    <li>Der gespeicherte Wert bleibt stehen; nur der wirksame Wert bewegt sich. Potis und Display zeigen den Grundwert, <code>MOD n</code> unten links die Zahl aktiver Slots.</li>
+    <li>Mehrere Slots auf dasselbe Ziel addieren sich.</li>
+    <li>Schalter und Zahlen (Lock, Solo, Cont. Rec, Count, Size, Partials, Direction) werden gerundet: Offset +100 % auf <i>Lock 1</i> hält Trail 1 fest, solange der Slot aktiv ist.</li>
+    <li>Nicht modulierbar: Routing, <i>Clear trails</i> (dafür ein Gate per NT-Mapping), <i>Rec style</i>.</li>
+  </ul>
+  <h3 id="nt-mapping">CV-Mapping des NT</h3>
+  <p>Zusätzlich lässt sich im NT jeder Parameter auf CV oder MIDI legen, auch die Mod-Slots selbst (etwa <i>Mod 1 amount</i> per Fader). Das NT-Mapping verstellt den gespeicherten Wert direkt; die Mod-Slots wirken obendrauf.</p>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
 <article class="patch-card" id="parameter">
-  <div class="ph"><div class="num">08</div><div class="ph-main"><h2>Parameter</h2></div></div>
+  <div class="ph"><div class="num">09</div><div class="ph-main"><h2>Parameter</h2></div></div>
   <div class="pb">
   <p>Alle Parameter lassen sich im NT auf CV oder MIDI legen und werden mit dem Preset gespeichert.</p>
   <div class="tbl"><table><tr><th>Seite</th><th>Parameter</th><th>Bereich (Standard)</th></tr>
@@ -294,6 +319,10 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <tr><td></td><td>Direction</td><td>Fwd/Rev/Rnd (Fwd)</td></tr>
   <tr><td>Mixer</td><td>Level 1–5</td><td>0–100 % (50 %)</td></tr>
   <tr><td></td><td>Lock 1–5 · Solo 1–5</td><td>Off/On (Off)</td></tr>
+  <tr><td>Mod 1–4</td><td>Mod in</td><td>CV-Eingang oder keiner (keiner = LFO)</td></tr>
+  <tr><td></td><td>Mod dest</td><td>Off oder einer von 39 Parametern (Off)</td></tr>
+  <tr><td></td><td>Mod amount · Mod offset</td><td>−100 … +100 % (0)</td></tr>
+  <tr><td></td><td>Mod LFO rate</td><td>0,01–20 Hz (0,25 Hz)</td></tr>
   <tr><td>Display</td><td>Rec style</td><td>PRS/PLR/CTR (PLR)</td></tr>
   <tr><td>Routing</td><td>In L · In R</td><td>Eingang 1 · 2 (In R auch „keiner“)</td></tr>
   <tr><td></td><td>Rec trig in</td><td>keiner</td></tr>
@@ -303,7 +332,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
 </article>
 
 <article class="patch-card" id="rezepte">
-  <div class="ph"><div class="num">09</div><div class="ph-main"><h2>Rezepte</h2></div></div>
+  <div class="ph"><div class="num">10</div><div class="ph-main"><h2>Rezepte</h2></div></div>
   <div class="pb">
   <h3>Gefrorene Fläche</h3>
   <p>Count 3, Hold INF (Taste 4), Blend ganz rechts, Scan 0, Scatter 100 %, Atmosphere −80 %. Drei Phrasen spielen, dann nur noch mit Poti C (Scan) leicht bewegen.</p>
@@ -312,12 +341,14 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <h3>Getaktete Erinnerung</h3>
   <p>Threshold 100 % (nur noch der Trigger nimmt auf), Rec trig in an einen langsamen Clock-Teiler, Buffer 1 s, Hold 8 s, Count 5. Jeder Takt hält eine Sekunde fest; die Wolke erneuert sich von selbst.</p>
   <h3>Wolke statt Hall</h3>
-  <p>Perseids vor einen NT-Reverb setzen, Output level 0 dB, Out auf <i>Add</i>. Blend 60 %, Spread 80 %, Fade in/out 5 s. Mit einem LFO auf Blend wandert der Klang zwischen Körnern und Teiltönen.</p>
+  <p>Perseids vor einen NT-Reverb setzen, Output level 0 dB, Out auf <i>Add</i>. Blend 60 %, Spread 80 %, Fade in/out 5 s. Mit Mod 1 ohne Kabel, Ziel <i>Blend</i>, Amount 40 %, LFO 0,05 Hz wandert der Klang von selbst zwischen Körnern und Teiltönen.</p>
+  <h3>Lauter = körniger</h3>
+  <p>Einen Hüllkurvenfolger der Quelle an einen NT-Eingang, <i>Mod 1 in</i> darauf, Ziel <i>Blend</i>, Amount 60 %, Offset −30 %. In leisen Passagen dominiert Spectra, laute Stellen schieben die Wolke zu Swarm. Ein zweiter Slot mit demselben Eingang auf <i>Scatter</i> streut sie dabei weiter.</p>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 
 <article class="patch-card" id="grenzen">
-  <div class="ph"><div class="num">10</div><div class="ph-main"><h2>Unterschiede, Grenzen, Stand</h2></div></div>
+  <div class="ph"><div class="num">11</div><div class="ph-main"><h2>Unterschiede, Grenzen, Stand</h2></div></div>
   <div class="pb">
   <h3>Anders als am Modul</h3>
   <ul class="lst">
@@ -334,7 +365,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
     <li>Wie viel DRAM der NT einem Plug-in gibt, ist nicht dokumentiert; 30 s pro Trail erst ausprobieren.</li>
   </ul>
   <h3>Stand</h3>
-  <p>In einer Simulation getestet (76 Prüfungen: Tonhöhe, Klicks, Blockgrößen, Bedienung, Display) und unter Wine mit einem nt_emu-artigen Host. <b>Noch nicht am NT und noch nicht in echtem VCV Rack gelaufen.</b> Rückmeldungen dazu, besonders zum Nachglimmen der Funken und zur CPU-Last, fließen in die nächste Fassung.</p>
+  <p>In einer Simulation getestet (85 Prüfungen: Tonhöhe, Klicks, Blockgrößen, Modulation, Bedienung, Display) und unter Wine mit einem nt_emu-artigen Host. Die DLL läuft in nt_emu (VCV Rack). <b>Am NT selbst noch nicht getestet.</b> Rückmeldungen dazu, besonders zum Nachglimmen der Funken und zur CPU-Last, fließen in die nächste Fassung.</p>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 </section>
