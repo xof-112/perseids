@@ -156,7 +156,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.11"
+#define PERSEIDS_NT_VERSION "0.12"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Hold: the top value means "infinite" (engine: > 30 s).
@@ -417,6 +417,12 @@ struct PerseidsAlgorithm : public _NT_algorithm
     bool  pot_l_mix;   // Pot L: false = Blend, true = Dry/Wet
     bool  pot_c_reso;  // Pot C: false = Scan, true = Reso mix
     bool  pot_r_atmo;  // Pot R: false = Size, true = Atmosphere
+    // Catch-up per pot: after a switch (or a change from the menu) the pot only
+    // takes over once it reaches or passes the stored value, so nothing jumps.
+    bool    pot_caught[3];
+    float   pot_last[3];    // last position seen, < 0 = unknown
+    int16_t pot_written[3]; // value this pot wrote last (detects outside edits)
+    int     pot_param[3];   // parameter the catch state belongs to
     int   hold_before; // Hold value to restore when Hold is toggled off
     Click click_l;
     Click click_r;
@@ -680,6 +686,13 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->pot_l_mix    = false;
     a->pot_c_reso   = false;
     a->pot_r_atmo   = false;
+    for(int k = 0; k < 3; ++k)
+    {
+        a->pot_caught[k]  = false;
+        a->pot_last[k]    = -1.f;
+        a->pot_written[k] = 0;
+        a->pot_param[k]   = -1;
+    }
     a->dry_wet      = 1.f;
     a->hold_before  = 15;
     a->click_l      = Click{false, false};
@@ -702,6 +715,10 @@ void parameterChanged(_NT_algorithm* self, int p)
 {
     PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
     a->dirty             = true;
+    // Changed from the menu (or a preset): the pot has to catch up again.
+    for(int k = 0; k < 3; ++k)
+        if(a->pot_param[k] == p && a->v && a->v[p] != a->pot_written[k])
+            a->pot_caught[k] = false;
     if(p == kParamHold && a->v && a->v[kParamHold] != kHoldInf)
         a->hold_before = a->v[kParamHold];
 }
@@ -1056,6 +1073,69 @@ inline bool Pressed(const _NT_uiData& d, uint32_t bits)
 
 int Count(const PerseidsAlgorithm* a) { return ParamValue(a, kParamCount); }
 
+// Current target of each pot and its value mapped to the pot's 0…1 travel.
+int PotParam(const PerseidsAlgorithm* a, int k)
+{
+    if(k == 0)
+        return a->pot_l_mix ? kParamDryWet : kParamBlend;
+    if(k == 1)
+        return a->pot_c_reso ? kParamResoMix : kParamScan;
+    return a->pot_r_atmo ? kParamAtmosphere : kParamSize;
+}
+
+float PotNorm(const PerseidsAlgorithm* a, int k)
+{
+    const int p = PotParam(a, k);
+    const int v = ParamValue(a, p);
+    if(p == kParamAtmosphere)
+        return (v + 100) * 0.005f;
+    if(p == kParamSize)
+        return (v - 4) * 0.05f;
+    return v * 0.01f;
+}
+
+int PotValue(int p, float pos)
+{
+    if(p == kParamAtmosphere)
+        return static_cast<int>(pos * 200.f + 0.5f) - 100;
+    if(p == kParamSize)
+        return 4 + static_cast<int>(pos * 20.f + 0.5f);
+    return static_cast<int>(pos * 100.f + 0.5f);
+}
+
+// True while the pot has not yet picked up its current target.
+bool PotWaiting(const PerseidsAlgorithm* a, int k)
+{
+    const int p = PotParam(a, k);
+    return !(a->pot_caught[k] && a->pot_param[k] == p);
+}
+
+constexpr float kCatchWindow = 0.02f; // ±2 % of the travel counts as "there"
+
+void PotMoved(PerseidsAlgorithm* a, int k, float pos)
+{
+    const int p = PotParam(a, k);
+    if(PotWaiting(a, k))
+    {
+        // New target, or the value was changed elsewhere: wait for the pot.
+        a->pot_caught[k] = false;
+        a->pot_param[k]  = p;
+        const float target = PotNorm(a, k);
+        const float last   = a->pot_last[k];
+        const bool  near   = std::fabs(pos - target) <= kCatchWindow;
+        const bool  passed = last >= 0.f && (last - target) * (pos - target) <= 0.f;
+        a->pot_last[k]     = pos;
+        if(!near && !passed)
+            return;
+        a->pot_caught[k] = true;
+    }
+    a->pot_last[k] = pos;
+    int v          = PotValue(p, pos);
+    v              = v < a->params[p].min ? a->params[p].min : (v > a->params[p].max ? a->params[p].max : v);
+    a->pot_written[k] = static_cast<int16_t>(v); // before: nt_emu calls parameterChanged at once
+    SetParamUi(a, p, v);
+}
+
 void customUi(_NT_algorithm* self, const _NT_uiData& data)
 {
     PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
@@ -1063,28 +1143,21 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data)
         return;
 
     if(data.controls & kNT_potL)
-        SetParamUi(a, a->pot_l_mix ? kParamDryWet : kParamBlend,
-                   static_cast<int>(data.pots[0] * 100.f + 0.5f));
+        PotMoved(a, 0, data.pots[0]);
     if(Pressed(data, kPotLSwitch))
     {
         a->pot_l_mix = !a->pot_l_mix;
         NT_requestSetupUi(); // re-sync soft takeover for the new target
     }
     if(data.controls & kNT_potC)
-        SetParamUi(a, a->pot_c_reso ? kParamResoMix : kParamScan,
-                   static_cast<int>(data.pots[1] * 100.f + 0.5f));
+        PotMoved(a, 1, data.pots[1]);
     if(kPotCSwitch && Pressed(data, kPotCSwitch))
     {
         a->pot_c_reso = !a->pot_c_reso;
         NT_requestSetupUi();
     }
     if(data.controls & kNT_potR)
-    {
-        if(a->pot_r_atmo)
-            SetParamUi(a, kParamAtmosphere, static_cast<int>(data.pots[2] * 200.f + 0.5f) - 100);
-        else
-            SetParamUi(a, kParamSize, 4 + static_cast<int>(data.pots[2] * 20.f + 0.5f));
-    }
+        PotMoved(a, 2, data.pots[2]);
     if(Pressed(data, kPotRSwitch))
     {
         a->pot_r_atmo = !a->pot_r_atmo;
@@ -1143,10 +1216,8 @@ void setupUi(_NT_algorithm* self, _NT_float3& pots)
     PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
     if(!a->v)
         return;
-    pots[0] = ParamValue(a, a->pot_l_mix ? kParamDryWet : kParamBlend) * 0.01f;
-    pots[1] = ParamValue(a, a->pot_c_reso ? kParamResoMix : kParamScan) * 0.01f;
-    pots[2] = a->pot_r_atmo ? (ParamValue(a, kParamAtmosphere) + 100) * 0.005f
-                            : (ParamValue(a, kParamSize) - 4) * 0.05f;
+    for(int k = 0; k < 3; ++k)
+        pots[k] = PotNorm(a, k);
 }
 
 int parameterString(_NT_algorithm* /*self*/, int p, int v, char* buff)
@@ -1552,18 +1623,20 @@ bool draw(_NT_algorithm* self)
 
     FormatPercent(buff, ParamValue(a, a->pot_l_mix ? kParamDryWet : kParamBlend), false);
     NT_drawText(2, 61, lbl_l, 6, kNT_textLeft, kNT_textTiny);
-    NT_drawText(ValueX(2, lbl_l), 61, buff, 15, kNT_textLeft, kNT_textTiny);
+    // Value dim while the pot still has to catch up with it.
+    auto ValColour = [a](int k) { return PotWaiting(a, k) && a->pot_last[k] >= 0.f ? 5 : 15; };
+    NT_drawText(ValueX(2, lbl_l), 61, buff, ValColour(0), kNT_textLeft, kNT_textTiny);
 
     FormatPercent(buff, ParamValue(a, a->pot_c_reso ? kParamResoMix : kParamScan), false);
     NT_drawText(100, 61, lbl_c, 6, kNT_textLeft, kNT_textTiny);
-    NT_drawText(ValueX(100, lbl_c), 61, buff, 15, kNT_textLeft, kNT_textTiny);
+    NT_drawText(ValueX(100, lbl_c), 61, buff, ValColour(1), kNT_textLeft, kNT_textTiny);
 
     if(a->pot_r_atmo)
         FormatPercent(buff, ParamValue(a, kParamAtmosphere), true);
     else
         NT_intToString(buff, ParamValue(a, kParamSize));
     NT_drawText(196, 61, lbl_r, 6, kNT_textLeft, kNT_textTiny);
-    NT_drawText(254, 61, buff, 15, kNT_textRight, kNT_textTiny);
+    NT_drawText(254, 61, buff, ValColour(2), kNT_textRight, kNT_textTiny);
 
     if(ParamValue(a, kParamHold) == kHoldInf)
         NT_drawText(160, 61, "HOLD", 15, kNT_textLeft, kNT_textTiny);

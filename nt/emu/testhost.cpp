@@ -93,10 +93,14 @@ int main()
     const bool custom = f->draw(a);
     printf("draw(): %d calls, %s the parameter line\n", draws, custom ? "replaces" : "keeps");
 
+    // Pot L from Blend 50 % down to 25 % (catch-up picks it up at 50 %).
     _NT_uiData ui = {};
     ui.controls   = kNT_potL;
-    ui.pots[0]    = 0.25f;
-    f->customUi(a, ui);
+    for(int i = 50; i >= 25; --i)
+    {
+        ui.pots[0] = i * 0.01f;
+        f->customUi(a, ui);
+    }
     printf("customUi: Pot L → Blend %d (written to own v[]: %s)\n", vals[18], params == 0 ? "yes" : "no");
 
     const bool ok = rms > 0.01 && peak < 10.f && draws > 20 && vals[18] == 25;

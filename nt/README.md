@@ -27,6 +27,8 @@ Gebaut gegen distingNT_API v14 (Submodul `distingNT_API`, Stand 6975a63). GPL-3.
 
 Tasten 1/2 bleiben beim NT. Ein Encoder-Klick zählt nur ohne Drehen.
 
+**Catch-up der Potis:** Nach dem Umschalten (oder wenn der Wert im Menü geändert wurde) übernimmt ein Poti erst, wenn es den gespeicherten Wert erreicht oder überfährt; bis dahin bleibt der Wert stehen und ist in der Fußzeile dunkel. So springt nichts, auch in nt_emu, wo das Soft Takeover des NT fehlt.
+
 **In nt_emu (VCV Rack)** kommen bei Plug-ins mit eigener Oberfläche nur Poti- und Encoder-Drehungen und die Tasten 1–4 an, kein Druck auf Potis oder Encoder (so ist nt_emu gebaut, Stand ad2aa4b). Die Windows-DLL legt deshalb das Umschalten auf die freien Tasten: **Taste 1** = Poti L Blend ↔ Dry/Wet, **Taste 2** = Poti C und Poti R gemeinsam (Scan/Size ↔ Reso mix/Atmosphere). Meldet nt_emu doch einen Poti-Druck (beim Anfassen zum Drehen kommt das vor), ignoriert die nt_emu-Fassung ihn, damit Drehen das Ziel nicht zurückschaltet. Solo und Lock gehen in nt_emu nur über die Parameterseite *Mixer*. Tasten wirken in nt_emu beim Loslassen. Die Fußzeile der nt_emu-Fassung zeigt vor jedem Poti-Ziel die zuständige Taste (`1 BLEND`, `2 SCAN`, `2 SIZE`).
 
 Display: Kopfzeile mit REC-Anzeige (bzw. dem nächsten Ziel-Trail), Eingangspegel L/R mit Threshold-Marke und Blend-Stellung. Darunter fünf Spalten: Trail-Nummer, Zustand (`REC`, `IN`, Sekunden bis zum Ausblenden, `INF`, `OUT`), Lebensbalken, Level-Balken, `L`/`S` und Level in %. Der gewählte Trail ist umrahmt, Trails über *Count* sind dunkel. Fußzeile: was die drei Potis gerade tun, `HOLD` bei unendlichem Hold, `CPU`, wenn der Swarm-Governor Grains spart, `MOD n`, wenn n Mod-Slots arbeiten.
@@ -146,10 +148,11 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.9 | REC-Anzeige im Kopf nach rechts, verdeckt die Versionsnummer nicht mehr; Version heller |
 | 0.10 | Hold wirkt sofort auf laufende Trails (INF stoppt den Countdown, kürzer als schon gespielt → Fade out, länger während des Fade out → Trail kommt zurück); Overwrite Off + INF: Threshold/Cont. Rec lassen INF-Trails stehen, nur Rec ersetzt den ältesten; Makefile mit Header-Abhängigkeiten; beides gilt auch in der Firmware (ARCHITECTURE §4.8) |
 | 0.11 | Parameterseite *Resonator* direkt nach *Swarm*, vor *Mixer* (sie liegt auf dem Swarm-Ausgang) |
+| 0.12 | Catch-up für Poti L/C/R: kein Sprung nach dem Umschalten oder nach einer Menü-Änderung; Wert dunkel, solange das Poti noch nicht übernommen hat |
 
 ## Stand
 
-- Nativ getestet (101 + 106 Prüfungen, NT- und nt_emu-Fassung), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
+- Nativ getestet (über 110 Prüfungen je Fassung, NT- und nt_emu-Fassung), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
 - Läuft in nt_emu (VCV Rack, Windows), bestätigt am 10.10.2026. **Am NT selbst noch nicht getestet.**
 - Firmware: Umbau der Engines bitgleich (Golden-Test vor/nach, 40 s Audio), Firmware-Link mit libDaisy geprüft.
 
@@ -157,4 +160,5 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 
 - **DRAM-Grenze des NT** für Plug-ins ist nicht dokumentiert; 5 × 30 s (14,5 MB) erst am Gerät ausprobieren.
 - **Taste 4:** Hold INF (jetzt, wirkt sofort auf alle laufenden Trails) oder „alles festhalten“ wie Imprint in der Firmware (alle aktiven Trails locken)?
+- **Shift-Taste am NT (vorgemerkt):** am Gerät selbst die Poti-Ziele über eine Art Shift-Taste umschalten (gedrückt halten = zweite Belegung von Poti L/C/R) statt per Poti-Druck. Welche Taste, und ob halten oder umschalten, klärt sich am Gerät.
 - **CPU-Budget** des Governors (Hälfte des NT) ist geschätzt, am Gerät nachmessen.

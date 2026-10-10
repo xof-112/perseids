@@ -440,6 +440,24 @@ _NT_uiData Ui()
     return d;
 }
 
+// Turns a pot like a hand would: from where its target stands now (catch-up
+// picks it up there at once) to `to`, in 1 % steps.
+void Turn(Inst& in, int k, float to)
+{
+    _NT_float3 now;
+    setupUi(in.a, now);
+    const uint32_t bits[3] = {kNT_potL, kNT_potC, kNT_potR};
+    const float    from    = now[k];
+    const int      steps   = 1 + static_cast<int>(std::fabs(to - from) * 100.f);
+    for(int i = 1; i <= steps; ++i)
+    {
+        _NT_uiData d = Ui();
+        d.controls   = static_cast<uint16_t>(bits[k]);
+        d.pots[k]    = from + (to - from) * static_cast<float>(i) / static_cast<float>(steps);
+        customUi(in.a, d);
+    }
+}
+
 void Press(Inst& in, uint32_t bit, bool nt_emu)
 {
     _NT_uiData d = Ui();
@@ -960,32 +978,24 @@ int main(int argc, char** argv)
         const char* host = emu ? "nt_emu" : "NT";
 
         _NT_uiData d = Ui();
-        d.controls   = kNT_potL | kNT_potC | kNT_potR;
-        d.pots[0]    = 0.3f;
-        d.pots[1]    = 0.75f;
-        d.pots[2]    = 1.f;
-        customUi(I.a, d);
+        Turn(I, 0, 0.3f);
+        Turn(I, 1, 0.75f);
+        Turn(I, 2, 1.f);
         CHECK(I.v[kParamBlend] == 30 && I.v[kParamScan] == 75 && I.v[kParamSize] == 24,
               "%s: pots → Blend %d, Scan %d, Size %d", host, I.v[kParamBlend], I.v[kParamScan],
               I.v[kParamSize]);
 #ifndef NT_EMU_WIN // pot presses are ignored in the nt_emu build (own block below)
         Press(I, kNT_potButtonR, emu);
-        d.controls = kNT_potR;
-        d.pots[2]  = 0.f;
-        customUi(I.a, d);
+        Turn(I, 2, 0.f);
         CHECK(I.v[kParamAtmosphere] == -100 && I.v[kParamSize] == 24,
               "%s: Pot R press switches to Atmosphere (%d)", host, I.v[kParamAtmosphere]);
         Press(I, kNT_potButtonC, emu);
-        d.controls = kNT_potC;
-        d.pots[1]  = 0.4f;
-        customUi(I.a, d);
+        Turn(I, 1, 0.4f);
         CHECK(I.v[kParamResoMix] == 40 && I.v[kParamScan] == 75,
               "%s: Pot C press switches to Reso mix (%d %%)", host, I.v[kParamResoMix]);
         Press(I, kNT_potButtonC, emu);
         Press(I, kNT_potButtonL, emu);
-        d.controls = kNT_potL;
-        d.pots[0]  = 0.6f;
-        customUi(I.a, d);
+        Turn(I, 0, 0.6f);
         CHECK(I.v[kParamDryWet] == 60 && I.v[kParamBlend] == 30,
               "%s: Pot L press switches to Dry/Wet (%d %%), Blend stays %d %%", host,
               I.v[kParamDryWet], I.v[kParamBlend]);
@@ -1063,6 +1073,65 @@ int main(int argc, char** argv)
         g_alg = A.a;
     }
 
+    // --- pot catch-up: no jump after switching or after a menu edit ---------------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+#ifdef NT_EMU_WIN
+        const bool emu_ev = true;
+#else
+        const bool emu_ev = false;
+#endif
+        auto Move = [&](int k, float pos) {
+            const uint32_t bits[3] = {kNT_potL, kNT_potC, kNT_potR};
+            _NT_uiData     d       = Ui();
+            d.controls             = static_cast<uint16_t>(bits[k]);
+            d.pots[k]              = pos;
+            customUi(I.a, d);
+        };
+        Turn(I, 0, 0.05f); // Blend 5 %
+        Press(I, kPotLSwitch, emu_ev);
+        for(float p = 0.05f; p < 1.f; p += 0.01f) // Dry/Wet: pot from 5 % up to 100 %
+            Move(0, p);
+        Move(0, 1.f);
+        const int dw = I.v[kParamDryWet];
+        Press(I, kPotLSwitch, emu_ev); // back to Blend, pot still at 100 %
+        Move(0, 0.97f);
+        Move(0, 0.9f);
+        CHECK(I.v[kParamBlend] == 5 && dw == 100, "catch-up: Blend stays 5 %% while the pot is far away (%d %%)",
+              I.v[kParamBlend]);
+        g_textOob = g_shapeOob = 0;
+        draw(I.a);
+        CHECK(g_textOob == 0, "catch-up: footer drawn while waiting");
+        for(float p = 0.9f; p > 0.02f; p -= 0.01f) // turn down past 5 %
+            Move(0, p);
+        Move(0, 0.2f);
+        CHECK(I.v[kParamBlend] == 20, "catch-up: after passing 5 %% the pot takes over (Blend %d %%)",
+              I.v[kParamBlend]);
+        // Jumping across the value in one event also counts as passing it.
+        Turn(I, 2, 0.2f); // Size 8
+        Press(I, kPotRSwitch, emu_ev);
+        Move(2, 0.3f);    // Atmosphere 0 (= 0.5), pot below: wait
+        CHECK(I.v[kParamAtmosphere] == 0, "catch-up: Atmosphere waits (%d)", I.v[kParamAtmosphere]);
+        Move(2, 0.8f);    // jumped across 0.5 → caught
+        Move(2, 0.3f);
+        CHECK(I.v[kParamAtmosphere] == -40, "catch-up: crossing the value picks it up (%d)", I.v[kParamAtmosphere]);
+        // A change from the parameter menu: the pot waits for the new value.
+        SetP(I, kParamAtmosphere, 60);
+        Move(2, 0.32f);
+        CHECK(I.v[kParamAtmosphere] == 60, "catch-up: menu edit is kept until the pot gets there (%d)",
+              I.v[kParamAtmosphere]);
+        for(float p = 0.32f; p < 0.86f; p += 0.01f)
+            Move(2, p);
+        CHECK(I.v[kParamAtmosphere] >= 66 && I.v[kParamAtmosphere] <= 72,
+              "catch-up: then follows the pot again (%d)", I.v[kParamAtmosphere]);
+        _NT_float3 pots;
+        setupUi(I.a, pots);
+        CHECK(std::fabs(pots[2] - (I.v[kParamAtmosphere] + 100) * 0.005f) < 1e-6f,
+              "catch-up: setupUi still reports the target for the NT's own soft takeover");
+        g_alg = A.a;
+    }
+
 #ifdef NT_EMU_WIN
     // --- nt_emu: buttons 1/2 switch the pot targets ------------------------------
     {
@@ -1082,19 +1151,14 @@ int main(int argc, char** argv)
               "nt_emu build claims buttons 1/2");
         EmuButton(kNT_button1);
         _NT_uiData d = Ui();
-        d.controls   = kNT_potL | kNT_potR;
-        d.pots[0]    = 0.2f;
-        d.pots[2]    = 1.f;
-        customUi(I.a, d);
+        Turn(I, 0, 0.2f);
         CHECK(I.a->pot_l_mix && I.v[kParamDryWet] == 20 && I.v[kParamBlend] == 50,
               "nt_emu: button 1 → Pot L sets Dry/Wet (%d %%)", I.v[kParamDryWet]);
         EmuButton(kNT_button2);
-        customUi(I.a, d);
+        Turn(I, 2, 1.f);
         CHECK(I.a->pot_r_atmo && I.v[kParamAtmosphere] == 100,
               "nt_emu: button 2 → Pot R sets Atmosphere (%d %%)", I.v[kParamAtmosphere]);
-        d.controls = kNT_potC;
-        d.pots[1]  = 0.9f;
-        customUi(I.a, d);
+        Turn(I, 1, 0.9f);
         CHECK(I.a->pot_c_reso && I.v[kParamResoMix] == 90,
               "nt_emu: button 2 also puts Pot C on Reso mix (%d %%)", I.v[kParamResoMix]);
         // nt_emu sends a pot "press" when a pot drag starts: it must not flip the target.
@@ -1108,10 +1172,8 @@ int main(int argc, char** argv)
             p.controls = 0;
             customUi(I.a, p);
         }
-        d.controls = kNT_potL | kNT_potC;
-        d.pots[0]  = 0.35f;
-        d.pots[1]  = 0.45f;
-        customUi(I.a, d);
+        Turn(I, 0, 0.35f);
+        Turn(I, 1, 0.45f);
         CHECK(I.a->pot_l_mix && I.a->pot_c_reso && I.a->pot_r_atmo && I.v[kParamDryWet] == 35
                   && I.v[kParamResoMix] == 45 && I.v[kParamBlend] == 50,
               "nt_emu: pot drag/press keeps the target (Dry/Wet %d, Reso %d, Blend %d)",
