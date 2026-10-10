@@ -1,0 +1,10 @@
+# Build results
+build/
+plugins/
+emu/*.dll
+test/sim
+test/out/
+render/render
+render/frames.txt
+render/screen_*.png
+emu/*.exe

@@ -1,0 +1,995 @@
+// Perseids-core for the Expert Sleepers disting NT.
+//
+// The core of Perseids as one NT algorithm: Capture (five Trails), Spectra
+// (additive FFT resynthesis), Swarm (granular) and the Blend between them.
+// Reverb, filter, Pan Drift, Crossfade, Multi Dry/Wet and the mod system are
+// left to the NT itself (its own algorithms, Add/Replace routing, CV mapping).
+//
+// The engines are the firmware's own sources (src/*_engine.cpp), built with
+// PERSEIDS_TRAIL_INT16. This file is the NT platform layer: memory, routing,
+// parameters, controls and display.
+//
+// GPL-3.0, like the rest of Perseids.
+
+#include <distingnt/api.h>
+
+#include "capture_engine.h"
+#include "spectra_engine.h"
+#include "swarm_engine.h"
+
+#include <cmath>
+#include <cstring>
+#include <new>
+
+using namespace perseids;
+
+namespace
+{
+
+// ---------------------------------------------------------------------------
+// Parameters
+
+enum
+{
+    // Routing
+    kParamInL,
+    kParamInR,
+    kParamRecIn,
+    kParamOutL,
+    kParamOutLMode,
+    kParamOutR,
+    kParamOutRMode,
+
+    // Trails
+    kParamCount,
+    kParamThreshold,
+    kParamContRec,
+    kParamOverwrite,
+    kParamCapture,
+    kParamPlay,
+    kParamClear,
+
+    // Time
+    kParamBuffer,
+    kParamHold,
+    kParamFadeIn,
+    kParamFadeOut,
+
+    // Engines
+    kParamBlend,
+    kParamPitchSpectra,
+    kParamPitchSwarm,
+    kParamOutLevel,
+
+    // Spectra
+    kParamPartials,
+    kParamWaveshape,
+    kParamUmbra,
+    kParamEnsemble,
+
+    // Swarm
+    kParamSize,
+    kParamSpread,
+    kParamScan,
+    kParamScatter,
+    kParamAtmosphere,
+    kParamDirection,
+
+    // Mixer
+    kParamTrailLevel1,
+    kParamLock1   = kParamTrailLevel1 + kTrailCount,
+    kParamSolo1   = kParamLock1 + kTrailCount,
+    kNumParams    = kParamSolo1 + kTrailCount,
+};
+
+// Hold: the top value means "infinite" (engine: > 30 s).
+constexpr int kHoldInf = 31;
+
+const char* const kOffOn[]     = {"Off", "On", nullptr};
+const char* const kDirection[] = {"Fwd", "Rev", "Rnd", nullptr};
+
+#define P_NUM(n, lo, hi, d, u, sc) \
+    {.name = n, .min = lo, .max = hi, .def = d, .unit = u, .scaling = sc, .enumStrings = nullptr},
+#define P_ENUM(n, hi, d, strs) \
+    {.name = n, .min = 0, .max = hi, .def = d, .unit = kNT_unitEnum, .scaling = 0, .enumStrings = strs},
+#define P_TRAIL_LEVEL(n) P_NUM(n, 0, 100, 50, kNT_unitPercent, 0)
+#define P_TRAIL_TOGGLE(n) P_ENUM(n, 1, 0, kOffOn)
+
+const _NT_parameter kParameterDefs[kNumParams] = {
+    NT_PARAMETER_AUDIO_INPUT("In L", 1, 1)
+    NT_PARAMETER_AUDIO_INPUT("In R", 0, 2)
+    NT_PARAMETER_CV_INPUT("Rec trig in", 0, 0)
+    NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Out L", 1, 13)
+    NT_PARAMETER_AUDIO_OUTPUT_WITH_MODE("Out R", 1, 14)
+
+    P_NUM("Count", 1, 5, 3, kNT_unitNone, 0)
+    P_NUM("Threshold", 0, 100, 12, kNT_unitPercent, 0)
+    P_ENUM("Cont. Rec", 1, 0, kOffOn)
+    P_ENUM("Overwrite", 1, 1, kOffOn)
+    P_ENUM("Capture", 1, 1, kOffOn)
+    P_ENUM("Play", 1, 1, kOffOn)
+    {.name = "Clear trails", .min = 0, .max = 1, .def = 0, .unit = kNT_unitConfirm, .scaling = 0, .enumStrings = nullptr},
+
+    P_NUM("Buffer", 1, 300, 20, kNT_unitSeconds, kNT_scaling10)
+    {.name = "Hold", .min = 0, .max = kHoldInf, .def = 15, .unit = kNT_unitHasStrings, .scaling = 0, .enumStrings = nullptr},
+    P_NUM("Fade in", 0, 50, 30, kNT_unitSeconds, kNT_scaling10)
+    P_NUM("Fade out", 0, 50, 30, kNT_unitSeconds, kNT_scaling10)
+
+    P_NUM("Blend", 0, 100, 50, kNT_unitPercent, 0)
+    P_NUM("Pitch Spectra", -24, 24, 0, kNT_unitSemitones, 0)
+    P_NUM("Pitch Swarm", -24, 24, 0, kNT_unitSemitones, 0)
+    // Perseids' wet bus sits well below a Eurorack line (Trail levels 50 %,
+    // −3 dB cloud pan); +12 dB brings a 10 Vpp input back to a similar level.
+    P_NUM("Output level", -24, 24, 12, kNT_unitDb, 0)
+
+    P_NUM("Partials", 4, 32, 16, kNT_unitNone, 0)
+    P_NUM("Waveshape", -100, 100, 0, kNT_unitPercent, 0)
+    P_NUM("Umbra/Aurora", -100, 100, 0, kNT_unitPercent, 0)
+    P_NUM("Ensemble", 0, 100, 0, kNT_unitPercent, 0)
+
+    P_NUM("Size", 4, 24, 16, kNT_unitNone, 0)
+    P_NUM("Spread", 0, 100, 35, kNT_unitPercent, 0)
+    P_NUM("Scan", 0, 100, 20, kNT_unitPercent, 0)
+    P_NUM("Scatter", 0, 100, 75, kNT_unitPercent, 0)
+    P_NUM("Atmosphere", -100, 100, 0, kNT_unitPercent, 0)
+    P_ENUM("Direction", 2, 0, kDirection)
+
+    P_TRAIL_LEVEL("Level 1") P_TRAIL_LEVEL("Level 2") P_TRAIL_LEVEL("Level 3")
+    P_TRAIL_LEVEL("Level 4") P_TRAIL_LEVEL("Level 5")
+    P_TRAIL_TOGGLE("Lock 1") P_TRAIL_TOGGLE("Lock 2") P_TRAIL_TOGGLE("Lock 3")
+    P_TRAIL_TOGGLE("Lock 4") P_TRAIL_TOGGLE("Lock 5")
+    P_TRAIL_TOGGLE("Solo 1") P_TRAIL_TOGGLE("Solo 2") P_TRAIL_TOGGLE("Solo 3")
+    P_TRAIL_TOGGLE("Solo 4") P_TRAIL_TOGGLE("Solo 5")
+};
+
+const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
+                                kParamOverwrite, kParamCapture, kParamPlay,
+                                kParamClear};
+const uint8_t kPageTime[]    = {kParamBuffer, kParamHold, kParamFadeIn, kParamFadeOut};
+const uint8_t kPageEngines[] = {kParamBlend, kParamPitchSpectra, kParamPitchSwarm,
+                                kParamOutLevel};
+const uint8_t kPageSpectra[] = {kParamPartials, kParamWaveshape, kParamUmbra,
+                                kParamEnsemble};
+const uint8_t kPageSwarm[]   = {kParamSize, kParamSpread, kParamScan, kParamScatter,
+                                kParamAtmosphere, kParamDirection};
+const uint8_t kPageMixer[]   = {
+    kParamTrailLevel1, kParamTrailLevel1 + 1, kParamTrailLevel1 + 2,
+    kParamTrailLevel1 + 3, kParamTrailLevel1 + 4,
+    kParamLock1, kParamLock1 + 1, kParamLock1 + 2, kParamLock1 + 3, kParamLock1 + 4,
+    kParamSolo1, kParamSolo1 + 1, kParamSolo1 + 2, kParamSolo1 + 3, kParamSolo1 + 4};
+const uint8_t kPageRouting[] = {kParamInL, kParamInR, kParamRecIn, kParamOutL,
+                                kParamOutLMode, kParamOutR, kParamOutRMode};
+
+const _NT_parameterPage kPages[] = {
+    {.name = "Trails", .numParams = ARRAY_SIZE(kPageTrails), .group = 1, .unused = {0, 0}, .params = kPageTrails},
+    {.name = "Time", .numParams = ARRAY_SIZE(kPageTime), .group = 2, .unused = {0, 0}, .params = kPageTime},
+    {.name = "Engines", .numParams = ARRAY_SIZE(kPageEngines), .group = 3, .unused = {0, 0}, .params = kPageEngines},
+    {.name = "Spectra", .numParams = ARRAY_SIZE(kPageSpectra), .group = 4, .unused = {0, 0}, .params = kPageSpectra},
+    {.name = "Swarm", .numParams = ARRAY_SIZE(kPageSwarm), .group = 5, .unused = {0, 0}, .params = kPageSwarm},
+    {.name = "Mixer", .numParams = ARRAY_SIZE(kPageMixer), .group = 6, .unused = {0, 0}, .params = kPageMixer},
+    {.name = "Routing", .numParams = ARRAY_SIZE(kPageRouting), .group = 7, .unused = {0, 0}, .params = kPageRouting},
+};
+
+const _NT_parameterPages kParameterPages = {
+    .numPages = ARRAY_SIZE(kPages),
+    .pages    = kPages,
+};
+
+// Specification: recording time each Trail can hold. Sets the DRAM request
+// (16 bit: 5 Trails × 10 s ≈ 4.8 MB at 48 kHz).
+enum
+{
+    kSpecTrailSeconds,
+    kNumSpecs,
+};
+const _NT_specification kSpecs[kNumSpecs] = {
+    {.name = "Trail seconds", .min = 1, .max = 30, .def = 10, .type = kNT_typeSeconds},
+};
+
+// ---------------------------------------------------------------------------
+// Instance
+
+// Audio is processed in chunks of at most this many frames, so the scratch
+// buffers stay small whatever block size the host uses.
+constexpr int kChunk = 64;
+
+// Spectra analysis and the Swarm envelope rebuild advance one slice per this
+// many samples (a 1024-sample hop needs 10 slices; here there are 32).
+constexpr uint32_t kSliceSamples = 32;
+
+// The Swarm governor and RecordSource are tuned for 256-sample blocks.
+constexpr uint32_t kGovernorSamples = 256;
+
+// NT audio is in volts; Perseids works at codec scale (±1 ≈ ±5 V).
+constexpr float kVoltsToUnit = 0.2f;
+constexpr float kUnitToVolts = 5.f;
+
+struct Engines
+{
+    CaptureEngine capture;
+    SpectraEngine spectra;
+    SwarmEngine   swarm;
+
+    float in_l[kChunk];
+    float in_r[kChunk];
+    float dry_l[kChunk];
+    float dry_r[kChunk];
+    float trail_mix[kChunk];
+    float sp_l[kChunk];
+    float sp_r[kChunk];
+    float sw_l[kChunk];
+    float sw_r[kChunk];
+};
+
+// Encoder-button click, for the NT and for nt_emu (same scheme as Duett):
+// NT:      press c=1 l=0, hold c=1 l=1, release c=0 l=1
+// nt_emu:  press c=1 l=0, release c=1 l=1; dragging an encoder presses it,
+//          so a press does not count when the encoder was turned meanwhile.
+struct Click
+{
+    bool down;
+    bool turned;
+};
+
+struct PerseidsAlgorithm : public _NT_algorithm
+{
+    Engines* eng;
+
+    // Per instance, so Buffer's maximum can follow the specification.
+    _NT_parameter params[kNumParams];
+
+    float trail_seconds;
+
+    // Parameters → engines: parameterChanged sets the flag, step() applies.
+    volatile bool dirty;
+    float         blend;
+    float         out_gain;
+    bool          playing;
+
+    CaptureParamValues capture_p;
+    SpatialParamValues spatial_p;
+    TrailMixerState    mixer[kTrailCount];
+    SpectraParamValues spectra_p;
+    SwarmParamValues   swarm_p;
+
+    // Rec trig input (Schmitt trigger, in volts).
+    bool rec_gate;
+
+    // Housekeeping counters (samples).
+    uint32_t sample_clock;
+    uint32_t slice_acc;
+    uint32_t gov_acc;
+    uint32_t gov_cycles;
+
+    // Controls
+    int   selected;    // Trail 0…4
+    bool  pot_r_atmo;  // Pot R: false = Size, true = Atmosphere
+    int   hold_before; // Hold value to restore when Hold is toggled off
+    Click click_l;
+    Click click_r;
+};
+
+inline float Clampf(float x, float lo, float hi)
+{
+    return x < lo ? lo : (x > hi ? hi : x);
+}
+
+inline int ParamValue(const PerseidsAlgorithm* a, int p)
+{
+    int v = a->v[p];
+    if(v < a->params[p].min)
+        v = a->params[p].min;
+    if(v > a->params[p].max)
+        v = a->params[p].max;
+    return v;
+}
+
+// nt_emu (Windows build, NT_EMU_WIN): NT_setParameterFrom… always lands in the
+// most recently created nt_emu instance. There the plug-in writes its own v[]
+// directly (that is this instance's parameter table in nt_emu).
+void parameterChanged(_NT_algorithm* self, int p);
+
+void SetParamUi(PerseidsAlgorithm* a, int p, int value)
+{
+    if(value < a->params[p].min)
+        value = a->params[p].min;
+    if(value > a->params[p].max)
+        value = a->params[p].max;
+#ifdef NT_EMU_WIN
+    if(a->v)
+    {
+        const_cast<int16_t*>(a->v)[p] = static_cast<int16_t>(value);
+        parameterChanged(a, p);
+        return;
+    }
+#endif
+    NT_setParameterFromUi(NT_algorithmIndex(a), p + NT_parameterOffset(), value);
+}
+
+void SetParamAudio(PerseidsAlgorithm* a, int p, int value)
+{
+#ifdef NT_EMU_WIN
+    if(a->v)
+    {
+        const_cast<int16_t*>(a->v)[p] = static_cast<int16_t>(value);
+        a->dirty = true;
+        return;
+    }
+#endif
+    NT_setParameterFromAudio(NT_algorithmIndex(a), p + NT_parameterOffset(), value);
+}
+
+// Reads every parameter into the engine structs.
+void ReadParams(PerseidsAlgorithm* a)
+{
+    CaptureParamValues& c = a->capture_p;
+    c.count      = static_cast<float>(ParamValue(a, kParamCount));
+    c.threshold  = ParamValue(a, kParamThreshold) * 0.01f;
+    c.cont_rec   = static_cast<float>(ParamValue(a, kParamContRec));
+    c.overwrite  = static_cast<float>(ParamValue(a, kParamOverwrite));
+    c.on_off     = static_cast<float>(ParamValue(a, kParamCapture));
+    c.buffer_s   = ParamValue(a, kParamBuffer) * 0.1f;
+    c.hold_s     = static_cast<float>(ParamValue(a, kParamHold));
+    c.fade_in_s  = Clampf(ParamValue(a, kParamFadeIn) * 0.1f, 0.001f, 5.f);
+    c.fade_out_s = Clampf(ParamValue(a, kParamFadeOut) * 0.1f, 0.001f, 5.f);
+    c.routing    = 0.f; // Stereo; the NT chooses the busses.
+    a->playing   = ParamValue(a, kParamPlay) != 0;
+
+    // Pan Drift / Crossfade are left to the NT: Trails stay centred.
+    a->spatial_p                 = SpatialParamValues{};
+    a->spatial_p.pan_amplitude   = 0.f;
+    a->spatial_p.xfade_amplitude = 0.f;
+
+    for(size_t t = 0; t < kTrailCount; ++t)
+    {
+        a->mixer[t].level  = ParamValue(a, kParamTrailLevel1 + t) * 0.01f;
+        a->mixer[t].locked = ParamValue(a, kParamLock1 + t) != 0;
+        a->mixer[t].solo   = ParamValue(a, kParamSolo1 + t) != 0;
+    }
+
+    // Pitch: semitones. The engines map ±1 → ±span octaves; span 2 (Pitch
+    // Both = 1) makes ±24 semitones exact.
+    SpectraParamValues& s = a->spectra_p;
+    s.pitch_spectra = ParamValue(a, kParamPitchSpectra) / 24.f;
+    s.partials      = static_cast<float>(ParamValue(a, kParamPartials));
+    s.waveshape     = ParamValue(a, kParamWaveshape) * 0.01f;
+    s.umbra_aurora  = ParamValue(a, kParamUmbra) * 0.01f;
+    s.ensemble      = ParamValue(a, kParamEnsemble) * 0.01f;
+
+    SwarmParamValues& w = a->swarm_p;
+    a->blend            = ParamValue(a, kParamBlend) * 0.01f;
+    w.blend             = a->blend;
+    w.pitch_swarm       = ParamValue(a, kParamPitchSwarm) / 24.f;
+    w.pitch_both        = 1.f;
+    w.size              = static_cast<float>(ParamValue(a, kParamSize));
+    w.spread            = ParamValue(a, kParamSpread) * 0.01f;
+    w.scan              = ParamValue(a, kParamScan) * 0.01f;
+    w.scatter           = ParamValue(a, kParamScatter) * 0.01f;
+    w.atmosphere        = ParamValue(a, kParamAtmosphere) * 0.01f;
+    w.direction         = static_cast<float>(ParamValue(a, kParamDirection));
+
+    a->out_gain = std::pow(10.f, ParamValue(a, kParamOutLevel) / 20.f);
+}
+
+// ---------------------------------------------------------------------------
+// Memory
+
+constexpr size_t Align16(size_t n) { return (n + 15u) & ~static_cast<size_t>(15u); }
+
+size_t TrailCapacity(float seconds, float sample_rate)
+{
+    // Recording length plus room for the 40 ms loop seam.
+    return static_cast<size_t>(seconds * sample_rate)
+           + static_cast<size_t>(0.05f * sample_rate);
+}
+
+int SpecSeconds(const int32_t* specifications)
+{
+    int s = specifications ? specifications[kSpecTrailSeconds] : kSpecs[0].def;
+    if(s < kSpecs[0].min)
+        s = kSpecs[0].min;
+    if(s > kSpecs[0].max)
+        s = kSpecs[0].max;
+    return s;
+}
+
+struct DramLayout
+{
+    size_t engines;
+    size_t window;
+    size_t mags;
+    size_t smooth;
+    size_t ring;
+    size_t trails;
+    size_t capacity;
+    size_t total;
+};
+
+DramLayout Layout(int seconds)
+{
+    const float sr = static_cast<float>(NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000);
+    DramLayout l;
+    size_t     at = 0;
+    l.engines     = at;
+    at += Align16(sizeof(Engines));
+    l.window = at;
+    at += Align16(SpectraEngine::kFftSize * sizeof(float));
+    l.mags = at;
+    at += Align16(SpectraEngine::kBinCount * sizeof(float));
+    l.smooth = at;
+    at += Align16(SpectraEngine::kBinCount * sizeof(float));
+    l.ring = at;
+    at += Align16(SpectraEngine::kInputRing * sizeof(float));
+    l.capacity = TrailCapacity(static_cast<float>(seconds), sr);
+    l.trails   = at;
+    at += Align16(kTrailCount * l.capacity * sizeof(TrailSample));
+    l.total = at;
+    return l;
+}
+
+void calculateRequirements(_NT_algorithmRequirements& req, const int32_t* specifications)
+{
+    req.numParameters = kNumParams;
+    req.sram          = sizeof(PerseidsAlgorithm);
+    req.dram          = static_cast<uint32_t>(Layout(SpecSeconds(specifications)).total + 16);
+    req.dtc           = 0;
+    req.itc           = 0;
+}
+
+_NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
+                         const _NT_algorithmRequirements& /*req*/,
+                         const int32_t* specifications)
+{
+    PerseidsAlgorithm* a = new(ptrs.sram) PerseidsAlgorithm();
+
+    const int        seconds = SpecSeconds(specifications);
+    const DramLayout l       = Layout(seconds);
+    uint8_t* const   base    = reinterpret_cast<uint8_t*>(
+        (reinterpret_cast<uintptr_t>(ptrs.dram) + 15u) & ~static_cast<uintptr_t>(15u));
+
+    a->eng = new(base + l.engines) Engines();
+
+    std::memcpy(a->params, kParameterDefs, sizeof(a->params));
+    a->params[kParamBuffer].max = static_cast<int16_t>(seconds * 10);
+    if(a->params[kParamBuffer].def > a->params[kParamBuffer].max)
+        a->params[kParamBuffer].def = a->params[kParamBuffer].max;
+    a->parameters     = a->params;
+    a->parameterPages = &kParameterPages;
+
+    const float sr = static_cast<float>(NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000);
+    a->trail_seconds = static_cast<float>(seconds);
+
+    CaptureEngine::TrailBank bank;
+    TrailSample* trails = reinterpret_cast<TrailSample*>(base + l.trails);
+    for(size_t t = 0; t < kTrailCount; ++t)
+        bank.data[t] = trails + t * l.capacity;
+    bank.capacity = l.capacity;
+    a->eng->capture.Init(sr, bank);
+
+    a->eng->spectra.Init(sr,
+                         SpectraEngine::Buffers{reinterpret_cast<float*>(base + l.window),
+                                                reinterpret_cast<float*>(base + l.mags),
+                                                reinterpret_cast<float*>(base + l.smooth),
+                                                reinterpret_cast<float*>(base + l.ring)});
+    a->eng->swarm.Init(sr, &a->eng->capture);
+
+    a->dirty        = true;
+    a->blend        = 0.5f;
+    a->out_gain     = 1.f;
+    a->playing      = true;
+    a->rec_gate     = false;
+    a->sample_clock = 0;
+    a->slice_acc    = 0;
+    a->gov_acc      = 0;
+    a->gov_cycles   = 0;
+    a->selected     = 0;
+    a->pot_r_atmo   = false;
+    a->hold_before  = 15;
+    a->click_l      = Click{false, false};
+    a->click_r      = Click{false, false};
+    return a;
+}
+
+void parameterChanged(_NT_algorithm* self, int p)
+{
+    PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
+    a->dirty             = true;
+    if(p == kParamHold && a->v && a->v[kParamHold] != kHoldInf)
+        a->hold_before = a->v[kParamHold];
+}
+
+// ---------------------------------------------------------------------------
+// Audio
+
+// Same rational soft limit as the firmware's Multi stage.
+inline float SoftLimit(float x)
+{
+    const float a = x >= 0.f ? x : -x;
+    return x * (27.f + a * a) / (27.f + 9.f * a * a);
+}
+
+void ApplyParams(PerseidsAlgorithm* a)
+{
+    a->dirty = false; // clear first: a change during the read sets it again
+    ReadParams(a);
+    Engines& e = *a->eng;
+    e.capture.SyncFromUi(a->capture_p, a->mixer, a->playing, a->spatial_p);
+    e.spectra.SyncFromUi(a->spectra_p, a->swarm_p.pitch_both);
+    e.swarm.SetParams(a->swarm_p);
+}
+
+void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
+{
+    PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
+    if(!a->v)
+        return;
+#if defined(__arm__)
+    const uint32_t cycles_start = NT_getCpuCycleCount();
+#endif
+
+    if(a->dirty)
+        ApplyParams(a);
+
+    // "Clear trails" acts like a button: clear once, then fall back to 0.
+    if(a->v[kParamClear])
+    {
+        a->eng->capture.ClearAll();
+        SetParamAudio(a, kParamClear, 0);
+    }
+
+    Engines&  e         = *a->eng;
+    const int numFrames = numFramesBy4 * 4;
+
+    const int in_l_bus  = ParamValue(a, kParamInL);
+    const int in_r_bus  = ParamValue(a, kParamInR);
+    const int rec_bus   = ParamValue(a, kParamRecIn);
+    const int out_l_bus = ParamValue(a, kParamOutL);
+    const int out_r_bus = ParamValue(a, kParamOutR);
+    const bool replace_l = a->v[kParamOutLMode] != 0;
+    const bool replace_r = a->v[kParamOutRMode] != 0;
+
+    const float* in_l  = in_l_bus > 0 ? busFrames + (in_l_bus - 1) * numFrames : nullptr;
+    const float* in_r  = in_r_bus > 0 ? busFrames + (in_r_bus - 1) * numFrames : nullptr;
+    const float* rec   = rec_bus > 0 ? busFrames + (rec_bus - 1) * numFrames : nullptr;
+    float*       out_l = out_l_bus > 0 ? busFrames + (out_l_bus - 1) * numFrames : nullptr;
+    float*       out_r = out_r_bus > 0 ? busFrames + (out_r_bus - 1) * numFrames : nullptr;
+
+    // Blend: equal-power, the silent engine is skipped (as in the firmware).
+    const float blend       = Clampf(a->blend, 0.f, 1.f);
+    const float wet_spectra = std::cos(blend * 1.5707964f);
+    const float wet_swarm   = std::sin(blend * 1.5707964f);
+    const bool  run_spectra = wet_spectra > 0.001f;
+    const bool  run_swarm   = wet_swarm > 0.001f;
+
+    for(int done = 0; done < numFrames; done += kChunk)
+    {
+        const int n = numFrames - done < kChunk ? numFrames - done : kChunk;
+
+        for(int i = 0; i < n; ++i)
+        {
+            e.in_l[i] = in_l ? in_l[done + i] * kVoltsToUnit : 0.f;
+            e.in_r[i] = in_r ? in_r[done + i] * kVoltsToUnit : 0.f;
+        }
+
+        // Rec trig: rising edge above 1 V, re-armed below 0.5 V.
+        if(rec)
+        {
+            for(int i = 0; i < n; ++i)
+            {
+                const float x = rec[done + i];
+                if(!a->rec_gate && x > 1.f)
+                {
+                    a->rec_gate = true;
+                    e.capture.RequestManualTrigger();
+                }
+                else if(a->rec_gate && x < 0.5f)
+                    a->rec_gate = false;
+            }
+        }
+
+        e.capture.Process(e.in_l, e.in_r, e.dry_l, e.dry_r, e.trail_mix, n);
+        e.spectra.PushInput(e.trail_mix, n);
+
+        if(run_spectra)
+        {
+            e.spectra.Process(e.sp_l, e.sp_l, n);
+            const CaptureEngine::CloudPan cp = e.capture.LastCloudPan();
+            for(int i = 0; i < n; ++i)
+            {
+                const float s = e.sp_l[i];
+                e.sp_l[i]     = s * cp.l * wet_spectra;
+                e.sp_r[i]     = s * cp.r * wet_spectra;
+            }
+        }
+        if(run_swarm)
+            e.swarm.Process(e.sw_l, e.sw_r, n);
+
+        for(int i = 0; i < n; ++i)
+        {
+            float l = 0.f;
+            float r = 0.f;
+            if(run_spectra)
+            {
+                l += e.sp_l[i];
+                r += e.sp_r[i];
+            }
+            if(run_swarm)
+            {
+                l += e.sw_l[i] * wet_swarm;
+                r += e.sw_r[i] * wet_swarm;
+            }
+            l = SoftLimit(l * a->out_gain) * kUnitToVolts;
+            r = SoftLimit(r * a->out_gain) * kUnitToVolts;
+            if(out_l)
+            {
+                if(replace_l)
+                    out_l[done + i] = l;
+                else
+                    out_l[done + i] += l;
+            }
+            if(out_r)
+            {
+                if(replace_r)
+                    out_r[done + i] = r;
+                else
+                    out_r[done + i] += r;
+            }
+        }
+
+        // Background work, a slice at a time: Spectra analysis (skipped at
+        // full Swarm, like the firmware) and the Swarm envelope rebuild.
+        a->slice_acc += static_cast<uint32_t>(n);
+        while(a->slice_acc >= kSliceSamples)
+        {
+            a->slice_acc -= kSliceSamples;
+            if(a->blend < 0.98f)
+                e.spectra.AnalysisSlice();
+            e.swarm.WindowSlice();
+        }
+    }
+
+    a->sample_clock += static_cast<uint32_t>(numFrames);
+
+    // Swarm load governor, once per 256 samples. On the NT the load is this
+    // algorithm's own share of the CPU; elsewhere (nt_emu) it stays idle.
+#if defined(__arm__)
+    a->gov_cycles += NT_getCpuCycleCount() - cycles_start;
+#endif
+    a->gov_acc += static_cast<uint32_t>(numFrames);
+    if(a->gov_acc >= kGovernorSamples)
+    {
+        float load = 0.f;
+#if defined(__arm__)
+        // 600 MHz core; Perseids may take up to half of it before thinning.
+        const float budget = 0.5f * 600e6f
+                             * (static_cast<float>(a->gov_acc)
+                                / static_cast<float>(NT_globals.sampleRate));
+        load = static_cast<float>(a->gov_cycles) / budget;
+#endif
+        e.swarm.UpdateGovernor(load);
+        a->gov_acc    = 0;
+        a->gov_cycles = 0;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Controls
+//
+// Pot L Blend · Pot C Scan · Pot R Size (press: Atmosphere)
+// Encoder L: choose Trail, click: Solo · Encoder R: Trail level, click: Lock
+// Button 3: Rec · Button 4: Hold (infinite on/off)
+
+constexpr uint32_t kCustomControls = kNT_potL | kNT_potC | kNT_potR | kNT_potButtonR
+                                     | kNT_encoderL | kNT_encoderR | kNT_encoderButtonL
+                                     | kNT_encoderButtonR | kNT_button3 | kNT_button4;
+
+uint32_t hasCustomUi(_NT_algorithm* self)
+{
+    if(!self->v)
+        return 0; // nt_emu asks before it has connected the parameters
+    return kCustomControls;
+}
+
+bool ClickEdge(Click& c, const _NT_uiData& d, uint32_t bit, bool turn)
+{
+    const bool cb = d.controls & bit;
+    const bool lb = d.lastButtons & bit;
+    if(cb && !lb)
+    {
+        c.down   = true;
+        c.turned = false;
+        return false;
+    }
+    if(!c.down)
+        return false;
+    if(turn)
+        c.turned = true;
+    if(!lb)
+        return false;
+    c.down = false;
+    return !c.turned;
+}
+
+inline bool Pressed(const _NT_uiData& d, uint32_t bit)
+{
+    return (d.controls & bit) && !(d.lastButtons & bit);
+}
+
+int Count(const PerseidsAlgorithm* a) { return ParamValue(a, kParamCount); }
+
+void customUi(_NT_algorithm* self, const _NT_uiData& data)
+{
+    PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
+    if(!a->v)
+        return;
+
+    if(data.controls & kNT_potL)
+        SetParamUi(a, kParamBlend, static_cast<int>(data.pots[0] * 100.f + 0.5f));
+    if(data.controls & kNT_potC)
+        SetParamUi(a, kParamScan, static_cast<int>(data.pots[1] * 100.f + 0.5f));
+    if(data.controls & kNT_potR)
+    {
+        if(a->pot_r_atmo)
+            SetParamUi(a, kParamAtmosphere, static_cast<int>(data.pots[2] * 200.f + 0.5f) - 100);
+        else
+            SetParamUi(a, kParamSize, 4 + static_cast<int>(data.pots[2] * 20.f + 0.5f));
+    }
+    if(Pressed(data, kNT_potButtonR))
+    {
+        a->pot_r_atmo = !a->pot_r_atmo;
+        NT_requestSetupUi(); // re-sync soft takeover for the new target
+    }
+
+    // Keep the selection inside Count (Count may have been lowered).
+    if(a->selected > Count(a) - 1)
+        a->selected = Count(a) - 1;
+
+    const bool turned = data.encoders[0] || data.encoders[1];
+    if(data.encoders[0])
+    {
+        int s = a->selected + data.encoders[0];
+        const int n = Count(a);
+        if(s < 0)
+            s = 0;
+        if(s > n - 1)
+            s = n - 1;
+        a->selected = s;
+    }
+    if(data.encoders[1])
+    {
+        const int p = kParamTrailLevel1 + a->selected;
+        SetParamUi(a, p, ParamValue(a, p) + 2 * data.encoders[1]);
+    }
+    if(ClickEdge(a->click_l, data, kNT_encoderButtonL, turned))
+    {
+        const int p = kParamSolo1 + a->selected;
+        SetParamUi(a, p, ParamValue(a, p) ? 0 : 1);
+    }
+    if(ClickEdge(a->click_r, data, kNT_encoderButtonR, turned))
+    {
+        const int p = kParamLock1 + a->selected;
+        SetParamUi(a, p, ParamValue(a, p) ? 0 : 1);
+    }
+
+    if(Pressed(data, kNT_button3))
+        a->eng->capture.RequestManualTrigger();
+    if(Pressed(data, kNT_button4))
+    {
+        if(ParamValue(a, kParamHold) == kHoldInf)
+            SetParamUi(a, kParamHold, a->hold_before >= kHoldInf ? 15 : a->hold_before);
+        else
+            SetParamUi(a, kParamHold, kHoldInf);
+    }
+}
+
+void setupUi(_NT_algorithm* self, _NT_float3& pots)
+{
+    PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
+    if(!a->v)
+        return;
+    pots[0] = ParamValue(a, kParamBlend) * 0.01f;
+    pots[1] = ParamValue(a, kParamScan) * 0.01f;
+    pots[2] = a->pot_r_atmo ? (ParamValue(a, kParamAtmosphere) + 100) * 0.005f
+                            : (ParamValue(a, kParamSize) - 4) * 0.05f;
+}
+
+int parameterString(_NT_algorithm* /*self*/, int p, int v, char* buff)
+{
+    if(p != kParamHold)
+        return 0;
+    if(v >= kHoldInf)
+    {
+        std::strcpy(buff, "INF");
+        return 3;
+    }
+    int n = NT_intToString(buff, v);
+    std::strcpy(buff + n, " s");
+    return n + 2;
+}
+
+// ---------------------------------------------------------------------------
+// Display (256 × 64, 4 bit)
+
+void DrawBar(int x0, int y0, int w, int h, float fill, int colour)
+{
+    NT_drawShapeI(kNT_box, x0, y0, x0 + w - 1, y0 + h - 1, 3);
+    const int fw = static_cast<int>(Clampf(fill, 0.f, 1.f) * (w - 2) + 0.5f);
+    if(fw > 0)
+        NT_drawShapeI(kNT_rectangle, x0 + 1, y0 + 1, x0 + fw, y0 + h - 2, colour);
+}
+
+void FormatPercent(char* buff, int v, bool sign)
+{
+    int n = 0;
+    if(sign && v > 0)
+        buff[n++] = '+';
+    n += NT_intToString(buff + n, v);
+    buff[n++] = '%';
+    buff[n]   = 0;
+}
+
+bool draw(_NT_algorithm* self)
+{
+    PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
+    if(!a->v)
+        return false;
+    const Engines& e = *a->eng;
+    char           buff[24];
+
+    // Header: name, recording state, input meter.
+    NT_drawText(0, 8, "PERSEIDS", 15);
+    const int count = Count(a);
+    if(e.capture.RecActive())
+    {
+        std::strcpy(buff, "REC ");
+        NT_intToString(buff + 4, e.capture.RecTrailSlot());
+        NT_drawShapeI(kNT_rectangle, 62, 0, 99, 9, 15);
+        NT_drawText(66, 8, buff, 0);
+    }
+    else
+    {
+        std::strcpy(buff, "next ");
+        NT_intToString(buff + 5, e.capture.RecTrailSlot());
+        NT_drawText(66, 8, buff, 5);
+    }
+    NT_drawText(108, 7, "IN", 6, kNT_textLeft, kNT_textTiny);
+    DrawBar(118, 1, 50, 4, e.capture.InputLevel(), 10);
+    DrawBar(118, 5, 50, 4, e.capture.InputLevelR(), 10);
+    // Threshold mark on the meters (same 1.5× display boost as the engine).
+    const int thr_x = 119 + static_cast<int>(Clampf(a->capture_p.threshold * 1.5f, 0.f, 1.f) * 47.f);
+    NT_drawShapeI(kNT_line, thr_x, 0, thr_x, 9, 15);
+
+    // Blend: SP ─●─ SW
+    NT_drawText(176, 7, "SP", 8, kNT_textLeft, kNT_textTiny);
+    NT_drawShapeI(kNT_line, 187, 4, 239, 4, 4);
+    const int bx = 187 + static_cast<int>(Clampf(a->blend, 0.f, 1.f) * 52.f);
+    NT_drawShapeI(kNT_rectangle, bx - 1, 2, bx + 1, 6, 15);
+    NT_drawText(244, 7, "SW", 8, kNT_textLeft, kNT_textTiny);
+
+    // Trails: one column each.
+    TrailLifeUi life[kTrailCount];
+    e.capture.GetTrailLifeUi(life);
+    for(int t = 0; t < static_cast<int>(kTrailCount); ++t)
+    {
+        const int  x0     = 1 + t * 51;
+        const bool active = t < count;
+        const bool sel    = t == a->selected;
+        const int  dim    = active ? 15 : 3;
+        if(sel && active)
+            NT_drawShapeI(kNT_box, x0, 12, x0 + 48, 50, 8);
+
+        NT_intToString(buff, t + 1);
+        NT_drawText(x0 + 3, 22, buff, dim);
+
+        const char* phase = "--";
+        int         pc    = active ? 5 : 2;
+        switch(life[t].phase)
+        {
+            case TrailLifePhase::Recording: phase = "REC"; pc = 15; break;
+            case TrailLifePhase::FadeIn: phase = "IN"; pc = 12; break;
+            case TrailLifePhase::FadeOut: phase = "OUT"; pc = 9; break;
+            case TrailLifePhase::Hold:
+                if(life[t].hold_sec < 0)
+                    phase = "INF";
+                else
+                {
+                    NT_intToString(buff, life[t].hold_sec);
+                    std::strcat(buff, "s");
+                    phase = buff;
+                }
+                pc = 12;
+                break;
+            case TrailLifePhase::Empty: break;
+        }
+        NT_drawText(x0 + 46, 22, phase, active ? pc : 2, kNT_textRight);
+
+        // Life bar (recording progress / fade / hold).
+        float fill = life[t].fill;
+        if(life[t].phase == TrailLifePhase::Hold)
+            fill = 1.f;
+        DrawBar(x0 + 3, 26, 43, 5, active ? fill : 0.f, life[t].phase == TrailLifePhase::Recording ? 15 : 7);
+
+        // Level bar.
+        const int level = ParamValue(a, kParamTrailLevel1 + t);
+        DrawBar(x0 + 3, 34, 43, 5, level * 0.01f, active ? 12 : 3);
+
+        // Lock / Solo.
+        const bool locked = ParamValue(a, kParamLock1 + t) != 0;
+        const bool solo   = ParamValue(a, kParamSolo1 + t) != 0;
+        NT_drawText(x0 + 4, 48, "L", locked ? 15 : 2, kNT_textLeft, kNT_textTiny);
+        NT_drawText(x0 + 12, 48, "S", solo ? 15 : 2, kNT_textLeft, kNT_textTiny);
+        NT_intToString(buff, level);
+        std::strcat(buff, "%");
+        NT_drawText(x0 + 46, 48, buff, active ? 8 : 2, kNT_textRight, kNT_textTiny);
+    }
+
+    // Footer: what the pots do, and the current values.
+    FormatPercent(buff, ParamValue(a, kParamBlend), false);
+    NT_drawText(2, 61, "BLEND", 6, kNT_textLeft, kNT_textTiny);
+    NT_drawText(26, 61, buff, 15, kNT_textLeft, kNT_textTiny);
+
+    FormatPercent(buff, ParamValue(a, kParamScan), false);
+    NT_drawText(100, 61, "SCAN", 6, kNT_textLeft, kNT_textTiny);
+    NT_drawText(120, 61, buff, 15, kNT_textLeft, kNT_textTiny);
+
+    if(a->pot_r_atmo)
+    {
+        FormatPercent(buff, ParamValue(a, kParamAtmosphere), true);
+        NT_drawText(196, 61, "ATMO", 6, kNT_textLeft, kNT_textTiny);
+    }
+    else
+    {
+        NT_intToString(buff, ParamValue(a, kParamSize));
+        NT_drawText(196, 61, "SIZE", 6, kNT_textLeft, kNT_textTiny);
+    }
+    NT_drawText(254, 61, buff, 15, kNT_textRight, kNT_textTiny);
+
+    if(ParamValue(a, kParamHold) == kHoldInf)
+        NT_drawText(160, 61, "HOLD", 15, kNT_textLeft, kNT_textTiny);
+    if(e.swarm.GovernorActive())
+        NT_drawText(60, 61, "CPU", 15, kNT_textLeft, kNT_textTiny);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+
+const _NT_factory kFactory = {
+    .guid                        = NT_MULTICHAR('X', 'o', 'P', 's'),
+    .name                        = "Perseids",
+    .description                 = "Ambient resynthesizer: 5 Trails, Spectra + Swarm",
+    .numSpecifications           = kNumSpecs,
+    .specifications              = kSpecs,
+    .calculateStaticRequirements = nullptr,
+    .initialise                  = nullptr,
+    .calculateRequirements       = calculateRequirements,
+    .construct                   = construct,
+    .parameterChanged            = parameterChanged,
+    .step                        = step,
+    .draw                        = draw,
+    .midiRealtime                = nullptr,
+    .midiMessage                 = nullptr,
+    .tags                        = kNT_tagEffect,
+    .hasCustomUi                 = hasCustomUi,
+    .customUi                    = customUi,
+    .setupUi                     = setupUi,
+    .serialise                   = nullptr,
+    .deserialise                 = nullptr,
+    .midiSysEx                   = nullptr,
+    .parameterUiPrefix           = nullptr,
+    .parameterString             = parameterString,
+    .stringParameterBuffer       = nullptr,
+};
+
+} // namespace
+
+extern "C" uintptr_t pluginEntry(_NT_selector selector, uint32_t data)
+{
+    switch(selector)
+    {
+        case kNT_selector_version: return kNT_apiVersionCurrent;
+        case kNT_selector_numFactories: return 1;
+        case kNT_selector_factoryInfo:
+            return reinterpret_cast<uintptr_t>(data == 0 ? &kFactory : nullptr);
+    }
+    return 0;
+}

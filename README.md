@@ -40,6 +40,13 @@ earlier as `dev-phase4v002`.
 
 Full roadmap & DSP contracts: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 
+### disting NT — `nt/`
+
+The core of Perseids (Capture, Spectra, Swarm, Blend) also runs as an algorithm on the
+Expert Sleepers **disting NT** and in VCV Rack via nt_emu, built from the same engine sources.
+Reverb, filter, Pan Drift, Crossfade, Multi and the mod system are left to the NT. Build,
+controls and tests: [`nt/README.md`](./nt/README.md) (German).
+
 ---
 
 ## Phase 5 rework — `dev-phase5v004` (2026-08-04)
