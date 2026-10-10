@@ -246,7 +246,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.24"
+#define PERSEIDS_NT_VERSION "0.25"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -671,6 +671,8 @@ struct PerseidsAlgorithm : public _NT_algorithm
     uint32_t clock_since;  // samples since the last rising edge
     float    clock_period; // samples between edges, 0 = not measured yet
     uint32_t clock_count;  // edges since the clock (re)appeared
+    float    clock_peak;   // highest voltage seen on Clock in recently (display)
+    uint32_t clock_edges;  // rising edges counted since loading (display)
     float cv_smooth[kNumModSlots];
     float   mod_prev[kNumModSlots][3]; // last chunk's mod on amount / offset / rate
     float   mod_out[kNumModSlots];     // what each slot puts out right now (offset + amount × source)
@@ -951,6 +953,8 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->clock_since  = 0;
     a->clock_period = 0.f;
     a->clock_count  = 0;
+    a->clock_peak   = 0.f;
+    a->clock_edges  = 0;
     a->sample_clock = 0;
     a->slice_acc    = 0;
     a->gov_acc      = 0;
@@ -1145,12 +1149,16 @@ bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int 
     if(clock_bus > 0)
     {
         const float* ck = busFrames + (clock_bus - 1) * numFrames + at;
+        a->clock_peak *= 0.9995f; // display peak falls over ~2 s
         for(int i = 0; i < n; ++i)
         {
             ++a->clock_since;
+            if(ck[i] > a->clock_peak)
+                a->clock_peak = ck[i];
             if(!a->clock_gate && ck[i] > 1.f)
             {
                 a->clock_gate = true;
+                ++a->clock_edges;
                 if(a->clock_since >= static_cast<uint32_t>(0.002f * sr)) // 2 ms debounce
                 {
                     if(a->clock_seen)
@@ -2537,7 +2545,11 @@ bool draw(_NT_algorithm* self)
     NT_drawText(196, 61, lbl_r, 6, kNT_textLeft, kNT_textTiny);
     NT_drawText(254, 61, buff, ValColour(2), kNT_textRight, kNT_textTiny);
 
-    if(ParamValue(a, kParamHold) == kHoldInf)
+    bool wants_clock = false;
+    for(int m = 0; m < kNumModSlots; ++m)
+        wants_clock = wants_clock || (a->mod_armed[m][kArmSync] != 0 && a->mod_armed[m][kArmDest] != 0);
+    const bool clock_diag = wants_clock && !a->clock_valid;
+    if(ParamValue(a, kParamHold) == kHoldInf && !clock_diag)
         NT_drawText(160, 61, "HOLD", 15, kNT_textLeft, kNT_textTiny);
     if(e.swarm.GovernorActive())
         NT_drawText(60, 61, "CPU", 15, kNT_textLeft, kNT_textTiny);
@@ -2556,13 +2568,34 @@ bool draw(_NT_algorithm* self)
         buff[len] = 0;
         NT_drawText(76, 61, buff, 12, kNT_textLeft, kNT_textTiny);
     }
-    bool wants_clock = false;
-    for(int m = 0; m < kNumModSlots; ++m)
-        wants_clock = wants_clock || (a->mod_armed[m][kArmSync] != 0 && a->mod_armed[m][kArmDest] != 0);
     if(a->clock_valid)
+    {
         NT_drawText(179, 61, "CLK", 12, kNT_textLeft, kNT_textTiny);
-    else if(wants_clock)
-        NT_drawText(179, 61, "CLK?", 6, kNT_textLeft, kNT_textTiny); // synced slot, no clock arriving
+    }
+    else if(clock_diag)
+    {
+        // Synced slot but no clock: show what arrives at Clock in ("CLK?0.0V 0"
+        // = highest voltage, rising edges counted mod 100), to find the cause.
+        const int dv = static_cast<int>(a->clock_peak * 10.f + (a->clock_peak >= 0.f ? 0.5f : -0.5f));
+        std::strcpy(buff, "CLK?");
+        int len = 4;
+        if(ParamValue(a, kParamClockIn) <= 0)
+        {
+            std::strcpy(buff + len, " none");
+            len += 5;
+        }
+        else
+        {
+            len += NT_intToString(buff + len, dv / 10);
+            buff[len++] = '.';
+            len += NT_intToString(buff + len, (dv < 0 ? -dv : dv) % 10);
+            buff[len++] = 'V';
+            buff[len++] = ' ';
+            len += NT_intToString(buff + len, static_cast<int>(a->clock_edges % 100));
+        }
+        buff[len] = 0;
+        NT_drawText(142, 61, buff, 8, kNT_textLeft, kNT_textTiny);
+    }
     return true;
 }
 

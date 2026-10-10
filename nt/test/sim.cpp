@@ -1162,6 +1162,12 @@ int main(int argc, char** argv)
         q.r = q.l;
         Run(I, q, 24, none.data());
         CHECK(!I.a->clock_valid, "Clock in: clock lost after 4 missing pulses, LFOs run free");
+        SetP(I, ModParam(0, kModDest), 11); // a synced slot without clock: footer diagnostics
+        Run(I, q, 24, none.data());
+        g_textOob = g_shapeOob = 0;
+        draw(I.a);
+        CHECK(g_textOob == 0 && I.a->clock_edges >= 7, "Clock in: diagnostics on screen (%u edges counted, peak %.1f V)",
+              I.a->clock_edges, I.a->clock_peak);
         g_textOob = g_shapeOob = 0;
         draw(I.a);
         CHECK(g_textOob == 0 && g_shapeOob == 0, "Clock in: display on screen");
