@@ -24,6 +24,8 @@ uint32_t NT_getCpuCycleCount(void) { return s_cycles += 1000; }
 int32_t  NT_algorithmIndex(const _NT_algorithm*) { return 0; }
 uint32_t NT_parameterOffset(void) { return 0; }
 void     NT_requestSetupUi(void) {}
+int      g_paramDefUpdates = 0;
+void     NT_updateParameterDefinition(uint32_t, uint32_t) { ++g_paramDefUpdates; }
 
 void NT_setParameterFromUi(uint32_t, uint32_t p, int16_t v)
 {

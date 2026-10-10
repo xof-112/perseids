@@ -28,6 +28,8 @@ void NT_setParameterFromAudio(uint32_t, uint32_t p, int16_t v)
     vals[p] = v;
     ++params;
 }
+void NT_updateParameterDefinition(uint32_t, uint32_t) {}
+void NT_requestSetupUi(void) {}
 void NT_drawText(int, int, const char*, int, _NT_textAlignment, _NT_textSize) { ++draws; }
 void NT_drawShapeI(_NT_shape, int, int, int, int, int) { ++draws; }
 int  NT_intToString(char* b, int32_t v) { return sprintf(b, "%d", static_cast<int>(v)); }

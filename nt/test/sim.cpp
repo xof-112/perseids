@@ -56,6 +56,14 @@ void SetP(Inst& in, int p, int value)
 {
     in.v[p] = static_cast<int16_t>(value);
     parameterChanged(in.a, p);
+    in.a->mod_arm_now = true; // as if back on the plug-in screen (own test below)
+}
+
+// Like the NT menu: no return to the plug-in screen, slot settings wait.
+void SetMenu(Inst& in, int p, int value)
+{
+    in.v[p] = static_cast<int16_t>(value);
+    parameterChanged(in.a, p);
 }
 
 Inst Make(int seconds, int16_t* vbuf)
@@ -1166,6 +1174,121 @@ int main(int argc, char** argv)
         CHECK(std::fabs(slow - 0.1f) < 0.01f && std::fabs(fast / 0.01f - 11.f) < 0.5f,
               "Mod the mod: slot 2 raises slot 1's LFO from %.1f Hz to %.1f Hz", slow / 0.1f, fast / 0.01f);
         CHECK(kNumModTargets == 85, "mod targets incl. amount / offset / rate of all 12 slots (%d)", kNumModTargets);
+        g_alg = A.a;
+    }
+
+    // --- Mod mode, overview reset, menu marks, free + reset sync ---------------------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        auto Dest = [&](int param) {
+            for(int k = 0; k < kNumModTargets; ++k)
+                if(kModTargets[k] == param)
+                    return k;
+            return 0;
+        };
+        Signal s;
+        s.l.assign(960, 0.f);
+        s.r = s.l;
+        CHECK(I.v[kParamClockIn] == 3, "Clock in defaults to In 3");
+        SetP(I, kParamBlend, 80);
+        SetP(I, ModParam(0, kModDest), Dest(kParamBlend));
+        SetP(I, ModParam(0, kModOffset), 20);
+        Run(I, s, 24);
+        const float around = I.a->blend;
+        SetP(I, ModModeParam(0), 1);
+        Run(I, s, 24);
+        const float over = I.a->blend;
+        CHECK(std::fabs(around - 1.f) < 0.01f && std::fabs(over - 0.6f) < 0.01f,
+              "Mod mode: Around base 80 %% + 20 %% = %.0f %%, Override ignores the 80 %%: %.0f %%",
+              around * 100.f, over * 100.f);
+        // Menu marks: the modulated parameter's name gets " ~", back after a reset.
+        g_paramDefUpdates = 0;
+        draw(I.a);
+        CHECK(!std::strcmp(I.a->parameters[kParamBlend].name, "Blend ~") && g_paramDefUpdates == 1,
+              "menu mark: '%s' while modulated (%d update)", I.a->parameters[kParamBlend].name, g_paramDefUpdates);
+        draw(I.a);
+        CHECK(g_paramDefUpdates == 1, "menu mark: no further updates while nothing changes");
+        SetP(I, ModParam(5, kModDest), Dest(kParamScan));
+        SetP(I, ModParam(5, kModAmount), 30);
+        SetP(I, ModSyncParam(5), 3);
+        SetP(I, kParamModReset, 1);
+        Run(I, s, 24);
+        bool clean = I.v[kParamModReset] == 0;
+        for(int m = 0; m < kNumModSlots; ++m)
+            clean = clean && I.v[ModParam(m, kModDest)] == 0 && I.v[ModParam(m, kModAmount)] == 0
+                    && I.v[ModParam(m, kModOffset)] == 0 && I.v[ModSyncParam(m)] == 0 && I.v[ModModeParam(m)] == 0;
+        draw(I.a);
+        CHECK(clean && I.a->mod_active == 0 && std::fabs(I.a->blend - 0.8f) < 0.01f
+                  && !std::strcmp(I.a->parameters[kParamBlend].name, "Blend"),
+              "Reset all mods: every slot off, Blend back to its 80 %%, name '%s'", I.a->parameters[kParamBlend].name);
+        // Free rate, restarted by the clock: Rst x1 and Rst x2 at a 2 Hz clock,
+        // own rate 0.5 Hz (phase grows 1/16 per quarter pulse).
+        SetP(I, ModSyncParam(0), kModSyncLocked + 6); // Rst x1
+        SetP(I, ModSyncParam(1), kModSyncLocked + 7); // Rst x2
+        SetP(I, ModParam(0, kModRate), 50);
+        SetP(I, ModParam(1, kModRate), 50);
+        const size_t       len = 48000 * 3;
+        std::vector<float> ck(len, 0.f);
+        for(size_t i = 1000; i < len; i += 24000)
+            for(size_t k = 0; k < 240 && i + k < len; ++k)
+                ck[i + k] = 5.f;
+        Signal one;
+        one.l.assign(24, 0.f);
+        one.r = one.l;
+        bool r1 = true, r2 = true;
+        int  marks = 0;
+        for(size_t pos = 0; pos + 24 <= len; pos += 24)
+        {
+            Run(I, one, 24, ck.data() + pos);
+            if(pos >= 1000 + 24000 && (pos - 1000) % 6000 < 24)
+            {
+                const int   q  = static_cast<int>(((pos - 1000) / 6000) % 4); // quarter of the pulse
+                const float w1 = 0.0625f * q;
+                const float w2 = 0.0625f * (q % 2);
+                r1 = r1 && std::fabs(I.a->lfo_phase[0] - w1) < 0.02f;
+                r2 = r2 && std::fabs(I.a->lfo_phase[1] - w2) < 0.02f;
+                ++marks;
+            }
+        }
+        CHECK(marks >= 6 && r1, "Rst x1: own rate, restarted on every pulse");
+        CHECK(marks >= 6 && r2, "Rst x2: own rate, restarted twice per pulse");
+        g_alg = A.a;
+    }
+
+    // --- slot settings from the menu take effect after a pause ------------------------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        Signal s;
+        s.l.assign(4800, 0.f); // 0.1 s
+        s.r = s.l;
+        SetP(I, ModParam(0, kModOffset), 30);
+        Run(I, s, 24);
+        // Scroll the destination through a few targets in the menu.
+        for(int k = 1; k <= 12; ++k)
+        {
+            SetMenu(I, ModParam(0, kModDest), k);
+            Run(I, s, 24);
+        }
+        CHECK(I.a->mod_active == 0, "menu scroll through destinations: nothing is modulated on the way");
+        g_textOob = g_shapeOob = 0;
+        draw(I.a);
+        CHECK(g_textOob == 0, "footer shows the waiting slot (MOD*)");
+        for(int t = 0; t < 16; ++t) // 1.6 s without change
+            Run(I, s, 24);
+        CHECK(I.a->mod_active == 1 && I.a->mod_armed[0][kArmDest] == 12,
+              "after 1.5 s standing still the last destination takes effect");
+        SetMenu(I, ModParam(0, kModDest), 11);
+        Run(I, s, 24);
+        _NT_uiData d = Ui();
+        customUi(I.a, d); // back on the plug-in screen
+        Run(I, s, 24);
+        CHECK(I.a->mod_armed[0][kArmDest] == 11, "back on the plug-in screen: takes effect at once");
+        SetMenu(I, ModParam(0, kModAmount), 40);
+        Run(I, s, 24);
+        CHECK(std::fabs(I.a->mod_sum[kModTargets[11]] - 0.3f) < 0.45f && I.v[ModParam(0, kModAmount)] == 40,
+              "amount / offset / rate act at once");
         g_alg = A.a;
     }
 

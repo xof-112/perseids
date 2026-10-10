@@ -107,8 +107,10 @@ enum
     kParamModSync4 = kParamModSync1 + 3,
     // Mod slots 5–12, added later: six parameters each (the five + sync).
     kParamMod5,
+    kParamModReset = kParamMod5 + 8 * 6, // Mod overview: all slots back to off
+    kParamModMode1,                      // per slot: around the base value or override it
 
-    kNumParams = kParamMod5 + 8 * 6,
+    kNumParams = kParamModMode1 + 12,
 };
 
 // Mod slot layout: slots 1–4 at kParamMod1 + slot × 5 (+ sync at
@@ -133,7 +135,22 @@ constexpr int ModSyncParam(int m)
 {
     return m < 4 ? kParamModSync1 + m : kParamMod5 + (m - 4) * (kModParams + 1) + kModParams;
 }
-static_assert(ModSyncParam(kNumModSlots - 1) == kNumParams - 1, "mod slot layout");
+static_assert(ModSyncParam(kNumModSlots - 1) == kParamModReset - 1, "mod slot layout");
+constexpr int ModModeParam(int m) { return kParamModMode1 + m; }
+
+// Switch-like slot settings (input, destination, mode, sync) take effect only
+// once they have stood still for this long, or as soon as the plug-in's own
+// screen is used again: scrolling through the destinations in the menu does
+// not modulate every parameter on the way. Amount, offset and rate act at once.
+constexpr float kModArmS = 1.5f;
+enum { kArmIn, kArmDest, kArmMode, kArmSync, kArmFields };
+constexpr int ArmParam(int m, int f)
+{
+    return f == kArmIn ? ModParam(m, kModIn)
+           : f == kArmDest ? ModParam(m, kModDest)
+           : f == kArmMode ? ModModeParam(m)
+                           : ModSyncParam(m);
+}
 
 // Everything a slot can modulate: all sound and Trail parameters. Not routing,
 // not Clear trails (a held mod would clear forever), not the display or the
@@ -195,12 +212,19 @@ const char* const kModTargetNames[] = {
     nullptr,
 };
 constexpr int kNumModTargets = static_cast<int>(sizeof(kModTargets));
+// The same names with " ~": shown in the parameter menus while a target is
+// modulated (index = target index, 0 = Off has no marked form).
+const char* const kModTargetMarked[] = {
+    nullptr, "Count ~", "Threshold ~", "Cont. Rec ~", "Overwrite ~", "Capture ~", "Play ~", "Buffer ~", "Hold ~", "Fade in ~", "Fade out ~", "Blend ~", "Pitch Spectra ~", "Pitch Swarm ~", "Output level ~", "Partials ~", "Waveshape ~", "Umbra/Aurora ~", "Ensemble ~", "Size ~", "Spread ~", "Scan ~", "Scatter ~", "Atmosphere ~", "Direction ~", "Level 1 ~", "Level 2 ~", "Level 3 ~", "Level 4 ~", "Level 5 ~", "Lock 1 ~", "Lock 2 ~", "Lock 3 ~", "Lock 4 ~", "Lock 5 ~", "Solo 1 ~", "Solo 2 ~", "Solo 3 ~", "Solo 4 ~", "Solo 5 ~", "Dry/Wet ~", "Reso mix ~", "Reso decay ~", "Reso damping ~", "Reso spread ~", "Reso pitch ~", "Reso quantize ~", "Reso scale ~", "Reso tuning ~", "Mod 1 amount ~", "Mod 1 offset ~", "Mod 1 LFO rate ~", "Mod 2 amount ~", "Mod 2 offset ~", "Mod 2 LFO rate ~", "Mod 3 amount ~", "Mod 3 offset ~", "Mod 3 LFO rate ~", "Mod 4 amount ~", "Mod 4 offset ~", "Mod 4 LFO rate ~", "Mod 5 amount ~", "Mod 5 offset ~", "Mod 5 LFO rate ~", "Mod 6 amount ~", "Mod 6 offset ~", "Mod 6 LFO rate ~", "Mod 7 amount ~", "Mod 7 offset ~", "Mod 7 LFO rate ~", "Mod 8 amount ~", "Mod 8 offset ~", "Mod 8 LFO rate ~", "Mod 9 amount ~", "Mod 9 offset ~", "Mod 9 LFO rate ~", "Mod 10 amount ~", "Mod 10 offset ~", "Mod 10 LFO rate ~", "Mod 11 amount ~", "Mod 11 offset ~", "Mod 11 LFO rate ~", "Mod 12 amount ~", "Mod 12 offset ~", "Mod 12 LFO rate ~"};
+static_assert(sizeof(kModTargetMarked) / sizeof(kModTargetMarked[0]) == sizeof(kModTargets),
+              "every mod target needs a marked name");
+const char* const kModModes[] = {"Around base", "Override", nullptr};
 static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kModTargets) + 1,
               "every mod target needs a name");
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.15"
+#define PERSEIDS_NT_VERSION "0.16"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -241,8 +265,13 @@ const char* const kResoTunings[] = {"Equal", "Just", nullptr};
 const char* const kMatchSpeeds[] = {"Slow", "Medium", "Fast", nullptr};
 // Mod LFO sync to Clock in: LFO cycles per clock pulse (÷ = one cycle over N
 // pulses, × = N cycles per pulse). Free = the slot's own LFO rate.
-const char* const kModSyncNames[] = {"Free", "/16", "/8", "/4", "/3", "/2", "x1",
-                                     "x2",   "x3",  "x4", "x8", nullptr};
+// "Rst …" = the slot's own LFO rate, but restarted on that grid (each pulse,
+// every Nth pulse, or N times per pulse from the measured period).
+const char* const kModSyncNames[] = {"Free",    "/16",     "/8",     "/4",     "/3",     "/2",
+                                     "x1",      "x2",      "x3",     "x4",     "x8",     "Rst /16",
+                                     "Rst /8",  "Rst /4",  "Rst /3", "Rst /2", "Rst x1", "Rst x2",
+                                     "Rst x3",  "Rst x4",  "Rst x8", nullptr};
+constexpr int kModSyncLocked = 10; // 1…10 locked to the clock, 11…20 free + reset
 constexpr int kModSyncDiv[] = {0, 16, 8, 4, 3, 2, 1, 1, 1, 1, 1}; // pulses per reset
 constexpr int kModSyncMul[] = {0, 1, 1, 1, 1, 1, 1, 2, 3, 4, 8};  // cycles per reset
 
@@ -334,16 +363,29 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     // Clock for the mod LFOs (ARCHITECTURE 4.3 Divider / 4.10 OFF: rate =
     // clock period × divider). Rising edge above 1 V. No pulse for 4 periods
     // (or 3 s) = clock lost: synced slots fall back to their free rate.
-    NT_PARAMETER_CV_INPUT("Clock in", 0, 0)
-    P_ENUM("Mod 1 sync", 10, 0, kModSyncNames)
-    P_ENUM("Mod 2 sync", 10, 0, kModSyncNames)
-    P_ENUM("Mod 3 sync", 10, 0, kModSyncNames)
-    P_ENUM("Mod 4 sync", 10, 0, kModSyncNames)
+    NT_PARAMETER_CV_INPUT("Clock in", 0, 3) // In 3 ab Werk
+    P_ENUM("Mod 1 sync", 20, 0, kModSyncNames)
+    P_ENUM("Mod 2 sync", 20, 0, kModSyncNames)
+    P_ENUM("Mod 3 sync", 20, 0, kModSyncNames)
+    P_ENUM("Mod 4 sync", 20, 0, kModSyncNames)
 
     // Mod slots 5–12: same as 1–4, sync included.
-#define P_MOD_SLOT_SYNC(n) P_MOD_SLOT(n) P_ENUM("Mod " n " sync", 10, 0, kModSyncNames)
+#define P_MOD_SLOT_SYNC(n) P_MOD_SLOT(n) P_ENUM("Mod " n " sync", 20, 0, kModSyncNames)
     P_MOD_SLOT_SYNC("5") P_MOD_SLOT_SYNC("6") P_MOD_SLOT_SYNC("7") P_MOD_SLOT_SYNC("8")
     P_MOD_SLOT_SYNC("9") P_MOD_SLOT_SYNC("10") P_MOD_SLOT_SYNC("11") P_MOD_SLOT_SYNC("12")
+
+    // Mod overview: one confirm resets every slot (dest Off, amount and
+    // offset 0, sync Free, mode Around base).
+    {.name = "Reset all mods", .min = 0, .max = 1, .def = 0, .unit = kNT_unitConfirm, .scaling = 0, .enumStrings = nullptr},
+    // Around base: the stored value is the centre, the slot swings around it
+    // (dest = base + contrib × travel). Override: the slot ignores the stored
+    // value and sweeps from the middle of the range (Amount 100 % = full range).
+    P_ENUM("Mod 1 mode", 1, 0, kModModes) P_ENUM("Mod 2 mode", 1, 0, kModModes)
+    P_ENUM("Mod 3 mode", 1, 0, kModModes) P_ENUM("Mod 4 mode", 1, 0, kModModes)
+    P_ENUM("Mod 5 mode", 1, 0, kModModes) P_ENUM("Mod 6 mode", 1, 0, kModModes)
+    P_ENUM("Mod 7 mode", 1, 0, kModModes) P_ENUM("Mod 8 mode", 1, 0, kModModes)
+    P_ENUM("Mod 9 mode", 1, 0, kModModes) P_ENUM("Mod 10 mode", 1, 0, kModModes)
+    P_ENUM("Mod 11 mode", 1, 0, kModModes) P_ENUM("Mod 12 mode", 1, 0, kModModes)
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
@@ -365,8 +407,16 @@ const uint8_t kPageDisplay[] = {kParamRecStyle};
 const uint8_t kPageReso[]    = {kParamResoMix,   kParamResoDecay, kParamResoDamping,
                                 kParamResoSpread, kParamResoPitch, kParamResoQuant,
                                 kParamResoScale,  kParamResoTuning, kParamResoVoct};
-#define MOD_PAGE(s) {ModParam(s, 0), ModParam(s, 1), ModParam(s, 2), ModParam(s, 3), ModParam(s, 4), ModSyncParam(s)}
-const uint8_t kPageMod[kNumModSlots][kModParams + 1] = {
+#define MOD_PAGE(s) {ModParam(s, 0), ModParam(s, 1), ModParam(s, 2), ModParam(s, 3), \
+                     ModModeParam(s), ModParam(s, 4), ModSyncParam(s)}
+constexpr int kModPageParams = kModParams + 2;
+// Overview: what every slot is aimed at, and one reset for all of them.
+const uint8_t kPageModOverview[] = {kParamModReset, ModParam(0, kModDest), ModParam(1, kModDest),
+                                    ModParam(2, kModDest), ModParam(3, kModDest), ModParam(4, kModDest),
+                                    ModParam(5, kModDest), ModParam(6, kModDest), ModParam(7, kModDest),
+                                    ModParam(8, kModDest), ModParam(9, kModDest), ModParam(10, kModDest),
+                                    ModParam(11, kModDest)};
+const uint8_t kPageMod[kNumModSlots][kModPageParams] = {
     MOD_PAGE(0), MOD_PAGE(1), MOD_PAGE(2), MOD_PAGE(3), MOD_PAGE(4),  MOD_PAGE(5),
     MOD_PAGE(6), MOD_PAGE(7), MOD_PAGE(8), MOD_PAGE(9), MOD_PAGE(10), MOD_PAGE(11)};
 const uint8_t kPageRouting[] = {kParamInL, kParamInR, kParamRecIn, kParamClockIn, kParamOutL,
@@ -383,19 +433,21 @@ const _NT_parameterPage kPages[] = {
     {.name = "Mixer", .numParams = ARRAY_SIZE(kPageMixer), .group = 6, .unused = {0, 0}, .params = kPageMixer},
     {.name = "Display", .numParams = ARRAY_SIZE(kPageDisplay), .group = 8, .unused = {0, 0}, .params = kPageDisplay},
     {.name = "Routing", .numParams = ARRAY_SIZE(kPageRouting), .group = 7, .unused = {0, 0}, .params = kPageRouting},
-    // Mod slots at the end. Same group: the cursor keeps its row from slot to slot.
-    {.name = "Mod 1", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[0]},
-    {.name = "Mod 2", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[1]},
-    {.name = "Mod 3", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[2]},
-    {.name = "Mod 4", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[3]},
-    {.name = "Mod 5", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[4]},
-    {.name = "Mod 6", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[5]},
-    {.name = "Mod 7", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[6]},
-    {.name = "Mod 8", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[7]},
-    {.name = "Mod 9", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[8]},
-    {.name = "Mod 10", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[9]},
-    {.name = "Mod 11", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[10]},
-    {.name = "Mod 12", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[11]},
+    // Mod slots at the end, the overview first. Same group for the slots: the
+    // cursor keeps its row from slot to slot.
+    {.name = "Mod overview", .numParams = ARRAY_SIZE(kPageModOverview), .group = 11, .unused = {0, 0}, .params = kPageModOverview},
+    {.name = "Mod 1", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[0]},
+    {.name = "Mod 2", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[1]},
+    {.name = "Mod 3", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[2]},
+    {.name = "Mod 4", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[3]},
+    {.name = "Mod 5", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[4]},
+    {.name = "Mod 6", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[5]},
+    {.name = "Mod 7", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[6]},
+    {.name = "Mod 8", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[7]},
+    {.name = "Mod 9", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[8]},
+    {.name = "Mod 10", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[9]},
+    {.name = "Mod 11", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[10]},
+    {.name = "Mod 12", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[11]},
 };
 
 const _NT_parameterPages kParameterPages = {
@@ -547,8 +599,16 @@ struct PerseidsAlgorithm : public _NT_algorithm
 
     // Mod slots (audio thread): contribution per destination in units of the
     // destination's full travel, internal LFO phases, smoothed CV.
-    float mod_sum[kNumParams];
+    float   mod_sum[kNumParams];
+    uint8_t mod_over[kNumParams];  // an Override slot aims at this parameter
+    uint8_t mod_marked[kNumParams]; // name shown with " ~" (display thread)
     float lfo_phase[kNumModSlots];
+    int   lfo_sub[kNumModSlots]; // "Rst xN": last sub-pulse a reset fired on
+
+    // Armed (in effect) input / dest / mode / sync per slot, see kModArmS.
+    int16_t  mod_armed[kNumModSlots][kArmFields];
+    uint64_t mod_pending_since[kNumModSlots]; // 0 = nothing pending
+    volatile bool mod_arm_now;                // own screen used: arm at once
 
     // Clock in: edge detector and period (samples), for synced mod LFOs.
     bool     clock_gate;
@@ -558,7 +618,8 @@ struct PerseidsAlgorithm : public _NT_algorithm
     float    clock_period; // samples between edges, 0 = not measured yet
     uint32_t clock_count;  // edges since the clock (re)appeared
     float cv_smooth[kNumModSlots];
-    float mod_prev[kNumModSlots][3]; // last chunk's mod on amount / offset / rate
+    float   mod_prev[kNumModSlots][3]; // last chunk's mod on amount / offset / rate
+    uint8_t mod_prev_over[kNumModSlots][3];
     int   mod_active;  // slots currently doing something (display)
     bool  mod_applied; // modulation was applied in the last chunk
 };
@@ -581,12 +642,18 @@ inline int ParamValue(const PerseidsAlgorithm* a, int p)
 // Value a parameter has right now: the stored (base) value plus all mod slot
 // contributions, contrib × the parameter's full travel, clamped (ARCHITECTURE
 // 4.3: dest = clamp(base + contrib × span)). The stored value never moves.
+// With an Override slot on it, the stored value is replaced by the middle of
+// the range (the slot sweeps from there).
+inline float ModValue(float base, float lo, float hi, float sum, bool over)
+{
+    const float centre = over ? 0.5f * (lo + hi) : base;
+    return Clampf(centre + sum * (hi - lo), lo, hi);
+}
+
 inline float Pv(const PerseidsAlgorithm* a, int p)
 {
-    const float lo   = a->params[p].min;
-    const float hi   = a->params[p].max;
-    const float base = static_cast<float>(ParamValue(a, p));
-    return Clampf(base + a->mod_sum[p] * (hi - lo), lo, hi);
+    return ModValue(static_cast<float>(ParamValue(a, p)), a->params[p].min, a->params[p].max,
+                    a->mod_sum[p], a->mod_over[p] != 0);
 }
 
 // Same, rounded — for counts, switches and enums.
@@ -841,14 +908,24 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     for(size_t t = 0; t < kTrailCount; ++t)
         a->life_anim[t] = LifeBarAnim{TrailLifePhase::Empty, RecSoft::Idle, 0, 1.f, false};
     for(int p = 0; p < kNumParams; ++p)
-        a->mod_sum[p] = 0.f;
+    {
+        a->mod_sum[p]    = 0.f;
+        a->mod_over[p]   = 0;
+        a->mod_marked[p] = 0;
+    }
     for(int m = 0; m < kNumModSlots; ++m)
     {
         a->lfo_phase[m] = 0.25f * static_cast<float>(m % 4) + 0.0833f * static_cast<float>(m / 4); // spread out
         a->cv_smooth[m] = 0.f;
+        a->lfo_sub[m]   = 0;
+        for(int f = 0; f < kArmFields; ++f)
+            a->mod_armed[m][f] = 0;
+        a->mod_pending_since[m] = 0;
         a->mod_prev[m][0] = a->mod_prev[m][1] = a->mod_prev[m][2] = 0.f;
+        a->mod_prev_over[m][0] = a->mod_prev_over[m][1] = a->mod_prev_over[m][2] = 0;
     }
     a->mod_active  = 0;
+    a->mod_arm_now = true; // the stored settings count from the start
     a->mod_applied = false;
     return a;
 }
@@ -857,6 +934,11 @@ void parameterChanged(_NT_algorithm* self, int p)
 {
     PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
     a->dirty             = true;
+    // A slot's input / dest / mode / sync: arm it later (kModArmS).
+    for(int m = 0; m < kNumModSlots; ++m)
+        for(int f = 0; f < kArmFields; ++f)
+            if(p == ArmParam(m, f))
+                a->mod_pending_since[m] = a->sample_clock + 1;
     // Changed from the menu (or a preset): the pot has to catch up again.
     for(int k = 0; k < 3; ++k)
         if(a->pot_param[k] == p && a->v && a->v[p] != a->pot_written[k])
@@ -897,20 +979,40 @@ float ModLfo(float phase)
 // Returns true if any slot is doing something.
 bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int at, int n)
 {
-    for(int m = 0; m < kNumModSlots; ++m)
+    // Arm pending slot settings that stood still long enough (or at once).
     {
-        a->mod_prev[m][0] = a->mod_sum[ModParam(m, kModAmount)];
-        a->mod_prev[m][1] = a->mod_sum[ModParam(m, kModOffset)];
-        a->mod_prev[m][2] = a->mod_sum[ModParam(m, kModRate)];
+        const bool     now  = a->mod_arm_now;
+        const float    rate = static_cast<float>(NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000);
+        const uint64_t wait = static_cast<uint64_t>(kModArmS * rate);
+        for(int m = 0; m < kNumModSlots; ++m)
+        {
+            const uint64_t since = a->mod_pending_since[m];
+            if(now || (since && a->sample_clock + 1 >= since + wait))
+            {
+                for(int f = 0; f < kArmFields; ++f)
+                    a->mod_armed[m][f] = static_cast<int16_t>(ParamValue(a, ArmParam(m, f)));
+                a->mod_pending_since[m] = 0;
+            }
+        }
+        a->mod_arm_now = false;
     }
+    const int mod_fields[3] = {kModAmount, kModOffset, kModRate};
+    for(int m = 0; m < kNumModSlots; ++m)
+        for(int k = 0; k < 3; ++k)
+        {
+            a->mod_prev[m][k]      = a->mod_sum[ModParam(m, mod_fields[k])];
+            a->mod_prev_over[m][k] = a->mod_over[ModParam(m, mod_fields[k])];
+        }
     for(int p = 0; p < kNumParams; ++p)
-        a->mod_sum[p] = 0.f;
+    {
+        a->mod_sum[p]  = 0.f;
+        a->mod_over[p] = 0;
+    }
     // A slot's own amount / offset / rate with last chunk's modulation on it.
     auto Eff = [a](int m, int field, int k) {
-        const int   p  = ModParam(m, field);
-        const float lo = a->params[p].min;
-        const float hi = a->params[p].max;
-        return Clampf(static_cast<float>(ParamValue(a, p)) + a->mod_prev[m][k] * (hi - lo), lo, hi);
+        const int p = ModParam(m, field);
+        return ModValue(static_cast<float>(ParamValue(a, p)), a->params[p].min, a->params[p].max,
+                        a->mod_prev[m][k], a->mod_prev_over[m][k] != 0);
     };
 
     const float sr     = static_cast<float>(NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000);
@@ -965,10 +1067,10 @@ bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int 
     }
     for(int m = 0; m < kNumModSlots; ++m)
     {
-        const int   dest   = kModTargets[ParamValue(a, ModParam(m, kModDest))];
+        const int   dest   = kModTargets[a->mod_armed[m][kArmDest]];
         const float amount = Eff(m, kModAmount, 0) * 0.01f;
         const float offset = Eff(m, kModOffset, 1) * 0.01f;
-        const int   bus    = ParamValue(a, ModParam(m, kModIn));
+        const int   bus    = a->mod_armed[m][kArmIn];
 
         float source;
         if(bus > 0)
@@ -984,8 +1086,35 @@ bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int 
         }
         else
         {
-            const int sync = ParamValue(a, ModSyncParam(m));
-            if(sync > 0 && a->clock_valid && a->clock_period > 1.f)
+            const int sync = a->mod_armed[m][kArmSync];
+            if(sync > kModSyncLocked)
+            {
+                // Free rate, restarted on the clock grid.
+                const int r   = sync - kModSyncLocked;
+                const int div = kModSyncDiv[r];
+                const int mul = kModSyncMul[r];
+                a->lfo_phase[m] += Eff(m, kModRate, 2) * 0.01f * static_cast<float>(n) / sr;
+                if(a->clock_valid && a->clock_period > 1.f)
+                {
+                    if(edge)
+                    {
+                        if(a->clock_count % static_cast<uint32_t>(div) == 0)
+                            a->lfo_phase[m] = 0.f;
+                        a->lfo_sub[m] = 0;
+                    }
+                    else if(mul > 1)
+                    {
+                        int k = static_cast<int>(static_cast<float>(a->clock_since) * mul / a->clock_period);
+                        k     = k > mul - 1 ? mul - 1 : k;
+                        if(k > a->lfo_sub[m])
+                        {
+                            a->lfo_phase[m] = 0.f;
+                            a->lfo_sub[m]   = k;
+                        }
+                    }
+                }
+            }
+            else if(sync > 0 && a->clock_valid && a->clock_period > 1.f)
             {
                 // Locked: Mul cycles per Div pulses, phase reset on the bar.
                 const float cycles = static_cast<float>(kModSyncMul[sync]) / static_cast<float>(kModSyncDiv[sync]);
@@ -1002,7 +1131,14 @@ bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int 
 
         if(!dest || (amount == 0.f && offset == 0.f))
             continue;
-        a->mod_sum[dest] += offset + amount * source;
+        if(a->mod_armed[m][kArmMode])
+        {
+            // Override: half the travel per 100 %, so Amount 100 % spans the range.
+            a->mod_sum[dest] += 0.5f * (offset + amount * source);
+            a->mod_over[dest] = 1;
+        }
+        else
+            a->mod_sum[dest] += offset + amount * source;
         ++active;
     }
     a->mod_active = active;
@@ -1039,6 +1175,20 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
         a->eng->capture.ClearAll();
         a->lm_sp_lock = a->lm_sw_lock = 0.f; // new material: lock in again
         SetParamAudio(a, kParamClear, 0);
+    }
+    // "Reset all mods": every slot back to off, then the switch falls back.
+    if(a->v[kParamModReset])
+    {
+        for(int m = 0; m < kNumModSlots; ++m)
+        {
+            SetParamAudio(a, ModParam(m, kModDest), 0);
+            SetParamAudio(a, ModParam(m, kModAmount), 0);
+            SetParamAudio(a, ModParam(m, kModOffset), 0);
+            SetParamAudio(a, ModSyncParam(m), 0);
+            SetParamAudio(a, ModModeParam(m), 0);
+        }
+        SetParamAudio(a, kParamModReset, 0);
+        a->mod_arm_now = true; // a reset acts at once
     }
 
     Engines&  e         = *a->eng;
@@ -1087,7 +1237,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
         {
             if(!modulating)
                 for(int p = 0; p < kNumParams; ++p)
-                    a->mod_sum[p] = 0.f;
+                {
+                    a->mod_sum[p]  = 0.f;
+                    a->mod_over[p] = 0;
+                }
             ApplyParams(a);
             a->mod_applied = modulating;
         }
@@ -1419,6 +1572,10 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data)
     PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
     if(!a->v)
         return;
+    // Back on Perseids' own screen: pending slot settings count now.
+    for(int m = 0; m < kNumModSlots; ++m)
+        if(a->mod_pending_since[m])
+            a->mod_arm_now = true;
 
     if(data.controls & kNT_potL)
         PotMoved(a, 0, data.pots[0]);
@@ -1785,11 +1942,31 @@ void DrawTrailLifeBar(LifeBarAnim&       anim,
     }
 }
 
+// Marks modulated parameters in the menus: their name gets " ~" while a slot
+// is aimed at them (and back when it stops). Display thread, only on change.
+void UpdateModMarks(PerseidsAlgorithm* a)
+{
+    for(int k = 1; k < kNumModTargets; ++k)
+    {
+        const int p = kModTargets[k];
+        bool      on = false;
+        for(int m = 0; m < kNumModSlots && !on; ++m)
+            on = a->mod_armed[m][kArmDest] == k
+                 && (ParamValue(a, ModParam(m, kModAmount)) != 0 || ParamValue(a, ModParam(m, kModOffset)) != 0);
+        if(on == (a->mod_marked[p] != 0))
+            continue;
+        a->mod_marked[p]   = on ? 1 : 0;
+        a->params[p].name  = on ? kModTargetMarked[k] : kParameterDefs[p].name;
+        NT_updateParameterDefinition(NT_algorithmIndex(a), p + NT_parameterOffset());
+    }
+}
+
 bool draw(_NT_algorithm* self)
 {
     PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
     if(!a->v)
         return false;
+    UpdateModMarks(a);
     const Engines& e = *a->eng;
     char           buff[24];
 
@@ -1920,10 +2097,19 @@ bool draw(_NT_algorithm* self)
         NT_drawText(160, 61, "HOLD", 15, kNT_textLeft, kNT_textTiny);
     if(e.swarm.GovernorActive())
         NT_drawText(60, 61, "CPU", 15, kNT_textLeft, kNT_textTiny);
-    if(a->mod_active > 0)
+    bool mod_pending = false;
+    for(int m = 0; m < kNumModSlots; ++m)
+        mod_pending = mod_pending || a->mod_pending_since[m] != 0;
+    if(a->mod_active > 0 || mod_pending)
     {
+        // "MOD n", with "*" while a changed slot setting waits to take effect.
         std::strcpy(buff, "MOD");
-        NT_intToString(buff + 3, a->mod_active);
+        int len = 3;
+        if(a->mod_active > 0)
+            len += NT_intToString(buff + 3, a->mod_active);
+        if(mod_pending)
+            buff[len++] = '*';
+        buff[len] = 0;
         NT_drawText(76, 61, buff, 12, kNT_textLeft, kNT_textTiny);
     }
     if(a->clock_valid)

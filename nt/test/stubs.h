@@ -11,5 +11,6 @@ extern int      g_draws;
 extern int      g_textOob;
 extern int      g_shapeOob;
 extern _NT_algorithm* g_alg;
+extern int      g_paramDefUpdates;
 extern void (*g_parameterChanged)(_NT_algorithm*, int);
 extern bool     g_logDraw; // print every draw call (renderer)
