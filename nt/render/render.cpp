@@ -35,6 +35,14 @@ static void Run(float secs, bool sound)
             bus[128 + i]    = bus[i];
         }
         step(A, bus.data(), 32);
+        // The NT redraws continuously; keep the display's animation state
+        // current between the logged frames (silently, every ~50 ms).
+        if(smp % 2432 < 128)
+        {
+            g_logDraw = false;
+            draw(A);
+            g_logDraw = true;
+        }
     }
 }
 
@@ -67,7 +75,11 @@ int main()
     SetP(kParamHold, 8);
     SetP(kParamFadeIn, 10);
     Run(1.0f, true);
-    Frame("Trail 1 recording (Threshold crossed), meter shows the input");
+    Frame("Trail 1 recording, Rec style PLR: embers travel left to right up to the take");
+    Run(0.15f, true);
+    Frame("... 150 ms later (each ember has its own speed)");
+    Run(0.45f, true);
+    Frame("Take finished: embers burn out (200 ms), then Fade In fills the bar");
 
     SetP(kParamCount, 5);
     SetP(kParamContRec, 1);
@@ -90,6 +102,23 @@ int main()
     SetP(kParamFadeOut, 40);
     SetP(kParamSolo1 + 2, 0);
     Run(4.4f, false);
-    Frame("Hold 2 s ran out: Trails fade out (OUT)");
+    Frame("Hold 2 s ran out: Trails fade out (OUT), the bar empties left to right");
+
+    // The other two recording styles.
+    SetP(kParamCount, 1);
+    SetP(kParamLock1, 0);
+    SetP(kParamClear, 1);
+    Run(0.05f, false);
+    SetP(kParamContRec, 0);
+    SetP(kParamRecStyle, 0);
+    A->eng->capture.RequestManualTrigger(); // Button 3
+    Run(0.9f, true);
+    Frame("Rec style PRS: embers grow from the centre");
+    SetP(kParamClear, 1);
+    Run(0.05f, false);
+    SetP(kParamRecStyle, 2);
+    A->eng->capture.RequestManualTrigger();
+    Run(0.9f, true);
+    Frame("Rec style CTR: solid bar from the centre");
     return 0;
 }

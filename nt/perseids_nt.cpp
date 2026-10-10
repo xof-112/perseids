@@ -79,7 +79,11 @@ enum
     kParamTrailLevel1,
     kParamLock1   = kParamTrailLevel1 + kTrailCount,
     kParamSolo1   = kParamLock1 + kTrailCount,
-    kNumParams    = kParamSolo1 + kTrailCount,
+
+    // Display
+    kParamRecStyle = kParamSolo1 + kTrailCount,
+
+    kNumParams,
 };
 
 // Hold: the top value means "infinite" (engine: > 30 s).
@@ -87,6 +91,9 @@ constexpr int kHoldInf = 31;
 
 const char* const kOffOn[]     = {"Off", "On", nullptr};
 const char* const kDirection[] = {"Fwd", "Rev", "Rnd", nullptr};
+// Recording graphic, as in the firmware's Settings → REC (same order there:
+// 0 PRS centre-out embers, 1 PLR left→right embers, 2 CTR solid centre-out).
+const char* const kRecStyle[] = {"PRS", "PLR", "CTR", nullptr};
 
 #define P_NUM(n, lo, hi, d, u, sc) \
     {.name = n, .min = lo, .max = hi, .def = d, .unit = u, .scaling = sc, .enumStrings = nullptr},
@@ -140,6 +147,8 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     P_TRAIL_TOGGLE("Lock 4") P_TRAIL_TOGGLE("Lock 5")
     P_TRAIL_TOGGLE("Solo 1") P_TRAIL_TOGGLE("Solo 2") P_TRAIL_TOGGLE("Solo 3")
     P_TRAIL_TOGGLE("Solo 4") P_TRAIL_TOGGLE("Solo 5")
+
+    P_ENUM("Rec style", 2, 1, kRecStyle)
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
@@ -157,6 +166,7 @@ const uint8_t kPageMixer[]   = {
     kParamTrailLevel1 + 3, kParamTrailLevel1 + 4,
     kParamLock1, kParamLock1 + 1, kParamLock1 + 2, kParamLock1 + 3, kParamLock1 + 4,
     kParamSolo1, kParamSolo1 + 1, kParamSolo1 + 2, kParamSolo1 + 3, kParamSolo1 + 4};
+const uint8_t kPageDisplay[] = {kParamRecStyle};
 const uint8_t kPageRouting[] = {kParamInL, kParamInR, kParamRecIn, kParamOutL,
                                 kParamOutLMode, kParamOutR, kParamOutRMode};
 
@@ -167,6 +177,7 @@ const _NT_parameterPage kPages[] = {
     {.name = "Spectra", .numParams = ARRAY_SIZE(kPageSpectra), .group = 4, .unused = {0, 0}, .params = kPageSpectra},
     {.name = "Swarm", .numParams = ARRAY_SIZE(kPageSwarm), .group = 5, .unused = {0, 0}, .params = kPageSwarm},
     {.name = "Mixer", .numParams = ARRAY_SIZE(kPageMixer), .group = 6, .unused = {0, 0}, .params = kPageMixer},
+    {.name = "Display", .numParams = ARRAY_SIZE(kPageDisplay), .group = 8, .unused = {0, 0}, .params = kPageDisplay},
     {.name = "Routing", .numParams = ARRAY_SIZE(kPageRouting), .group = 7, .unused = {0, 0}, .params = kPageRouting},
 };
 
@@ -231,6 +242,24 @@ struct Click
     bool turned;
 };
 
+// Recording embers: soft appear / burn-out around a take (UI only; audio has
+// no gap). Mirrors DisplayRenderer::LifeBarAnim in the firmware.
+enum class RecSoft : uint8_t
+{
+    Idle,
+    FadeIn,
+    FadeOut,
+};
+
+struct LifeBarAnim
+{
+    TrailLifePhase last_phase;
+    RecSoft        soft;
+    uint32_t       soft_t0;
+    float          grow_latch;
+    bool           ltr_latch;
+};
+
 struct PerseidsAlgorithm : public _NT_algorithm
 {
     Engines* eng;
@@ -256,7 +285,7 @@ struct PerseidsAlgorithm : public _NT_algorithm
     bool rec_gate;
 
     // Housekeeping counters (samples).
-    uint32_t sample_clock;
+    uint64_t sample_clock; // also the display's animation clock
     uint32_t slice_acc;
     uint32_t gov_acc;
     uint32_t gov_cycles;
@@ -267,6 +296,9 @@ struct PerseidsAlgorithm : public _NT_algorithm
     int   hold_before; // Hold value to restore when Hold is toggled off
     Click click_l;
     Click click_r;
+
+    // Life-bar animation per Trail (display thread only), as in the firmware.
+    LifeBarAnim life_anim[kTrailCount];
 };
 
 inline float Clampf(float x, float lo, float hi)
@@ -487,6 +519,8 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->hold_before  = 15;
     a->click_l      = Click{false, false};
     a->click_r      = Click{false, false};
+    for(size_t t = 0; t < kTrailCount; ++t)
+        a->life_anim[t] = LifeBarAnim{TrailLifePhase::Empty, RecSoft::Idle, 0, 1.f, false};
     return a;
 }
 
@@ -648,7 +682,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
         }
     }
 
-    a->sample_clock += static_cast<uint32_t>(numFrames);
+    a->sample_clock += static_cast<uint64_t>(numFrames);
 
     // Swarm load governor, once per 256 samples. On the NT the load is this
     // algorithm's own share of the CPU; elsewhere (nt_emu) it stays idle.
@@ -828,6 +862,258 @@ void FormatPercent(char* buff, int v, bool sign)
     buff[n]   = 0;
 }
 
+// --- Recording embers (port of the firmware's DrawRecSparkleFill) ----------
+//
+// The NT screen has 16 grey levels. Each ember is drawn like on the hardware
+// as one full-brightness pixel; on the NT it also leaves a faint pixel behind
+// it in its direction of travel (level kEmberTail). Where the grey levels are
+// hard to see, it simply looks like the hardware.
+
+constexpr uint32_t kRecSoftMs  = 200; // ember appear / burn-out
+constexpr int      kEmbers     = 13;  // firmware: 18 on a 58 px bar → same density
+constexpr int      kEmberHead  = 15;
+constexpr int      kEmberTail  = 5;
+
+uint32_t SparkleHash(int x, int y, uint32_t seed)
+{
+    uint32_t n = static_cast<uint32_t>(x) * 374761393u
+                 ^ static_cast<uint32_t>(y) * 668265263u ^ seed;
+    n = (n ^ (n >> 13)) * 1274126177u;
+    return n ^ (n >> 16);
+}
+
+inline void Pixel(int x, int y, int colour)
+{
+    NT_drawShapeI(kNT_point, x, y, x, y, colour);
+}
+
+void DrawRecSparkleFill(int      x0,
+                        int      y,
+                        int      w,
+                        int      h,
+                        float    grow,
+                        uint32_t seed,
+                        bool     left_to_right,
+                        float    visibility,
+                        uint32_t now_ms)
+{
+    if(grow <= 0.f || visibility <= 0.f)
+        return;
+    grow       = grow > 1.f ? 1.f : grow;
+    visibility = visibility > 1.f ? 1.f : visibility;
+
+    const int x_lo = x0 + 1;
+    const int x_hi = x0 + w - 2;
+    const int y_lo = y + 1;
+    const int y_hi = y + h - 2;
+    if(x_hi < x_lo || y_hi < y_lo)
+        return;
+
+    const float cx     = 0.5f * static_cast<float>(x_lo + x_hi);
+    const float half_w = 0.5f * static_cast<float>(x_hi - x_lo + 1);
+    const float inner  = static_cast<float>(x_hi - x_lo + 1);
+    const float radius = grow * half_w;
+    if(!left_to_right && radius < 0.5f)
+        return;
+    if(left_to_right && grow * inner < 0.5f)
+        return;
+
+    const int      y_span  = y_hi - y_lo + 1;
+    const float    t_sec   = static_cast<float>(now_ms) * 0.001f;
+    const uint32_t vis_thr = static_cast<uint32_t>(visibility * 255.f);
+    const float    edge_x  = static_cast<float>(x_lo) + grow * inner;
+
+    for(int i = 0; i < kEmbers; ++i)
+    {
+        if((SparkleHash(i, 3, seed) & 255u) >= vis_thr)
+            continue;
+
+        const uint32_t hh  = SparkleHash(i, 7, seed);
+        const float    spd = 0.45f + static_cast<float>((hh >> 1) & 255u) * (0.70f / 255.f);
+        const float    ph0 = static_cast<float>((hh >> 9) & 255u) * (1.f / 255.f);
+        float          u   = ph0 + t_sec * spd;
+        u -= std::floor(u);
+
+        int x;
+        int dir; // travel direction, for the tail
+        if(left_to_right)
+        {
+            const float x_f = static_cast<float>(x_lo) + u * inner;
+            if(x_f > edge_x + 0.5f)
+                continue;
+            x = static_cast<int>(x_f + 0.5f);
+            // Densest at mid-bar, thinner toward the ends.
+            const float xn  = (x_f - static_cast<float>(x_lo)) / (inner + 0.01f);
+            const float mid = 1.f - 2.f * std::fabs(xn - 0.5f);
+            if(mid < 0.f)
+                continue;
+            const float dens = 0.65f + 0.35f * mid;
+            if((SparkleHash(i, 11, seed) & 255u) >= static_cast<uint32_t>(dens * 255.f))
+                continue;
+            dir = 1;
+        }
+        else
+        {
+            const float side = (hh & 1u) ? 1.f : -1.f;
+            x                = static_cast<int>(cx + side * u * radius + 0.5f);
+            dir              = side > 0.f ? 1 : -1;
+        }
+        if(x < x_lo || x > x_hi)
+            continue;
+
+        const int py = y_lo + static_cast<int>((hh >> 17) % static_cast<uint32_t>(y_span));
+        const int tx = x - dir;
+        if(tx >= x_lo && tx <= x_hi)
+            Pixel(tx, py, kEmberTail);
+        Pixel(x, py, kEmberHead);
+    }
+}
+
+void DrawRecCenterSolid(int x0, int y, int w, int h, float grow, int colour)
+{
+    if(grow <= 0.f)
+        return;
+    grow              = grow > 1.f ? 1.f : grow;
+    const int inner_w = w - 2;
+    const int span    = static_cast<int>(grow * static_cast<float>(inner_w) + 0.5f);
+    if(span <= 0)
+        return;
+    const int mid   = x0 + 1 + inner_w / 2;
+    int       left  = mid - span / 2;
+    int       right = left + span - 1;
+    left            = left < x0 + 1 ? x0 + 1 : left;
+    right           = right > x0 + inner_w ? x0 + inner_w : right;
+    NT_drawShapeI(kNT_rectangle, left, y + 1, right, y + h - 2, colour);
+}
+
+// Port of DisplayRenderer::DrawTrailLifeBar: embers (PRS/PLR) or solid (CTR)
+// while recording, Fade In fills left→right, Hold full, Fade Out empties
+// left→right.
+void DrawTrailLifeBar(LifeBarAnim&       anim,
+                      int                x0,
+                      int                y,
+                      int                w,
+                      int                h,
+                      size_t             trail_index,
+                      const TrailLifeUi& life,
+                      int                rec_style,
+                      uint32_t           now,
+                      int                colour)
+{
+    const int x1 = x0 + w - 1;
+    const int y1 = y + h - 1;
+    NT_drawShapeI(kNT_box, x0, y, x1, y1, 3);
+
+    if(life.phase == TrailLifePhase::Empty)
+    {
+        anim.last_phase = TrailLifePhase::Empty;
+        anim.soft       = RecSoft::Idle;
+        anim.grow_latch = 1.f;
+        return;
+    }
+
+    const float    fill     = Clampf(life.fill, 0.f, 1.f);
+    const int      inner_w  = w - 2;
+    const int      fill_w   = static_cast<int>(fill * static_cast<float>(inner_w) + 0.5f);
+    const uint32_t seed     = 0xA5u + static_cast<uint32_t>(trail_index) * 97u;
+    const bool     perseids = rec_style <= 1;
+    const bool     ltr      = rec_style == 1;
+
+    if(perseids)
+    {
+        if(life.phase == TrailLifePhase::Recording
+           && anim.last_phase != TrailLifePhase::Recording && anim.soft != RecSoft::FadeOut)
+        {
+            // Soft appear only for PRS; PLR starts clean left→right.
+            if(!ltr)
+            {
+                anim.soft      = RecSoft::FadeIn;
+                anim.soft_t0   = now;
+                anim.ltr_latch = false;
+            }
+        }
+        if(anim.last_phase == TrailLifePhase::Recording
+           && (life.phase == TrailLifePhase::FadeIn || life.phase == TrailLifePhase::Hold)
+           && anim.soft != RecSoft::FadeOut)
+        {
+            anim.soft      = RecSoft::FadeOut;
+            anim.soft_t0   = now;
+            anim.ltr_latch = ltr;
+            if(anim.grow_latch < 0.15f)
+                anim.grow_latch = 1.f;
+        }
+        if(life.phase == TrailLifePhase::Recording)
+        {
+            if(fill > 0.05f)
+                anim.grow_latch = fill;
+            anim.ltr_latch = ltr;
+        }
+
+        if(anim.soft != RecSoft::Idle)
+        {
+            const uint32_t dt = now - anim.soft_t0;
+            if(dt >= kRecSoftMs)
+            {
+                const RecSoft done = anim.soft;
+                anim.soft          = RecSoft::Idle;
+                if(done != RecSoft::FadeOut && life.phase == TrailLifePhase::Recording)
+                {
+                    DrawRecSparkleFill(x0, y, w, h, fill, seed, ltr, 1.f, now);
+                    anim.last_phase = life.phase;
+                    return;
+                }
+            }
+            else
+            {
+                const float t = static_cast<float>(dt) / static_cast<float>(kRecSoftMs);
+                float       vis;
+                float       grow_draw;
+                bool        use_ltr = anim.ltr_latch;
+                if(anim.soft == RecSoft::FadeIn)
+                {
+                    vis       = t * (2.f - t);
+                    grow_draw = fill;
+                    use_ltr   = ltr;
+                }
+                else
+                {
+                    const float u = 1.f - t;
+                    vis           = u * u;
+                    grow_draw     = anim.grow_latch;
+                }
+                DrawRecSparkleFill(x0, y, w, h, grow_draw, seed, use_ltr, vis, now);
+                anim.last_phase = life.phase;
+                return; // solid Fade In waits until the embers have burnt out
+            }
+        }
+        anim.last_phase = life.phase;
+    }
+    else
+    {
+        anim.soft       = RecSoft::Idle;
+        anim.last_phase = life.phase;
+    }
+
+    if(life.phase == TrailLifePhase::Recording)
+    {
+        if(rec_style >= 2)
+            DrawRecCenterSolid(x0, y, w, h, fill, 15);
+        else
+            DrawRecSparkleFill(x0, y, w, h, fill, seed, ltr, 1.f, now);
+    }
+    else if(life.phase == TrailLifePhase::FadeOut)
+    {
+        if(fill_w > 0)
+            NT_drawShapeI(kNT_rectangle, x0 + 1 + (inner_w - fill_w), y + 1, x0 + inner_w, y1 - 1, colour);
+    }
+    else
+    {
+        const int fw = life.phase == TrailLifePhase::Hold ? inner_w : fill_w;
+        if(fw > 0)
+            NT_drawShapeI(kNT_rectangle, x0 + 1, y + 1, x0 + fw, y1 - 1, colour);
+    }
+}
+
 bool draw(_NT_algorithm* self)
 {
     PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
@@ -869,6 +1155,8 @@ bool draw(_NT_algorithm* self)
     // Trails: one column each.
     TrailLifeUi life[kTrailCount];
     e.capture.GetTrailLifeUi(life);
+    const uint32_t now_ms = static_cast<uint32_t>(
+        a->sample_clock * 1000u / (NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000u));
     for(int t = 0; t < static_cast<int>(kTrailCount); ++t)
     {
         const int  x0     = 1 + t * 51;
@@ -903,15 +1191,14 @@ bool draw(_NT_algorithm* self)
         }
         NT_drawText(x0 + 46, 22, phase, active ? pc : 2, kNT_textRight);
 
-        // Life bar (recording progress / fade / hold).
-        float fill = life[t].fill;
-        if(life[t].phase == TrailLifePhase::Hold)
-            fill = 1.f;
-        DrawBar(x0 + 3, 26, 43, 5, active ? fill : 0.f, life[t].phase == TrailLifePhase::Recording ? 15 : 7);
+        // Life bar: recording embers, Fade In, Hold, Fade Out (7 px like the
+        // hardware, so the embers have five rows to travel in).
+        DrawTrailLifeBar(a->life_anim[t], x0 + 3, 25, 43, 7, static_cast<size_t>(t),
+                         life[t], ParamValue(a, kParamRecStyle), now_ms, active ? 8 : 3);
 
         // Level bar.
         const int level = ParamValue(a, kParamTrailLevel1 + t);
-        DrawBar(x0 + 3, 34, 43, 5, level * 0.01f, active ? 12 : 3);
+        DrawBar(x0 + 3, 35, 43, 4, level * 0.01f, active ? 12 : 3);
 
         // Lock / Solo.
         const bool locked = ParamValue(a, kParamLock1 + t) != 0;

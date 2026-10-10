@@ -15,7 +15,8 @@ for line in open(sys.argv[1], encoding="utf-8"):
     img = cur[1]; d = ImageDraw.Draw(img); d.fontmode = "1"
     if p[0] == "S":
         sh, x0, y0, x1, y1, c = map(int, p[1:7])
-        if sh == 1: d.line([x0, y0, x1, y1], fill=grey(c))
+        if sh == 0: d.point([x0, y0], fill=grey(c))
+        elif sh == 1: d.line([x0, y0, x1, y1], fill=grey(c))
         elif sh == 2: d.rectangle([x0, y0, x1, y1], outline=grey(c))
         elif sh == 3: d.rectangle([x0, y0, x1, y1], fill=grey(c))
     else:

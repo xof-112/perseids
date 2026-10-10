@@ -782,6 +782,31 @@ int main(int argc, char** argv)
         SetP(I, kParamHold, 30);
         Run(I, mat, 24);
         draw(I.a);
+        // Every Rec style through a recording, its burn-out and Fade In.
+        int embers = 0;
+        for(int style = 0; style < 3; ++style)
+        {
+            SetP(I, kParamRecStyle, style);
+            SetP(I, kParamClear, 1);
+            Signal s = Tone(220.f, 0.03f, 3.f);
+            Run(I, s, 24);
+            SetP(I, kParamCount, 1);
+            SetP(I, kParamContRec, 0);
+            Signal t = Tone(220.f, 2.5f, 3.f);
+            for(size_t k = 0; k < t.l.size(); k += 2400) // draw every 50 ms
+            {
+                Signal part;
+                part.l.assign(t.l.begin() + k, t.l.begin() + std::min(t.l.size(), k + 2400));
+                part.r.assign(part.l.size(), 0.f);
+                Run(I, part, 24);
+                const int before = g_draws;
+                g_logDraw        = false;
+                draw(I.a);
+                if(style < 2 && I.a->eng->capture.RecActive())
+                    embers += g_draws - before;
+            }
+        }
+        CHECK(embers > 200, "recording embers drawn (%d draw calls while recording)", embers);
         CHECK(g_textOob == 0 && g_shapeOob == 0, "display: everything on screen (%d draws)", g_draws);
         g_alg = A.a;
     }

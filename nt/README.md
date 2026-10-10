@@ -27,6 +27,8 @@ Tasten 1/2 bleiben beim NT. Ein Encoder-Klick zählt nur ohne Drehen; in nt_emu 
 
 Display: Kopfzeile mit REC-Anzeige (bzw. dem nächsten Ziel-Trail), Eingangspegel L/R mit Threshold-Marke und Blend-Stellung. Darunter fünf Spalten: Trail-Nummer, Zustand (`REC`, `IN`, Sekunden bis zum Ausblenden, `INF`, `OUT`), Lebensbalken, Level-Balken, `L`/`S` und Level in %. Der gewählte Trail ist umrahmt, Trails über *Count* sind dunkel. Fußzeile: was die drei Potis gerade tun, `HOLD` bei unendlichem Hold, `CPU`, wenn der Swarm-Governor Grains spart.
 
+**Lebensbalken wie am Modul:** Während der Aufnahme ziehen Funken durch den Balken, portiert aus `DrawTrailLifeBar` / `DrawRecSparkleFill` der Firmware (gleicher Hash, gleiche Tempi, gleiche Dichte pro Pixel, 200 ms weiches Erscheinen bzw. Verglühen). Stil über *Rec style* auf der Seite *Display*, wie Settings → REC: **PLR** (Standard, Funken links → rechts bis zur Aufnahme-Front), **PRS** (aus der Mitte), **CTR** (voller Balken aus der Mitte). Danach füllt Fade In den Balken von links, Hold steht voll, Fade Out leert ihn von links. Die Funken sind wie am Modul voll hell; der NT hat 16 Graustufen, deshalb zieht jeder Funke zusätzlich einen schwachen Pixel (Stufe 5) hinter sich her. Sieht man die Abstufung kaum, sieht es aus wie am Modul.
+
 Bildschirm-Renderings: `render/perseids-screens.png` (Schriften angenähert, Positionen echt).
 
 ## Parameter
@@ -41,6 +43,7 @@ Alle Regler sind normale NT-Parameter, also per CV oder MIDI steuerbar.
 | Spectra | Partials 4–32 · Waveshape (Saw ← 0 → Fold) · Umbra/Aurora · Ensemble |
 | Swarm | Size · Spread · Scan · Scatter · Atmosphere · Direction (Fwd/Rev/Rnd) |
 | Mixer | Level 1–5 · Lock 1–5 · Solo 1–5 |
+| Display | Rec style PLR / PRS / CTR |
 | Routing | In L · In R (optional) · Rec trig in (Flanke über 1 V) · Out L/R mit Add/Replace |
 
 Unterschiede zur Firmware, alle durch den NT bedingt:
@@ -87,7 +90,7 @@ make render     # render/perseids-screens.png
 
 ## Tests
 
-`test/sim.cpp` läuft ohne Hardware und prüft 75 Punkte, u. a.:
+`test/sim.cpp` läuft ohne Hardware und prüft 76 Punkte, u. a.:
 
 - Speicherbedarf je *Trail seconds*, Stille rein = Stille raus
 - Spectra trifft 220 Hz, *Pitch Spectra* +12 → 440 Hz; Swarm mit *Pitch Swarm* +12 → 440 Hz und stereo
@@ -96,7 +99,7 @@ make render     # render/perseids-screens.png
 - Capture aus, Rec-Trigger-Eingang, Lebenszyklus bis Fade-out, *Clear trails*
 - Add/Replace, zwei Instanzen ohne gemeinsamen Zustand
 - Bedienung mit NT- und nt_emu-Tastensemantik (Potis, Encoder, Klicks, Ziehen ≠ Klick, Tasten 3/4)
-- Display: alles innerhalb von 256 × 64
+- Display: alles innerhalb von 256 × 64, alle drei Rec-Stile über eine Aufnahme hinweg
 
 Die Hörproben landen in `test/out/` (Eingang, Spectra, Swarm, Blend, Blur, Radiation, Umbra+Fold, Aurora+Saw). **Eigenes Material:** `./test/sim aufnahme.wav` schickt eine WAV-Datei (16/24/32 Bit oder Float) mit Blend 0/50/100 % durch das Plug-in und schreibt `test/out/yours_blend*.wav`.
 
@@ -104,7 +107,7 @@ Der Klick-Detektor hat in der Firmware-Engine einen echten Fehler gefunden: Spec
 
 ## Stand
 
-- Nativ getestet (75 Prüfungen), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
+- Nativ getestet (76 Prüfungen), DLL unter Wine mit einem nt_emu-artigen Host geladen und gespielt.
 - **Noch nicht auf dem NT und nicht in echtem VCV Rack gelaufen.**
 - Firmware: Umbau der Engines bitgleich (Golden-Test vor/nach, 40 s Audio), Firmware-Link mit libDaisy geprüft.
 
