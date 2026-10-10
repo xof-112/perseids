@@ -110,8 +110,9 @@ enum
     kParamModReset = kParamMod5 + 8 * 6, // Mod overview: all slots back to off
     kParamModMode1,                      // per slot: around the base value or override it
     kParamModView = kParamModMode1 + 12, // Display: Mod view as graphics or numbers
+    kParamModShape1,                     // per slot: internal LFO waveform
 
-    kNumParams,
+    kNumParams = kParamModShape1 + 12,
 };
 
 // Mod slot layout: slots 1–4 at kParamMod1 + slot × 5 (+ sync at
@@ -138,6 +139,7 @@ constexpr int ModSyncParam(int m)
 }
 static_assert(ModSyncParam(kNumModSlots - 1) == kParamModReset - 1, "mod slot layout");
 constexpr int ModModeParam(int m) { return kParamModMode1 + m; }
+constexpr int ModShapeParam(int m) { return kParamModShape1 + m; }
 
 // Switch-like slot settings (input, destination, mode, sync) take effect only
 // once they have stood still for this long, or as soon as the plug-in's own
@@ -221,12 +223,30 @@ static_assert(sizeof(kModTargetMarked) / sizeof(kModTargetMarked[0]) == sizeof(k
               "every mod target needs a marked name");
 const char* const kModModes[] = {"Around base", "Override", nullptr};
 const char* const kModViews[] = {"Graphic", "Numbers", nullptr};
+// Internal LFO waveforms. Classic = the module's triangle/sine blend (4.10).
+enum
+{
+    kShapeClassic,
+    kShapeSine,
+    kShapeTriangle,
+    kShapeSawUp,
+    kShapeSawDown,
+    kShapeSquare,
+    kShapeShark,
+    kShapeSharkRev,
+    kShapeExp,
+    kShapeLog,
+    kShapeRandom,
+    kNumShapes
+};
+const char* const kModShapes[] = {"Classic", "Sine",    "Triangle", "Saw up", "Saw down", "Square",
+                                  "Shark",   "Shark rev", "Exp",    "Log",    "Random steps", nullptr};
 static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kModTargets) + 1,
               "every mod target needs a name");
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.21"
+#define PERSEIDS_NT_VERSION "0.22"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -393,6 +413,14 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     // Mod view (Encoder L past the last Trail): tiles with a small scope
     // trace of each destination, or the same as numbers.
     P_ENUM("Mod view", 1, 0, kModViews)
+
+    // Waveform of each slot's internal LFO.
+    P_ENUM("Mod 1 shape", kNumShapes - 1, 0, kModShapes) P_ENUM("Mod 2 shape", kNumShapes - 1, 0, kModShapes)
+    P_ENUM("Mod 3 shape", kNumShapes - 1, 0, kModShapes) P_ENUM("Mod 4 shape", kNumShapes - 1, 0, kModShapes)
+    P_ENUM("Mod 5 shape", kNumShapes - 1, 0, kModShapes) P_ENUM("Mod 6 shape", kNumShapes - 1, 0, kModShapes)
+    P_ENUM("Mod 7 shape", kNumShapes - 1, 0, kModShapes) P_ENUM("Mod 8 shape", kNumShapes - 1, 0, kModShapes)
+    P_ENUM("Mod 9 shape", kNumShapes - 1, 0, kModShapes) P_ENUM("Mod 10 shape", kNumShapes - 1, 0, kModShapes)
+    P_ENUM("Mod 11 shape", kNumShapes - 1, 0, kModShapes) P_ENUM("Mod 12 shape", kNumShapes - 1, 0, kModShapes)
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
@@ -415,8 +443,8 @@ const uint8_t kPageReso[]    = {kParamResoMix,   kParamResoDecay, kParamResoDamp
                                 kParamResoSpread, kParamResoPitch, kParamResoQuant,
                                 kParamResoScale,  kParamResoTuning, kParamResoVoct};
 #define MOD_PAGE(s) {ModParam(s, 0), ModParam(s, 1), ModParam(s, 2), ModParam(s, 3), \
-                     ModModeParam(s), ModParam(s, 4), ModSyncParam(s)}
-constexpr int kModPageParams = kModParams + 2;
+                     ModModeParam(s), ModShapeParam(s), ModParam(s, 4), ModSyncParam(s)}
+constexpr int kModPageParams = kModParams + 3;
 // Overview: built per instance (BuildModOverview) — the reset, then the
 // destination and amount of every slot in use (named "Mod n dest / amount").
 // New slots are set up, and everything else changed, on the slot's own page.
@@ -624,7 +652,10 @@ struct PerseidsAlgorithm : public _NT_algorithm
     uint8_t mod_over[kNumParams];  // an Override slot aims at this parameter
     uint8_t mod_marked[kNumParams]; // name shown with " ~" (display thread)
     float lfo_phase[kNumModSlots];
-    int   lfo_sub[kNumModSlots]; // "Rst xN": last sub-pulse a reset fired on
+    int      lfo_sub[kNumModSlots]; // "Rst xN": last sub-pulse a reset fired on
+    float    lfo_last[kNumModSlots]; // phase of the last chunk (cycle start = wrap)
+    float    lfo_rand[kNumModSlots]; // Random steps: value of this cycle
+    uint32_t lfo_rng;
 
     // Armed (in effect) input / dest / mode / sync per slot, see kModArmS.
     int16_t  mod_armed[kNumModSlots][kArmFields];
@@ -953,6 +984,8 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
         a->lfo_phase[m] = 0.25f * static_cast<float>(m % 4) + 0.0833f * static_cast<float>(m / 4); // spread out
         a->cv_smooth[m] = 0.f;
         a->lfo_sub[m]   = 0;
+        a->lfo_last[m]  = 0.f;
+        a->lfo_rand[m]  = 0.f;
         a->mod_out[m]   = 0.f;
         for(int f = 0; f < kArmFields; ++f)
             a->mod_armed[m][f] = 0;
@@ -963,6 +996,7 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->mod_active  = 0;
     a->mod_arm_now = true; // the stored settings count from the start
     a->mod_reset_ui = false;
+    a->lfo_rng      = 0x2545F491u;
     a->mod_applied = false;
     return a;
 }
@@ -1017,6 +1051,33 @@ float ModLfo(float phase)
     else
         tri = ph * 4.f - 4.f;
     return tri * 0.55f + std::sin(ph * 6.2831853f) * 0.45f;
+}
+
+// One LFO waveform at phase 0…1, output −1…+1.
+float ModShape(int shape, float ph)
+{
+    constexpr float kCurve = 4.f; // bend of Shark / Exp / Log
+    const float     norm   = 1.f / (1.f - std::exp(-kCurve));
+    auto Charge = [&](float t) { return (1.f - std::exp(-kCurve * t)) * norm; };      // fast, then slow
+    auto Rise   = [&](float t) { return (std::exp(kCurve * t) - 1.f) / (std::exp(kCurve) - 1.f); }; // slow, then fast
+    switch(shape)
+    {
+        case kShapeSine: return std::sin(6.2831853f * ph);
+        case kShapeTriangle: return 1.f - 4.f * std::fabs(ph - 0.5f);
+        case kShapeSawUp: return 2.f * ph - 1.f;
+        case kShapeSawDown: return 1.f - 2.f * ph;
+        case kShapeSquare: return ph < 0.5f ? 1.f : -1.f;
+        case kShapeShark: // curved rise, curved fall (capacitor charge / discharge)
+            return 2.f * (ph < 0.5f ? Charge(2.f * ph) : 1.f - Charge(2.f * ph - 1.f)) - 1.f;
+        case kShapeSharkRev: // the same, back to front
+        {
+            const float q = 1.f - ph;
+            return 2.f * (q < 0.5f ? Charge(2.f * q) : 1.f - Charge(2.f * q - 1.f)) - 1.f;
+        }
+        case kShapeExp: return 2.f * Rise(ph) - 1.f;
+        case kShapeLog: return 2.f * Charge(ph) - 1.f;
+        default: return ModLfo(ph);
+    }
 }
 
 // Mod slots for one chunk: contrib = Offset + Amount × source, summed per
@@ -1171,7 +1232,17 @@ bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int 
             else
                 a->lfo_phase[m] += Eff(m, kModRate, 2) * 0.01f * static_cast<float>(n) / sr;
             a->lfo_phase[m] -= static_cast<float>(static_cast<int>(a->lfo_phase[m]));
-            source = ModLfo(a->lfo_phase[m]);
+            // New random step at every cycle start (phase wrapped or reset).
+            if(a->lfo_phase[m] < a->lfo_last[m])
+            {
+                a->lfo_rng ^= a->lfo_rng << 13;
+                a->lfo_rng ^= a->lfo_rng >> 17;
+                a->lfo_rng ^= a->lfo_rng << 5;
+                a->lfo_rand[m] = static_cast<float>(a->lfo_rng >> 8) * (2.f / 16777216.f) - 1.f;
+            }
+            a->lfo_last[m]  = a->lfo_phase[m];
+            const int shape = ParamValue(a, ModShapeParam(m));
+            source          = shape == kShapeRandom ? a->lfo_rand[m] : ModShape(shape, a->lfo_phase[m]);
         }
 
         a->mod_out[m] = dest && (amount != 0.f || offset != 0.f) ? offset + amount * source : 0.f;
@@ -1236,6 +1307,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
             SetParamAudio(a, ModParam(m, kModOffset), 0);
             SetParamAudio(a, ModSyncParam(m), 0);
             SetParamAudio(a, ModModeParam(m), 0);
+            SetParamAudio(a, ModShapeParam(m), 0);
         }
         SetParamAudio(a, kParamModReset, 0);
         a->mod_arm_now   = true; // a reset acts at once

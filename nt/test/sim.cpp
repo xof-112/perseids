@@ -489,6 +489,18 @@ std::string g_out = "test/out";
 int main(int argc, char** argv)
 {
     mkdir(g_out.c_str(), 0755);
+    // --shapes: every LFO waveform over one cycle (for the guide's picture).
+    if(argc > 1 && !std::strcmp(argv[1], "--shapes"))
+    {
+        for(int sh = 0; sh < kNumShapes - 1; ++sh)
+        {
+            printf("%s", kModShapes[sh]);
+            for(int i = 0; i <= 64; ++i)
+                printf("\t%.4f", ModShape(sh, i / 64.f));
+            printf("\n");
+        }
+        return 0;
+    }
     // --list: parameter pages and mod destinations as tab-separated lines,
     // for the appendix of the guide (docs/appendix.py).
     if(argc > 1 && !std::strcmp(argv[1], "--list"))
@@ -1383,6 +1395,49 @@ int main(int argc, char** argv)
         CHECK(!std::strcmp(I.a->parameterPages->pages[0].name, "Trails")
                   && !std::strcmp(I.a->parameterPages->pages[OverviewPageIndex(I.a)].name, "Mod overview"),
               "back on the Trails: usual page order again");
+        g_alg = A.a;
+    }
+
+    // --- LFO shapes --------------------------------------------------------------------
+    {
+        struct Pt { int shape; float ph, want; };
+        const Pt pts[] = {
+            {kShapeSine, 0.25f, 1.f},      {kShapeSine, 0.75f, -1.f},
+            {kShapeTriangle, 0.f, -1.f},   {kShapeTriangle, 0.5f, 1.f},
+            {kShapeSawUp, 0.f, -1.f},      {kShapeSawUp, 0.999f, 0.998f},
+            {kShapeSawDown, 0.f, 1.f},     {kShapeSawDown, 0.75f, -0.5f},
+            {kShapeSquare, 0.2f, 1.f},     {kShapeSquare, 0.7f, -1.f},
+            {kShapeShark, 0.f, -1.f},      {kShapeShark, 0.5f, 1.f},   {kShapeShark, 1.f, -1.f},
+            {kShapeSharkRev, 0.5f, 1.f},   {kShapeExp, 0.f, -1.f},     {kShapeExp, 1.f, 1.f},
+            {kShapeLog, 0.f, -1.f},        {kShapeLog, 1.f, 1.f},
+        };
+        bool ok = true;
+        for(const Pt& p : pts)
+            ok = ok && std::fabs(ModShape(p.shape, p.ph) - p.want) < 0.01f;
+        // Shark rises fast first (above the line), Exp slow first (below), Log fast (above).
+        ok = ok && ModShape(kShapeShark, 0.125f) > -0.5f + 0.2f && ModShape(kShapeExp, 0.5f) < -0.3f
+             && ModShape(kShapeLog, 0.5f) > 0.3f && ModShape(kShapeSharkRev, 0.875f) > -0.3f;
+        CHECK(ok, "LFO shapes: sine, triangle, saw up/down, square, shark both ways, exp, log at their key points");
+
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        SetP(I, ModParam(0, kModDest), 11);
+        SetP(I, ModParam(0, kModAmount), 100);
+        SetP(I, ModParam(0, kModRate), 200); // 2 Hz
+        SetP(I, ModShapeParam(0), kShapeRandom);
+        Signal s;
+        s.l.assign(960, 0.f); // 20 ms
+        s.r = s.l;
+        std::vector<float> outs;
+        for(int k = 0; k < 100; ++k) // 2 s = 4 cycles
+        {
+            Run(I, s, 24);
+            outs.push_back(I.a->mod_out[0]);
+        }
+        int changes = 0;
+        for(size_t k = 1; k < outs.size(); ++k)
+            changes += std::fabs(outs[k] - outs[k - 1]) > 1e-6f;
+        CHECK(changes >= 3 && changes <= 5, "Random steps: one new value per LFO cycle (%d steps in 4 cycles)", changes);
         g_alg = A.a;
     }
 
