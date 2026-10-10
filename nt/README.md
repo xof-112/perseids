@@ -80,7 +80,7 @@ Swarm (überlappende Grains) klingt lauter als Spectra (ein ruhiger Satz Teiltö
 
 ## Mod-Ansicht
 
-Encoder L über den letzten Trail hinaus (Pfeil am rechten Rand) öffnet statt der Trail-Spalten eine Kachel je aktivem Slot (4 × 2, bei mehr als acht seitenweise): Slot, Ziel, Amount und eine kleine Oszilloskop-Spur des Ziels über gut 2 s, der Grundwert gepunktet (25 Werte/s aus `draw()`, im DRAM). Encoder L wählt die Kachel, Encoder R stellt ihren Amount (1 %/Raste); links von der ersten Kachel zurück zu den Trails. *Mod view* (Seite Display) schaltet auf **Numbers**: Grundwert > aktueller Wert in den Einheiten des Parameters, Offset, `ovr`. Solange die Ansicht offen ist, steht *Mod overview* als erste Parameterseite (`NT_updateParameterPages`), damit das Menü dort öffnet. Menü-Timeout und Startseite des Menüs bestimmt der Host; die API bietet dafür nichts.
+Encoder L über den letzten Trail hinaus (Pfeil am rechten Rand) öffnet statt der Trail-Spalten eine Kachel je aktivem Slot (4 × 2, bei mehr als acht seitenweise): Slot, Ziel, Amount und eine kleine Oszilloskop-Spur des Ziels über gut 2 s, der Grundwert gepunktet (25 Werte/s aus `draw()`, im DRAM). Encoder L wählt die Kachel, Encoder R stellt ihren Amount (1 %/Raste); links von der ersten Kachel zurück zu den Trails (Pfeil links), rechts der vierten Kachel ein Pfeil, wenn mehr als acht Slots aktiv sind. *Mod view* (Seite Display) schaltet auf **Numbers**: Grundwert > aktueller Wert in den Einheiten des Parameters, Offset, `ovr`. Solange die Ansicht offen ist, steht *Mod overview* als erste Parameterseite (`NT_updateParameterPages`), damit das Menü dort öffnet. Menü-Timeout und Startseite des Menüs bestimmt der Host; die API bietet dafür nichts.
 
 ## Resonator
 
@@ -166,6 +166,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.17 | *Mod overview* schlanker: nur aktive Slots mit Namen, Ziel und Amount (Seite wird je Instanz neu gebaut, `NT_updateParameterPages`); Mod dest „Off“ heißt jetzt „None“ wie bei den Eingängen; *Mod n amount* zeigt die aktuelle Ausgabe des Slots live |
 | 0.18 | Anhang „Wo steht was“ in der Anleitung (Seiten + nummerierte Mod-Ziele, erzeugt mit `./test/sim --list | python3 docs/appendix.py`); *Reset all mods* setzt jeden Slot ganz zurück (auch Eingang und Rate) und frischt die Menüs auf |
 | 0.19 | Mod-Ansicht (Encoder L hinter dem letzten Trail): Kacheln mit Oszilloskop-Spur je aktivem Slot, Encoder R = Amount, *Mod view* Graphic/Numbers; Pfeil-Hinweis; Mod overview als erste Menüseite, solange die Ansicht offen ist |
+| 0.20 | Mod-Ansicht: Pfeil links der ersten Kachel (zurück), rechts der vierten nur bei mehr als acht aktiven Slots (weitere Seite); Kacheln etwas schmaler |
 
 ## Stand
 

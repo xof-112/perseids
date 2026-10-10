@@ -226,7 +226,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.19"
+#define PERSEIDS_NT_VERSION "0.20"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -2129,9 +2129,9 @@ void DrawModView(PerseidsAlgorithm* a)
         const int m   = active[k];
         const int col = (k % 8) % 4;
         const int row = (k % 8) / 4;
-        const int x0  = 1 + col * 64;
+        const int x0  = 4 + col * 62; // room for the arrows at both edges
         const int y0  = 11 + row * 22;
-        const int x1  = x0 + 61;
+        const int x1  = x0 + 58;
         const int y1  = y0 + 20;
         const bool sel = k == a->mod_sel;
         NT_drawShapeI(kNT_box, x0, y0, x1, y1, sel ? 12 : 3);
@@ -2195,11 +2195,15 @@ void DrawModView(PerseidsAlgorithm* a)
             NT_drawText(x0 + 2, y0 + 19, buff, 8, kNT_textLeft, kNT_textTiny);
         }
     }
-    if(n > 8)
+    // Arrows: left of the first tile = back (to the Trails, or the previous
+    // page); right of the fourth tile = more than eight active slots, the
+    // next page follows.
+    NT_drawShapeI(kNT_line, 2, 18, 0, 21, 8);
+    NT_drawShapeI(kNT_line, 2, 24, 0, 21, 8);
+    if(n > page * 8 + 8)
     {
-        std::strcpy(buff, "page ");
-        NT_intToString(buff + 5, page + 1);
-        NT_drawText(254, 53, buff, 6, kNT_textRight, kNT_textTiny);
+        NT_drawShapeI(kNT_line, 252, 18, 255, 21, 12);
+        NT_drawShapeI(kNT_line, 252, 24, 255, 21, 12);
     }
 }
 
