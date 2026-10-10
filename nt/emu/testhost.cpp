@@ -29,6 +29,7 @@ void NT_setParameterFromAudio(uint32_t, uint32_t p, int16_t v)
     ++params;
 }
 void NT_updateParameterDefinition(uint32_t, uint32_t) {}
+void NT_updateParameterPages(uint32_t) {}
 void NT_requestSetupUi(void) {}
 void NT_drawText(int, int, const char*, int, _NT_textAlignment, _NT_textSize) { ++draws; }
 void NT_drawShapeI(_NT_shape, int, int, int, int, int) { ++draws; }

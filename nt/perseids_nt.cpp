@@ -185,7 +185,7 @@ const uint8_t kModTargets[] = {
     ModParam(11, kModAmount), ModParam(11, kModOffset), ModParam(11, kModRate),
 };
 const char* const kModTargetNames[] = {
-    "Off",
+    "None", // first entry: turn the destination fully left to switch a slot off
     "Count", "Threshold", "Cont. Rec", "Overwrite", "Capture", "Play",
     "Buffer", "Hold", "Fade in", "Fade out",
     "Blend", "Pitch Spectra", "Pitch Swarm", "Output level",
@@ -224,7 +224,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.16"
+#define PERSEIDS_NT_VERSION "0.17"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -333,7 +333,7 @@ const _NT_parameter kParameterDefs[kNumParams] = {
 #define P_MOD_SLOT(n)                                                  \
     NT_PARAMETER_CV_INPUT("Mod " n " in", 0, 0)                        \
     P_ENUM("Mod " n " dest", kNumModTargets - 1, 0, kModTargetNames)   \
-    P_NUM("Mod " n " amount", -100, 100, 0, kNT_unitPercent, 0)        \
+    P_NUM("Mod " n " amount", -100, 100, 0, kNT_unitHasStrings, 0)     \
     P_NUM("Mod " n " offset", -100, 100, 0, kNT_unitPercent, 0)        \
     P_NUM("Mod " n " LFO rate", 1, 2000, 25, kNT_unitHz, kNT_scaling100)
     P_MOD_SLOT("1") P_MOD_SLOT("2") P_MOD_SLOT("3") P_MOD_SLOT("4")
@@ -410,12 +410,11 @@ const uint8_t kPageReso[]    = {kParamResoMix,   kParamResoDecay, kParamResoDamp
 #define MOD_PAGE(s) {ModParam(s, 0), ModParam(s, 1), ModParam(s, 2), ModParam(s, 3), \
                      ModModeParam(s), ModParam(s, 4), ModSyncParam(s)}
 constexpr int kModPageParams = kModParams + 2;
-// Overview: what every slot is aimed at, and one reset for all of them.
-const uint8_t kPageModOverview[] = {kParamModReset, ModParam(0, kModDest), ModParam(1, kModDest),
-                                    ModParam(2, kModDest), ModParam(3, kModDest), ModParam(4, kModDest),
-                                    ModParam(5, kModDest), ModParam(6, kModDest), ModParam(7, kModDest),
-                                    ModParam(8, kModDest), ModParam(9, kModDest), ModParam(10, kModDest),
-                                    ModParam(11, kModDest)};
+// Overview: built per instance (BuildModOverview) — the reset, then the
+// destination and amount of every slot in use (named "Mod n dest / amount").
+// New slots are set up, and everything else changed, on the slot's own page.
+constexpr int kModOverviewMax = 1 + 2 * kNumModSlots;
+const uint8_t kPageModOverview[] = {kParamModReset, ModParam(0, kModDest)}; // initial
 const uint8_t kPageMod[kNumModSlots][kModPageParams] = {
     MOD_PAGE(0), MOD_PAGE(1), MOD_PAGE(2), MOD_PAGE(3), MOD_PAGE(4),  MOD_PAGE(5),
     MOD_PAGE(6), MOD_PAGE(7), MOD_PAGE(8), MOD_PAGE(9), MOD_PAGE(10), MOD_PAGE(11)};
@@ -450,10 +449,9 @@ const _NT_parameterPage kPages[] = {
     {.name = "Mod 12", .numParams = kModPageParams, .group = 9, .unused = {0, 0}, .params = kPageMod[11]},
 };
 
-const _NT_parameterPages kParameterPages = {
-    .numPages = ARRAY_SIZE(kPages),
-    .pages    = kPages,
-};
+constexpr int kNumPages        = static_cast<int>(ARRAY_SIZE(kPages));
+constexpr int kModOverviewPage = 9;
+// (kPages[kModOverviewPage] is "Mod overview"; checked in the tests.)
 
 // Specification: recording time each Trail can hold. Sets the DRAM request
 // (16 bit: 5 Trails × 10 s ≈ 4.8 MB at 48 kHz).
@@ -599,6 +597,11 @@ struct PerseidsAlgorithm : public _NT_algorithm
 
     // Mod slots (audio thread): contribution per destination in units of the
     // destination's full travel, internal LFO phases, smoothed CV.
+    // Per-instance parameter pages: the Mod overview changes with the slots.
+    _NT_parameterPage  pages[kNumPages];
+    _NT_parameterPages pages_desc;
+    uint8_t            overview[kModOverviewMax];
+
     float   mod_sum[kNumParams];
     uint8_t mod_over[kNumParams];  // an Override slot aims at this parameter
     uint8_t mod_marked[kNumParams]; // name shown with " ~" (display thread)
@@ -619,6 +622,7 @@ struct PerseidsAlgorithm : public _NT_algorithm
     uint32_t clock_count;  // edges since the clock (re)appeared
     float cv_smooth[kNumModSlots];
     float   mod_prev[kNumModSlots][3]; // last chunk's mod on amount / offset / rate
+    float   mod_out[kNumModSlots];     // what each slot puts out right now (offset + amount × source)
     uint8_t mod_prev_over[kNumModSlots][3];
     int   mod_active;  // slots currently doing something (display)
     bool  mod_applied; // modulation was applied in the last chunk
@@ -828,6 +832,8 @@ void calculateRequirements(_NT_algorithmRequirements& req, const int32_t* specif
     req.itc           = 0;
 }
 
+bool BuildModOverview(struct PerseidsAlgorithm* a);
+
 _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
                          const _NT_algorithmRequirements& /*req*/,
                          const int32_t* specifications)
@@ -846,7 +852,14 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     if(a->params[kParamBuffer].def > a->params[kParamBuffer].max)
         a->params[kParamBuffer].def = a->params[kParamBuffer].max;
     a->parameters     = a->params;
-    a->parameterPages = &kParameterPages;
+    for(int i = 0; i < kNumPages; ++i)
+        a->pages[i] = kPages[i];
+    a->pages_desc.numPages = kNumPages;
+    a->pages_desc.pages    = a->pages;
+    a->pages[kModOverviewPage].params    = a->overview;
+    a->pages[kModOverviewPage].numParams = 0;
+    a->parameterPages = &a->pages_desc;
+    BuildModOverview(a);
 
     const float sr = static_cast<float>(NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000);
     a->trail_seconds = static_cast<float>(seconds);
@@ -918,6 +931,7 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
         a->lfo_phase[m] = 0.25f * static_cast<float>(m % 4) + 0.0833f * static_cast<float>(m / 4); // spread out
         a->cv_smooth[m] = 0.f;
         a->lfo_sub[m]   = 0;
+        a->mod_out[m]   = 0.f;
         for(int f = 0; f < kArmFields; ++f)
             a->mod_armed[m][f] = 0;
         a->mod_pending_since[m] = 0;
@@ -1129,6 +1143,7 @@ bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int 
             source = ModLfo(a->lfo_phase[m]);
         }
 
+        a->mod_out[m] = dest && (amount != 0.f || offset != 0.f) ? offset + amount * source : 0.f;
         if(!dest || (amount == 0.f && offset == 0.f))
             continue;
         if(a->mod_armed[m][kArmMode])
@@ -1655,8 +1670,32 @@ void setupUi(_NT_algorithm* self, _NT_float3& pots)
         pots[k] = PotNorm(a, k);
 }
 
-int parameterString(_NT_algorithm* /*self*/, int p, int v, char* buff)
+int parameterString(_NT_algorithm* self, int p, int v, char* buff)
 {
+    // Mod amount: the setting, and while the slot works what it puts out now
+    // ("40 % > +23 %"), so the movement shows in the Mod overview and pages.
+    for(int m = 0; m < kNumModSlots; ++m)
+    {
+        if(p != ModParam(m, kModAmount))
+            continue;
+        const PerseidsAlgorithm* a = static_cast<const PerseidsAlgorithm*>(self);
+        int n = NT_intToString(buff, v);
+        std::strcpy(buff + n, " %");
+        n += 2;
+        if(a && a->v && a->mod_armed[m][kArmDest] != 0 && (v != 0 || a->v[ModParam(m, kModOffset)] != 0))
+        {
+            const float o  = a->mod_out[m] * 100.f;
+            const int   oi = static_cast<int>(o >= 0.f ? o + 0.5f : o - 0.5f);
+            std::strcpy(buff + n, " > ");
+            n += 3;
+            if(oi >= 0)
+                buff[n++] = '+';
+            n += NT_intToString(buff + n, oi);
+            std::strcpy(buff + n, " %");
+            n += 2;
+        }
+        return n;
+    }
     if(p != kParamHold)
         return 0;
     if(v >= kHoldInf)
@@ -1942,6 +1981,29 @@ void DrawTrailLifeBar(LifeBarAnim&       anim,
     }
 }
 
+// Rebuilds the Mod overview page from the slots in use; tells the host only
+// when it changed. Returns true then.
+bool BuildModOverview(PerseidsAlgorithm* a)
+{
+    uint8_t list[kModOverviewMax];
+    int     n    = 0;
+    list[n++]    = kParamModReset;
+    for(int m = 0; m < kNumModSlots; ++m)
+    {
+        if(a->v && a->v[ModParam(m, kModDest)] != 0)
+        {
+            list[n++] = static_cast<uint8_t>(ModParam(m, kModDest));
+            list[n++] = static_cast<uint8_t>(ModParam(m, kModAmount));
+        }
+    }
+    _NT_parameterPage& pg = a->pages[kModOverviewPage];
+    if(static_cast<int>(pg.numParams) == n && !std::memcmp(a->overview, list, static_cast<size_t>(n)))
+        return false;
+    std::memcpy(a->overview, list, static_cast<size_t>(n));
+    pg.numParams = static_cast<uint8_t>(n);
+    return true;
+}
+
 // Marks modulated parameters in the menus: their name gets " ~" while a slot
 // is aimed at them (and back when it stops). Display thread, only on change.
 void UpdateModMarks(PerseidsAlgorithm* a)
@@ -1967,6 +2029,8 @@ bool draw(_NT_algorithm* self)
     if(!a->v)
         return false;
     UpdateModMarks(a);
+    if(BuildModOverview(a))
+        NT_updateParameterPages(NT_algorithmIndex(a));
     const Engines& e = *a->eng;
     char           buff[24];
 

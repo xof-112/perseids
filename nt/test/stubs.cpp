@@ -26,6 +26,8 @@ uint32_t NT_parameterOffset(void) { return 0; }
 void     NT_requestSetupUi(void) {}
 int      g_paramDefUpdates = 0;
 void     NT_updateParameterDefinition(uint32_t, uint32_t) { ++g_paramDefUpdates; }
+int      g_pageUpdates = 0;
+void     NT_updateParameterPages(uint32_t) { ++g_pageUpdates; }
 
 void NT_setParameterFromUi(uint32_t, uint32_t p, int16_t v)
 {

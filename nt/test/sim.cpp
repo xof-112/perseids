@@ -1256,6 +1256,51 @@ int main(int argc, char** argv)
         g_alg = A.a;
     }
 
+    // --- Mod overview: only the slots in use (dest + amount) and the next free one -----
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        const _NT_parameterPage& pg = I.a->parameterPages->pages[kModOverviewPage];
+        CHECK(!std::strcmp(pg.name, "Mod overview"), "Mod overview page index (%s)", pg.name);
+        draw(I.a);
+        CHECK(pg.numParams == 1 && pg.params[0] == kParamModReset,
+              "Mod overview, nothing set: only the reset (%d entries)", pg.numParams);
+        g_pageUpdates = 0;
+        SetP(I, ModParam(0, kModDest), 11);
+        SetP(I, ModParam(3, kModDest), 12);
+        draw(I.a);
+        const bool ok = pg.numParams == 5 && pg.params[1] == ModParam(0, kModDest) && pg.params[2] == ModParam(0, kModAmount)
+                        && pg.params[3] == ModParam(3, kModDest) && pg.params[4] == ModParam(3, kModAmount);
+        CHECK(ok && g_pageUpdates == 1, "Mod overview: only the active slots 1 and 4, each dest + amount (%d entries, %d update)",
+              pg.numParams, g_pageUpdates);
+        draw(I.a);
+        CHECK(g_pageUpdates == 1, "Mod overview: no host update while nothing changes");
+        g_alg = A.a;
+    }
+
+    // --- live slot output in the amount entry -------------------------------------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        char b1[64], b2[64];
+        parameterString(I.a, ModParam(2, kModAmount), 40, b1);
+        CHECK(!std::strcmp(b1, "40 %"), "amount of an idle slot reads '%s'", b1);
+        SetP(I, ModParam(2, kModDest), 11);
+        SetP(I, ModParam(2, kModAmount), 40);
+        SetP(I, ModParam(2, kModRate), 200); // 2 Hz
+        Signal s;
+        s.l.assign(4800, 0.f);
+        s.r = s.l;
+        Run(I, s, 24);
+        parameterString(I.a, ModParam(2, kModAmount), 40, b1);
+        Run(I, s, 24);
+        Run(I, s, 24);
+        parameterString(I.a, ModParam(2, kModAmount), 40, b2);
+        CHECK(!std::strncmp(b1, "40 % > ", 7) && std::strcmp(b1, b2) != 0,
+              "amount of a working slot shows its output live: '%s' … '%s'", b1, b2);
+        g_alg = A.a;
+    }
+
     // --- slot settings from the menu take effect after a pause ------------------------
     {
         Inst I = Make(4, g_params);
@@ -1568,7 +1613,6 @@ int main(int argc, char** argv)
         CHECK((hasCustomUi(I.a) & (kNT_button1 | kNT_button2)) == (kNT_button1 | kNT_button2),
               "nt_emu build claims buttons 1/2");
         EmuButton(kNT_button1);
-        _NT_uiData d = Ui();
         Turn(I, 0, 0.2f);
         CHECK(I.a->pot_l_mix && I.v[kParamDryWet] == 20 && I.v[kParamBlend] == 50,
               "nt_emu: button 1 → Pot L sets Dry/Wet (%d %%)", I.v[kParamDryWet]);
