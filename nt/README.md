@@ -174,6 +174,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.26 | v0.25 (Clock-Diagnose) zurückgenommen – die Ursache war ein VCV-Clock-Modul mit dauerhaft 10 V; Amount-Zeile: erst Amount, dann Ziel („40 % Blend > +12 %“) |
 | 0.27 | Amount-Zeile: links „Mod n <Ziel>“ (Name des Amount-Parameters folgt dem Ziel), rechts „40 % > +12 %“ |
 | 0.28 | Markierung und Ziel jetzt im Wert statt im Namen (nt_emu zeigt umbenannte Parameter nicht): modulierte Parameter „37% ~“, Übersicht „Mod 1   Blend 40 % > +12 %“; alle Mod-Ziele zeigen ihren Wert über `parameterString()` |
+| 0.29 | Slot-Seite wieder „Mod n amount   40 % > +12 %“ (ohne Ziel); die Mod overview hat eigene Zeilen „Mod n   Blend 40 % > +12 %“, die mit dem Amount gekoppelt sind; `HOLD`/`CLK` in der Fußzeile weiter links, damit `CLK` in nt_emu nicht mehr in `2 SIZE` steht |
 
 ## Stand
 

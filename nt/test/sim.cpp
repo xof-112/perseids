@@ -513,7 +513,7 @@ int main(int argc, char** argv)
             const _NT_parameterPage& pg = pp->pages[i];
             if(i == static_cast<uint32_t>(OverviewPageIndex(L.a)))
             {
-                printf("P\t%s\t(Reset all mods, dann je aktivem Slot eine Zeile: Mod n amount mit Ziel, Amount, Ausgabe)\n", pg.name);
+                printf("P\t%s\t(Reset all mods, dann je aktivem Slot eine Zeile: Mod n mit Ziel, Amount, Ausgabe)\n", pg.name);
                 continue;
             }
             for(int k = 0; k < pg.numParams; ++k)
@@ -1241,10 +1241,13 @@ int main(int argc, char** argv)
         draw(I.a);
         char mk[64], am[64];
         parameterString(I.a, kParamBlend, I.v[kParamBlend], mk);
-        parameterString(I.a, ModParam(0, kModAmount), I.v[ModParam(0, kModAmount)], am);
+        parameterString(I.a, ModLineParam(0), I.v[ModLineParam(0)], am);
+        char am2[64];
+        parameterString(I.a, ModParam(0, kModAmount), I.v[ModParam(0, kModAmount)], am2);
         CHECK(!std::strcmp(mk, "80% ~") && I.a->params[kParamBlend].unit == kNT_unitHasStrings
-                  && !std::strcmp(I.a->parameters[ModParam(0, kModAmount)].name, "Mod 1") && !std::strncmp(am, "Blend 0 %", 9),
-              "menu mark in the value: Blend '%s', slot line 'Mod 1  %s'", mk, am);
+                  && !std::strcmp(I.a->parameters[ModLineParam(0)].name, "Mod 1") && !std::strncmp(am, "Blend 0 %", 9)
+                  && !std::strcmp(I.a->parameters[ModParam(0, kModAmount)].name, "Mod 1 amount") && !std::strncmp(am2, "0 %", 3),
+              "menu mark in the value: Blend '%s'; overview 'Mod 1  %s'; slot page 'Mod 1 amount  %s'", mk, am, am2);
         CHECK(g_paramDefUpdates == 0, "no parameter renames needed (%d)", g_paramDefUpdates);
         SetP(I, ModParam(5, kModDest), Dest(kParamScan));
         SetP(I, ModParam(5, kModAmount), 30);
@@ -1308,10 +1311,10 @@ int main(int argc, char** argv)
         g_pageUpdates = 0;
         SetMenu(I, ModParam(0, kModDest), 11); // from the menu, no draw() in between
         SetMenu(I, ModParam(3, kModDest), 12);
-        const bool ok = pg.numParams == 3 && pg.params[1] == ModParam(0, kModAmount) && pg.params[2] == ModParam(3, kModAmount);
+        const bool ok = pg.numParams == 3 && pg.params[1] == ModLineParam(0) && pg.params[2] == ModLineParam(3);
         char line[64];
-        parameterString(I.a, ModParam(3, kModAmount), 0, line);
-        const std::string nm = I.a->parameters[ModParam(3, kModAmount)].name;
+        parameterString(I.a, ModLineParam(3), 0, line);
+        const std::string nm = I.a->parameters[ModLineParam(3)].name;
         CHECK(ok && g_pageUpdates == 2 && nm == "Mod 4" && !std::strcmp(line, (std::string(kModTargetNames[12]) + " 0 %").c_str()),
               "Mod overview: one line per active slot ('%s  %s'), follows the menu at once (%d updates)", nm.c_str(), line,
               g_pageUpdates);
@@ -1345,6 +1348,26 @@ int main(int argc, char** argv)
         g_alg = A.a;
     }
 
+    // --- overview line and amount stay one value -----------------------------------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        Signal s;
+        s.l.assign(480, 0.f);
+        s.r = s.l;
+        Run(I, s, 24);
+        SetMenu(I, ModLineParam(4), 35); // edited in the overview
+        Run(I, s, 24);
+        Run(I, s, 24);
+        const bool a1 = I.v[ModParam(4, kModAmount)] == 35;
+        SetMenu(I, ModParam(4, kModAmount), -20); // edited on the slot page
+        Run(I, s, 24);
+        Run(I, s, 24);
+        CHECK(a1 && I.v[ModLineParam(4)] == -20 && I.v[ModParam(4, kModAmount)] == -20,
+              "overview line and slot amount follow each other (35 → amount, −20 → line)");
+        g_alg = A.a;
+    }
+
     // --- live slot output in the amount entry -------------------------------------
     {
         Inst I = Make(4, g_params);
@@ -1363,7 +1386,7 @@ int main(int argc, char** argv)
         Run(I, s, 24);
         Run(I, s, 24);
         parameterString(I.a, ModParam(2, kModAmount), 40, b2);
-        CHECK(!std::strncmp(b1, "Blend 40 % > ", 13)
+        CHECK(!std::strncmp(b1, "40 % > ", 7)
                   && std::strcmp(b1, b2) != 0,
               "amount of a working slot shows its output live: '%s' … '%s'", b1, b2);
         g_alg = A.a;
@@ -1638,7 +1661,8 @@ int main(int argc, char** argv)
             bool amount = false; // "Mod n amount" in the list, the parameter itself is just "Mod n"
             for(int m = 0; m < kNumModSlots; ++m)
                 amount = amount || kModTargets[k] == ModParam(m, kModAmount);
-            names_ok = names_ok && (amount || !std::strcmp(kModTargetNames[k], kParameterDefs[kModTargets[k]].name));
+            (void)amount;
+            names_ok = names_ok && !std::strcmp(kModTargetNames[k], kParameterDefs[kModTargets[k]].name);
         }
         CHECK(names_ok, "mod destination names match the parameter names (%d targets)", kNumModTargets - 1);
 

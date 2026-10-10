@@ -35,7 +35,7 @@ for pg in order:
         continue
     if pg == "Mod 1":
         label = "Mod 1 … Mod %d" % len(mod_pages)
-        params = " · ".join(e("Mod n (Amount)" if n == "Mod 1" else n.replace("Mod 1 ", "Mod n ")) for n in pages[pg])
+        params = " · ".join(e(n.replace("Mod 1 ", "Mod n ")) for n in pages[pg])
     else:
         label = pg
         params = " · ".join(e(n) for n in pages[pg])

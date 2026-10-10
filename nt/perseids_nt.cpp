@@ -111,8 +111,9 @@ enum
     kParamModMode1,                      // per slot: around the base value or override it
     kParamModView = kParamModMode1 + 12, // Display: Mod view as graphics or numbers
     kParamModShape1,                     // per slot: internal LFO waveform
+    kParamModLine1 = kParamModShape1 + 12, // per slot: the Mod overview line (mirrors the amount)
 
-    kNumParams = kParamModShape1 + 12,
+    kNumParams = kParamModLine1 + 12,
 };
 
 // Mod slot layout: slots 1–4 at kParamMod1 + slot × 5 (+ sync at
@@ -140,6 +141,7 @@ constexpr int ModSyncParam(int m)
 static_assert(ModSyncParam(kNumModSlots - 1) == kParamModReset - 1, "mod slot layout");
 constexpr int ModModeParam(int m) { return kParamModMode1 + m; }
 constexpr int ModShapeParam(int m) { return kParamModShape1 + m; }
+constexpr int ModLineParam(int m) { return kParamModLine1 + m; }
 
 // Switch-like slot settings (input, destination, mode, sync) take effect only
 // once they have stood still for this long, or as soon as the plug-in's own
@@ -246,7 +248,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.28"
+#define PERSEIDS_NT_VERSION "0.29"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -355,7 +357,7 @@ const _NT_parameter kParameterDefs[kNumParams] = {
 #define P_MOD_SLOT(n)                                                  \
     NT_PARAMETER_CV_INPUT("Mod " n " in", 0, 0)                        \
     P_ENUM("Mod " n " dest", kNumModTargets - 1, 0, kModTargetNames)   \
-    P_NUM("Mod " n, -100, 100, 0, kNT_unitHasStrings, 0) /* amount */  \
+    P_NUM("Mod " n " amount", -100, 100, 0, kNT_unitHasStrings, 0)     \
     P_NUM("Mod " n " offset", -100, 100, 0, kNT_unitPercent, 0)        \
     P_NUM("Mod " n " LFO rate", 1, 2000, 25, kNT_unitHz, kNT_scaling100)
     P_MOD_SLOT("1") P_MOD_SLOT("2") P_MOD_SLOT("3") P_MOD_SLOT("4")
@@ -421,6 +423,12 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     P_ENUM("Mod 7 shape", kNumShapes - 1, 0, kModShapes) P_ENUM("Mod 8 shape", kNumShapes - 1, 0, kModShapes)
     P_ENUM("Mod 9 shape", kNumShapes - 1, 0, kModShapes) P_ENUM("Mod 10 shape", kNumShapes - 1, 0, kModShapes)
     P_ENUM("Mod 11 shape", kNumShapes - 1, 0, kModShapes) P_ENUM("Mod 12 shape", kNumShapes - 1, 0, kModShapes)
+
+    // Mod overview lines: "Mod n   Blend 40 % > +12 %". Each mirrors its
+    // slot's amount both ways (edit here = edit the amount), see SyncModLines.
+#define P_MOD_LINE(n) P_NUM("Mod " n, -100, 100, 0, kNT_unitHasStrings, 0)
+    P_MOD_LINE("1") P_MOD_LINE("2") P_MOD_LINE("3") P_MOD_LINE("4") P_MOD_LINE("5") P_MOD_LINE("6")
+    P_MOD_LINE("7") P_MOD_LINE("8") P_MOD_LINE("9") P_MOD_LINE("10") P_MOD_LINE("11") P_MOD_LINE("12")
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
@@ -664,6 +672,8 @@ struct PerseidsAlgorithm : public _NT_algorithm
     // Armed (in effect) input / dest / mode / sync per slot, see kModArmS.
     int16_t  mod_armed[kNumModSlots][kArmFields];
     int16_t  mod_seen[kNumModSlots][kArmFields]; // last values seen in v[] (change detection)
+    int16_t  line_seen[kNumModSlots];   // overview line / amount as last synced
+    int16_t  amount_seen[kNumModSlots];
     uint64_t mod_pending_since[kNumModSlots]; // 0 = nothing pending
     volatile bool mod_arm_now;                // own screen used: arm at once
     volatile bool mod_reset_ui;               // after Reset all mods
@@ -1008,6 +1018,7 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
         a->mod_out[m]   = 0.f;
         for(int f = 0; f < kArmFields; ++f)
             a->mod_armed[m][f] = a->mod_seen[m][f] = 0;
+        a->line_seen[m] = a->amount_seen[m] = 0;
         a->mod_pending_since[m] = 0;
         a->mod_prev[m][0] = a->mod_prev[m][1] = a->mod_prev[m][2] = 0.f;
         a->mod_prev_over[m][0] = a->mod_prev_over[m][1] = a->mod_prev_over[m][2] = 0;
@@ -1104,6 +1115,26 @@ float ModShape(int shape, float ph)
 // Returns true if any slot is doing something.
 bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int at, int n)
 {
+    // Overview lines mirror the amounts: whichever changed is copied to the
+    // other (the "seen" values hold the target, so a write that lands a
+    // little later is not taken for a new change).
+    for(int m = 0; m < kNumModSlots; ++m)
+    {
+        const int16_t line = static_cast<int16_t>(ParamValue(a, ModLineParam(m)));
+        const int16_t amt  = static_cast<int16_t>(ParamValue(a, ModParam(m, kModAmount)));
+        if(line != a->line_seen[m])
+        {
+            if(amt != line)
+                SetParamAudio(a, ModParam(m, kModAmount), line);
+            a->line_seen[m] = a->amount_seen[m] = line;
+        }
+        else if(amt != a->amount_seen[m])
+        {
+            if(line != amt)
+                SetParamAudio(a, ModLineParam(m), amt);
+            a->line_seen[m] = a->amount_seen[m] = amt;
+        }
+    }
     // Arm pending slot settings that stood still long enough (or at once).
     // Changes are found by comparing with the values seen last time, so this
     // does not depend on the host calling parameterChanged() (nt_emu's menu
@@ -1340,6 +1371,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
             SetParamAudio(a, ModSyncParam(m), 0);
             SetParamAudio(a, ModModeParam(m), 0);
             SetParamAudio(a, ModShapeParam(m), 0);
+            SetParamAudio(a, ModLineParam(m), 0);
         }
         SetParamAudio(a, kParamModReset, 0);
         a->mod_arm_now   = true; // a reset acts at once
@@ -1923,14 +1955,16 @@ int parameterString(_NT_algorithm* self, int p, int v, char* buff)
 {
     const PerseidsAlgorithm* a = static_cast<const PerseidsAlgorithm*>(self);
     int                      n = -1;
-    // Mod amount: destination, setting, and while the slot works what it puts
-    // out now ("Blend 40 % > +23 %") — one line in the Mod overview.
+    // Mod amount: the setting, and while the slot works what it puts out now
+    // ("40 % > +23 %"). The overview line of the slot shows the same with the
+    // destination in front ("Blend 40 % > +23 %").
     for(int m = 0; m < kNumModSlots && n < 0; ++m)
     {
-        if(p != ModParam(m, kModAmount))
+        const bool line = p == ModLineParam(m);
+        if(p != ModParam(m, kModAmount) && !line)
             continue;
         n = 0;
-        if(a && a->v && a->v[ModParam(m, kModDest)] != 0)
+        if(line && a && a->v && a->v[ModParam(m, kModDest)] != 0)
         {
             const char* d = kModTargetNames[a->v[ModParam(m, kModDest)]];
             std::strcpy(buff, d);
@@ -2449,7 +2483,7 @@ bool BuildModOverview(PerseidsAlgorithm* a)
     for(int m = 0; m < kNumModSlots; ++m)
     {
         if(a->v && a->v[ModParam(m, kModDest)] != 0)
-            list[n++] = static_cast<uint8_t>(ModParam(m, kModAmount)); // one line: "Mod n amount  Dest 40 % > +12 %"
+            list[n++] = static_cast<uint8_t>(ModLineParam(m)); // one line: "Mod n   Blend 40 % > +12 %"
     }
     if(a->overview_count == n && !std::memcmp(a->overview, list, static_cast<size_t>(n)))
         return false;
@@ -2624,7 +2658,7 @@ bool draw(_NT_algorithm* self)
     NT_drawText(254, 61, buff, ValColour(2), kNT_textRight, kNT_textTiny);
 
     if(ParamValue(a, kParamHold) == kHoldInf)
-        NT_drawText(160, 61, "HOLD", 15, kNT_textLeft, kNT_textTiny);
+        NT_drawText(148, 61, "HOLD", 15, kNT_textLeft, kNT_textTiny);
     if(e.swarm.GovernorActive())
         NT_drawText(60, 61, "CPU", 15, kNT_textLeft, kNT_textTiny);
     bool mod_pending = false;
@@ -2646,9 +2680,9 @@ bool draw(_NT_algorithm* self)
     for(int m = 0; m < kNumModSlots; ++m)
         wants_clock = wants_clock || (a->mod_armed[m][kArmSync] != 0 && a->mod_armed[m][kArmDest] != 0);
     if(a->clock_valid)
-        NT_drawText(179, 61, "CLK", 12, kNT_textLeft, kNT_textTiny);
+        NT_drawText(168, 61, "CLK", 12, kNT_textLeft, kNT_textTiny);
     else if(wants_clock)
-        NT_drawText(179, 61, "CLK?", 6, kNT_textLeft, kNT_textTiny); // synced slot, no clock arriving
+        NT_drawText(168, 61, "CLK?", 6, kNT_textLeft, kNT_textTiny); // synced slot, no clock arriving
     return true;
 }
 
