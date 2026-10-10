@@ -156,7 +156,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.10"
+#define PERSEIDS_NT_VERSION "0.11"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Hold: the top value means "infinite" (engine: > 30 s).
@@ -286,13 +286,14 @@ const _NT_parameterPage kPages[] = {
     {.name = "Engines", .numParams = ARRAY_SIZE(kPageEngines), .group = 3, .unused = {0, 0}, .params = kPageEngines},
     {.name = "Spectra", .numParams = ARRAY_SIZE(kPageSpectra), .group = 4, .unused = {0, 0}, .params = kPageSpectra},
     {.name = "Swarm", .numParams = ARRAY_SIZE(kPageSwarm), .group = 5, .unused = {0, 0}, .params = kPageSwarm},
+    // Resonator sits on the Swarm output, so its page follows Swarm.
+    {.name = "Resonator", .numParams = ARRAY_SIZE(kPageReso), .group = 10, .unused = {0, 0}, .params = kPageReso},
     {.name = "Mixer", .numParams = ARRAY_SIZE(kPageMixer), .group = 6, .unused = {0, 0}, .params = kPageMixer},
     // Same group: the cursor keeps its row when stepping Mod 1 → Mod 4.
     {.name = "Mod 1", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod1},
     {.name = "Mod 2", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod2},
     {.name = "Mod 3", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod3},
     {.name = "Mod 4", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod4},
-    {.name = "Resonator", .numParams = ARRAY_SIZE(kPageReso), .group = 10, .unused = {0, 0}, .params = kPageReso},
     {.name = "Display", .numParams = ARRAY_SIZE(kPageDisplay), .group = 8, .unused = {0, 0}, .params = kPageDisplay},
     {.name = "Routing", .numParams = ARRAY_SIZE(kPageRouting), .group = 7, .unused = {0, 0}, .params = kPageRouting},
 };

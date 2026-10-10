@@ -46,8 +46,8 @@ Alle Regler sind normale NT-Parameter, also per CV oder MIDI steuerbar.
 | Engines | Blend % · Dry/Wet % · Pitch Spectra ±24 HT · Pitch Swarm ±24 HT · Output level −24…+24 dB |
 | Spectra | Partials 4–32 · Waveshape (Saw ← 0 → Fold) · Umbra/Aurora · Ensemble |
 | Swarm | Size · Spread · Scan · Scatter · Atmosphere · Direction (Fwd/Rev/Rnd) |
-| Mixer | Level 1–5 · Lock 1–5 · Solo 1–5 |
 | Resonator | Reso mix (25 %) · Reso decay · Reso damping · Reso spread · Reso pitch ±12 HT · Reso quantize · Reso scale (Major/Minor/Pentatonic) · Reso tuning (Equal/Just) · Reso V/Oct in |
+| Mixer | Level 1–5 · Lock 1–5 · Solo 1–5 |
 | Mod 1–4 | Mod in (CV-Eingang, leer = internes LFO) · Mod dest · Mod amount ±100 % · Mod offset ±100 % · Mod LFO rate 0,01–20 Hz |
 | Display | Rec style PLR / PRS / CTR |
 | Routing | In L · In R (optional) · Rec trig in (Flanke über 1 V) · Out L/R mit Add/Replace |
@@ -145,6 +145,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.8 | nt_emu: Poti-Drücke werden ignoriert (nt_emu meldet beim Anfassen eines Potis einen Druck, Drehen schaltete das Ziel zurück); umgeschaltet wird nur mit Taste 1/2 |
 | 0.9 | REC-Anzeige im Kopf nach rechts, verdeckt die Versionsnummer nicht mehr; Version heller |
 | 0.10 | Hold wirkt sofort auf laufende Trails (INF stoppt den Countdown, kürzer als schon gespielt → Fade out, länger während des Fade out → Trail kommt zurück); Overwrite Off + INF: Threshold/Cont. Rec lassen INF-Trails stehen, nur Rec ersetzt den ältesten; Makefile mit Header-Abhängigkeiten; beides gilt auch in der Firmware (ARCHITECTURE §4.8) |
+| 0.11 | Parameterseite *Resonator* direkt nach *Swarm*, vor *Mixer* (sie liegt auf dem Swarm-Ausgang) |
 
 ## Stand
 
