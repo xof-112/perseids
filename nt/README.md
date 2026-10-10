@@ -50,9 +50,9 @@ Alle Regler sind normale NT-Parameter, also per CV oder MIDI steuerbar.
 | Swarm | Size · Spread · Scan · Scatter · Atmosphere · Direction (Fwd/Rev/Rnd) |
 | Resonator | Reso mix (25 %) · Reso decay · Reso damping · Reso spread · Reso pitch ±12 HT · Reso quantize · Reso scale (Major/Minor/Pentatonic) · Reso tuning (Equal/Just) · Reso V/Oct in |
 | Mixer | Level 1–5 · Lock 1–5 · Solo 1–5 |
-| Mod 1–4 | Mod in (CV-Eingang, leer = internes LFO) · Mod dest · Mod amount ±100 % · Mod offset ±100 % · Mod LFO rate 0,01–20 Hz |
+| Mod 1–12 | Mod in (CV-Eingang, leer = internes LFO) · Mod dest · Mod amount ±100 % · Mod offset ±100 % · Mod LFO rate 0,01–20 Hz · Mod sync Free / ÷ / × |
 | Display | Rec style PLR / PRS / CTR |
-| Routing | In L · In R (optional) · Rec trig in (Flanke über 1 V) · Out L/R mit Add/Replace |
+| Routing | In L · In R (optional) · Rec trig in (Flanke über 1 V) · Clock in (Flanke über 1 V) · Out L/R mit Add/Replace |
 
 **Dry/Wet** wie der Multi der Firmware: überblendet gleichlaut zwischen dem sauberen Stereo-Eingang (In R leer → In L auf beiden Seiten) und der Wolke, das trockene Signal mit 0,85 wie in der Firmware. Ab Werk 100 % = nur Wolke, wie vor diesem Parameter. Unter 100 % die Ausgänge auf *Replace* oder auf eigene Busse legen, sonst kommt das Original doppelt. Auch Mod-Ziel.
 
@@ -67,7 +67,7 @@ Unterschiede zur Firmware, alle durch den NT bedingt:
 
 Zwei Wege, die sich ergänzen:
 
-- **Mod-Slots im Plug-in** (Seiten *Mod 1* bis *Mod 4*), wie die vier Mod-Slots des Moduls (ARCHITECTURE 4.3): *Mod in* wählt einen CV-Eingang oder Bus; bleibt er leer, arbeitet das interne LFO (Dreieck/Sinus wie am Modul, *LFO rate* 0,01–20 Hz) – das ist die Normalisierung der Mod-Buchsen. *Mod dest* ist jeder Klang- und Trail-Parameter (48 Ziele: Trails, Time, Engines inkl. Dry/Wet, Spectra, Swarm, Resonator, Level/Lock/Solo je Trail). Gerechnet wird wie am Modul: `Beitrag = Offset + Amount × Quelle`, `Ziel = Grundwert + Beitrag × voller Regelweg`, begrenzt. ±5 V = ±100 % Quelle. Mehrere Slots auf dasselbe Ziel addieren sich. Der gespeicherte Wert bleibt stehen, nur der wirksame Wert bewegt sich; Schalter und Zahlen (Lock, Count, Size, Direction …) werden gerundet. Ausgenommen sind Routing, *Clear trails* und *Rec style*.
+- **Mod-Slots im Plug-in** (Seiten *Mod 1* bis *Mod 12*, am Ende der Seitenliste), aufgebaut wie die vier Mod-Slots des Moduls (ARCHITECTURE 4.3): *Mod in* wählt einen CV-Eingang oder Bus; bleibt er leer, arbeitet das interne LFO (Dreieck/Sinus wie am Modul, *LFO rate* 0,01–20 Hz) – das ist die Normalisierung der Mod-Buchsen. *Mod dest* ist jeder Klang- und Trail-Parameter (Trails, Time, Engines inkl. Dry/Wet, Spectra, Swarm, Resonator, Level/Lock/Solo je Trail) und **Amount, Offset und LFO rate jedes Slots** („Mod the mod“, eine Chunk-Länge ≈ 1 ms später) – 84 Ziele. *Mod sync* legt das interne LFO auf *Clock in* (Seite Routing, Flanke über 1 V): **Free**, **/16 /8 /4 /3 /2** (ein Durchlauf über N Takte) oder **x1 x2 x3 x4 x8** (N Durchläufe pro Takt), am Takt neu gestartet (ARCHITECTURE 4.3 Divider, 4.10). Bleibt die Clock 4 Perioden (höchstens 3 s) aus, läuft das LFO frei weiter; `CLK` in der Fußzeile zeigt eine laufende Clock. LFO rate bleibt bei höchstens 20 Hz: die Slots rechnen je 64 Samples, Modulation ist ein Steuersignal. Gerechnet wird wie am Modul: `Beitrag = Offset + Amount × Quelle`, `Ziel = Grundwert + Beitrag × voller Regelweg`, begrenzt. ±5 V = ±100 % Quelle. Mehrere Slots auf dasselbe Ziel addieren sich. Der gespeicherte Wert bleibt stehen, nur der wirksame Wert bewegt sich; Schalter und Zahlen (Lock, Count, Size, Direction …) werden gerundet. Ausgenommen sind Routing, *Clear trails* und *Rec style*.
 - **CV-/MIDI-Mapping des NT:** Jeder Parameter, auch die Mod-Slots selbst, lässt sich zusätzlich im NT auf CV oder MIDI legen. Das verstellt den gespeicherten Wert direkt.
 
 Typisch: Slot ohne Kabel, Amount 30 %, LFO 0,05 Hz auf *Scan* – die Wolke wandert von selbst. Oder ein Hüllkurvenfolger auf *Mod 1 in*, Ziel *Blend*: laute Stellen schieben zu Swarm.
@@ -157,6 +157,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.12 | Catch-up für Poti L/C/R: kein Sprung nach dem Umschalten oder nach einer Menü-Änderung; Wert dunkel, solange das Poti noch nicht übernommen hat |
 | 0.13 | *Level match*: Spectra und Swarm gleich laut (Lautheitsfolger je Engine gegen die Trail-Summe, ±12 dB, ab Werk On) |
 | 0.14 | *Match speed* Slow/Medium/Fast für Level match; Einrasten in den ersten 3 s immer schnell (kein Nachziehen am Anfang); Lautheitsfolger fällt jetzt über 1,2 s |
+| 0.15 | *Clock in* mit *Mod sync* je Slot (Free, /16…/2, x1…x8, Reset am Takt, Clock-Verlust → frei); 12 Mod-Slots, Seiten am Ende; Mod the mod (Amount/Offset/Rate jedes Slots als Ziel) |
 
 ## Stand
 

@@ -491,7 +491,7 @@ int main(int argc, char** argv)
         calculateRequirements(req, spec);
         CHECK(req.numParameters == kNumParams, "%d parameters", kNumParams);
         CHECK(req.dram > 4800000 && req.dram < 5200000, "DRAM for 5 x 10 s: %.2f MB", req.dram / 1e6);
-        CHECK(req.sram < 4096, "SRAM %u bytes", req.sram);
+        CHECK(req.sram < 8192, "SRAM %u bytes (instance + parameter table)", req.sram);
         spec[0] = 30;
         calculateRequirements(req, spec);
         CHECK(req.dram < 15000000, "DRAM for 5 x 30 s: %.2f MB", req.dram / 1e6);
@@ -1057,6 +1057,116 @@ int main(int argc, char** argv)
         silent.r = silent.l;
         Signal oy = Run(Y, silent, 24);
         CHECK(Peak(oy.l) < 1e-6f, "second instance stays silent while the first plays");
+    }
+
+    // --- Clock in: synced mod LFOs ------------------------------------------------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        SetP(I, kParamClockIn, 3);
+        SetP(I, kParamModSync1, 6);     // x1: one LFO cycle per pulse
+        SetP(I, kParamModSync1 + 1, 3); // /4: one cycle over four pulses
+        SetP(I, kParamModSync1 + 2, 9); // x4
+        // 2 Hz clock (period 24000 samples), 5 ms pulses, 4 s.
+        const size_t       len = 48000 * 4;
+        std::vector<float> ck(len, 0.f);
+        for(size_t i = 1000; i < len; i += 24000)
+            for(size_t k = 0; k < 240 && i + k < len; ++k)
+                ck[i + k] = 5.f;
+        Signal s;
+        s.l.assign(24, 0.f);
+        s.r = s.l;
+        std::vector<float> ph0, ph1, ph2;
+        bool               valid_seen = false;
+        for(size_t pos = 0; pos + 24 <= len; pos += 24)
+        {
+            Run(I, s, 24, ck.data() + pos);
+            valid_seen = valid_seen || I.a->clock_valid;
+            if(pos >= 1000 + 24000 * 2 && (pos - 1000) % 6000 < 24) // quarter-pulse marks
+            {
+                ph0.push_back(I.a->lfo_phase[0]);
+                ph1.push_back(I.a->lfo_phase[1]);
+                ph2.push_back(I.a->lfo_phase[2]);
+            }
+        }
+        CHECK(valid_seen && std::fabs(I.a->clock_period - 24000.f) < 30.f,
+              "Clock in: 2 Hz clock detected (period %.0f samples)", I.a->clock_period);
+        // x1 at quarter steps between pulses: 0, .25, .5, .75 (±0.02).
+        bool x1_ok = ph0.size() >= 8, d4_ok = ph1.size() >= 8, x4_ok = ph2.size() >= 8;
+        for(size_t k = 0; k < ph0.size(); ++k)
+        {
+            const float want = 0.25f * static_cast<float>(k % 4);
+            float       d    = std::fabs(ph0[k] - want);
+            d                = std::min(d, 1.f - d);
+            x1_ok            = x1_ok && d < 0.02f;
+            float d2         = std::fabs(ph2[k]);
+            d2               = std::min(d2, 1.f - d2);
+            x4_ok            = x4_ok && d2 < 0.03f; // four cycles per pulse: whole cycles at the marks
+        }
+        for(size_t k = 1; k < ph1.size(); ++k)
+        {
+            float step = ph1[k] - ph1[k - 1];
+            if(step < 0.f)
+                step += 1.f;
+            d4_ok = d4_ok && std::fabs(step - 0.0625f) < 0.01f; // 1/16 cycle per quarter pulse
+        }
+        CHECK(x1_ok, "Clock in: x1 LFO runs one cycle per pulse, locked to the pulses");
+        CHECK(d4_ok, "Clock in: /4 LFO runs one cycle over four pulses");
+        CHECK(x4_ok, "Clock in: x4 LFO runs four cycles per pulse");
+        // Clock stops: after 4 periods (2 s) synced slots fall back to free.
+        std::vector<float> none(48000 * 3, 0.f);
+        Signal             q;
+        q.l.assign(none.size(), 0.f);
+        q.r = q.l;
+        Run(I, q, 24, none.data());
+        CHECK(!I.a->clock_valid, "Clock in: clock lost after 4 missing pulses, LFOs run free");
+        g_textOob = g_shapeOob = 0;
+        draw(I.a);
+        CHECK(g_textOob == 0 && g_shapeOob == 0, "Clock in: display on screen");
+        g_alg = A.a;
+    }
+
+    // --- 12 mod slots, mod the mod ------------------------------------------------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        auto Dest = [&](int param) {
+            for(int k = 0; k < kNumModTargets; ++k)
+                if(kModTargets[k] == param)
+                    return k;
+            return 0;
+        };
+        Signal s;
+        s.l.assign(4800, 0.f); // 0.1 s
+        s.r = s.l;
+        // Slot 12: offset −40 % on Blend.
+        SetP(I, ModParam(11, kModDest), Dest(kParamBlend));
+        SetP(I, ModParam(11, kModOffset), -40);
+        Run(I, s, 24);
+        CHECK(std::fabs(I.a->blend - 0.1f) < 0.01f, "Mod 12 works like the others (Blend 50 → %.0f %%)",
+              I.a->blend * 100.f);
+        // Mod the mod: slot 2 pushes slot 1's LFO rate from 1 Hz up by +50 % of its travel.
+        SetP(I, ModParam(0, kModDest), Dest(kParamScan));
+        SetP(I, ModParam(0, kModAmount), 20);
+        SetP(I, ModParam(0, kModRate), 100);
+        float p0 = I.a->lfo_phase[0];
+        Run(I, s, 24);
+        float slow = I.a->lfo_phase[0] - p0;
+        slow += slow < 0.f ? 1.f : 0.f;
+        SetP(I, ModParam(1, kModDest), Dest(ModParam(0, kModRate)));
+        SetP(I, ModParam(1, kModOffset), 50);
+        Run(I, s, 24); // let the chain settle one block
+        p0 = I.a->lfo_phase[0];
+        Signal t;
+        t.l.assign(480, 0.f); // 10 ms: under one cycle even at 11 Hz
+        t.r = t.l;
+        Run(I, t, 24);
+        float fast = I.a->lfo_phase[0] - p0;
+        fast += fast < 0.f ? 1.f : 0.f;
+        CHECK(std::fabs(slow - 0.1f) < 0.01f && std::fabs(fast / 0.01f - 11.f) < 0.5f,
+              "Mod the mod: slot 2 raises slot 1's LFO from %.1f Hz to %.1f Hz", slow / 0.1f, fast / 0.01f);
+        CHECK(kNumModTargets == 85, "mod targets incl. amount / offset / rate of all 12 slots (%d)", kNumModTargets);
+        g_alg = A.a;
     }
 
     // --- mod slots ---------------------------------------------------------------

@@ -102,12 +102,19 @@ enum
     kParamResoVoct,
     kParamLevelMatch,
     kParamMatchSpeed,
+    kParamClockIn,
+    kParamModSync1, // one per mod slot: internal LFO free or locked to Clock in
+    kParamModSync4 = kParamModSync1 + 3,
+    // Mod slots 5–12, added later: six parameters each (the five + sync).
+    kParamMod5,
 
-    kNumParams,
+    kNumParams = kParamMod5 + 8 * 6,
 };
 
-// Mod slot layout: kParamMod1 + slot * kModParams + field.
-constexpr int kNumModSlots = 4;
+// Mod slot layout: slots 1–4 at kParamMod1 + slot × 5 (+ sync at
+// kParamModSync1 + slot), slots 5–12 at kParamMod5 + (slot − 4) × 6.
+// Use ModParam() / ModSyncParam(), never the raw layout.
+constexpr int kNumModSlots = 12;
 enum
 {
     kModIn,     // CV input bus; none = internal LFO (jack normalling, 4.10 "OFF")
@@ -117,7 +124,16 @@ enum
     kModRate,   // internal LFO rate, 0.01–20 Hz
     kModParams,
 };
-static_assert(kParamDryWet == kParamMod1 + kNumModSlots * kModParams, "mod slot layout");
+static_assert(kParamDryWet == kParamMod1 + 4 * kModParams, "mod slot layout");
+constexpr int ModParam(int m, int field)
+{
+    return m < 4 ? kParamMod1 + m * kModParams + field : kParamMod5 + (m - 4) * (kModParams + 1) + field;
+}
+constexpr int ModSyncParam(int m)
+{
+    return m < 4 ? kParamModSync1 + m : kParamMod5 + (m - 4) * (kModParams + 1) + kModParams;
+}
+static_assert(ModSyncParam(kNumModSlots - 1) == kNumParams - 1, "mod slot layout");
 
 // Everything a slot can modulate: all sound and Trail parameters. Not routing,
 // not Clear trails (a held mod would clear forever), not the display or the
@@ -136,6 +152,20 @@ const uint8_t kModTargets[] = {
     kParamDryWet,
     kParamResoMix, kParamResoDecay, kParamResoDamping, kParamResoSpread, kParamResoPitch,
     kParamResoQuant, kParamResoScale, kParamResoTuning,
+    // Mod the mod: amount, offset and LFO rate of every slot (applied one
+    // chunk later, ~1 ms, so a slot may even modulate itself).
+    ModParam(0, kModAmount), ModParam(0, kModOffset), ModParam(0, kModRate),
+    ModParam(1, kModAmount), ModParam(1, kModOffset), ModParam(1, kModRate),
+    ModParam(2, kModAmount), ModParam(2, kModOffset), ModParam(2, kModRate),
+    ModParam(3, kModAmount), ModParam(3, kModOffset), ModParam(3, kModRate),
+    ModParam(4, kModAmount), ModParam(4, kModOffset), ModParam(4, kModRate),
+    ModParam(5, kModAmount), ModParam(5, kModOffset), ModParam(5, kModRate),
+    ModParam(6, kModAmount), ModParam(6, kModOffset), ModParam(6, kModRate),
+    ModParam(7, kModAmount), ModParam(7, kModOffset), ModParam(7, kModRate),
+    ModParam(8, kModAmount), ModParam(8, kModOffset), ModParam(8, kModRate),
+    ModParam(9, kModAmount), ModParam(9, kModOffset), ModParam(9, kModRate),
+    ModParam(10, kModAmount), ModParam(10, kModOffset), ModParam(10, kModRate),
+    ModParam(11, kModAmount), ModParam(11, kModOffset), ModParam(11, kModRate),
 };
 const char* const kModTargetNames[] = {
     "Off",
@@ -150,6 +180,18 @@ const char* const kModTargetNames[] = {
     "Dry/Wet",
     "Reso mix", "Reso decay", "Reso damping", "Reso spread", "Reso pitch",
     "Reso quantize", "Reso scale", "Reso tuning",
+    "Mod 1 amount", "Mod 1 offset", "Mod 1 LFO rate",
+    "Mod 2 amount", "Mod 2 offset", "Mod 2 LFO rate",
+    "Mod 3 amount", "Mod 3 offset", "Mod 3 LFO rate",
+    "Mod 4 amount", "Mod 4 offset", "Mod 4 LFO rate",
+    "Mod 5 amount", "Mod 5 offset", "Mod 5 LFO rate",
+    "Mod 6 amount", "Mod 6 offset", "Mod 6 LFO rate",
+    "Mod 7 amount", "Mod 7 offset", "Mod 7 LFO rate",
+    "Mod 8 amount", "Mod 8 offset", "Mod 8 LFO rate",
+    "Mod 9 amount", "Mod 9 offset", "Mod 9 LFO rate",
+    "Mod 10 amount", "Mod 10 offset", "Mod 10 LFO rate",
+    "Mod 11 amount", "Mod 11 offset", "Mod 11 LFO rate",
+    "Mod 12 amount", "Mod 12 offset", "Mod 12 LFO rate",
     nullptr,
 };
 constexpr int kNumModTargets = static_cast<int>(sizeof(kModTargets));
@@ -158,7 +200,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.14"
+#define PERSEIDS_NT_VERSION "0.15"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -197,6 +239,12 @@ const char* const kRecStyle[] = {"PRS", "PLR", "CTR", nullptr};
 const char* const kResoScales[]  = {"Major", "Minor", "Pentatonic", nullptr};
 const char* const kResoTunings[] = {"Equal", "Just", nullptr};
 const char* const kMatchSpeeds[] = {"Slow", "Medium", "Fast", nullptr};
+// Mod LFO sync to Clock in: LFO cycles per clock pulse (÷ = one cycle over N
+// pulses, × = N cycles per pulse). Free = the slot's own LFO rate.
+const char* const kModSyncNames[] = {"Free", "/16", "/8", "/4", "/3", "/2", "x1",
+                                     "x2",   "x3",  "x4", "x8", nullptr};
+constexpr int kModSyncDiv[] = {0, 16, 8, 4, 3, 2, 1, 1, 1, 1, 1}; // pulses per reset
+constexpr int kModSyncMul[] = {0, 1, 1, 1, 1, 1, 1, 2, 3, 4, 8};  // cycles per reset
 
 #define P_NUM(n, lo, hi, d, u, sc) \
     {.name = n, .min = lo, .max = hi, .def = d, .unit = u, .scaling = sc, .enumStrings = nullptr},
@@ -282,6 +330,20 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     // crossfades between equally loud engines (NT only, see step()).
     P_ENUM("Level match", 1, 1, kOffOn)
     P_ENUM("Match speed", 2, 1, kMatchSpeeds)
+
+    // Clock for the mod LFOs (ARCHITECTURE 4.3 Divider / 4.10 OFF: rate =
+    // clock period × divider). Rising edge above 1 V. No pulse for 4 periods
+    // (or 3 s) = clock lost: synced slots fall back to their free rate.
+    NT_PARAMETER_CV_INPUT("Clock in", 0, 0)
+    P_ENUM("Mod 1 sync", 10, 0, kModSyncNames)
+    P_ENUM("Mod 2 sync", 10, 0, kModSyncNames)
+    P_ENUM("Mod 3 sync", 10, 0, kModSyncNames)
+    P_ENUM("Mod 4 sync", 10, 0, kModSyncNames)
+
+    // Mod slots 5–12: same as 1–4, sync included.
+#define P_MOD_SLOT_SYNC(n) P_MOD_SLOT(n) P_ENUM("Mod " n " sync", 10, 0, kModSyncNames)
+    P_MOD_SLOT_SYNC("5") P_MOD_SLOT_SYNC("6") P_MOD_SLOT_SYNC("7") P_MOD_SLOT_SYNC("8")
+    P_MOD_SLOT_SYNC("9") P_MOD_SLOT_SYNC("10") P_MOD_SLOT_SYNC("11") P_MOD_SLOT_SYNC("12")
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
@@ -303,14 +365,11 @@ const uint8_t kPageDisplay[] = {kParamRecStyle};
 const uint8_t kPageReso[]    = {kParamResoMix,   kParamResoDecay, kParamResoDamping,
                                 kParamResoSpread, kParamResoPitch, kParamResoQuant,
                                 kParamResoScale,  kParamResoTuning, kParamResoVoct};
-#define MOD_PAGE(s) {kParamMod1 + (s) * kModParams, kParamMod1 + (s) * kModParams + 1,      \
-                     kParamMod1 + (s) * kModParams + 2, kParamMod1 + (s) * kModParams + 3, \
-                     kParamMod1 + (s) * kModParams + 4}
-const uint8_t kPageMod1[] = MOD_PAGE(0);
-const uint8_t kPageMod2[] = MOD_PAGE(1);
-const uint8_t kPageMod3[] = MOD_PAGE(2);
-const uint8_t kPageMod4[] = MOD_PAGE(3);
-const uint8_t kPageRouting[] = {kParamInL, kParamInR, kParamRecIn, kParamOutL,
+#define MOD_PAGE(s) {ModParam(s, 0), ModParam(s, 1), ModParam(s, 2), ModParam(s, 3), ModParam(s, 4), ModSyncParam(s)}
+const uint8_t kPageMod[kNumModSlots][kModParams + 1] = {
+    MOD_PAGE(0), MOD_PAGE(1), MOD_PAGE(2), MOD_PAGE(3), MOD_PAGE(4),  MOD_PAGE(5),
+    MOD_PAGE(6), MOD_PAGE(7), MOD_PAGE(8), MOD_PAGE(9), MOD_PAGE(10), MOD_PAGE(11)};
+const uint8_t kPageRouting[] = {kParamInL, kParamInR, kParamRecIn, kParamClockIn, kParamOutL,
                                 kParamOutLMode, kParamOutR, kParamOutRMode};
 
 const _NT_parameterPage kPages[] = {
@@ -322,13 +381,21 @@ const _NT_parameterPage kPages[] = {
     // Resonator sits on the Swarm output, so its page follows Swarm.
     {.name = "Resonator", .numParams = ARRAY_SIZE(kPageReso), .group = 10, .unused = {0, 0}, .params = kPageReso},
     {.name = "Mixer", .numParams = ARRAY_SIZE(kPageMixer), .group = 6, .unused = {0, 0}, .params = kPageMixer},
-    // Same group: the cursor keeps its row when stepping Mod 1 → Mod 4.
-    {.name = "Mod 1", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod1},
-    {.name = "Mod 2", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod2},
-    {.name = "Mod 3", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod3},
-    {.name = "Mod 4", .numParams = kModParams, .group = 9, .unused = {0, 0}, .params = kPageMod4},
     {.name = "Display", .numParams = ARRAY_SIZE(kPageDisplay), .group = 8, .unused = {0, 0}, .params = kPageDisplay},
     {.name = "Routing", .numParams = ARRAY_SIZE(kPageRouting), .group = 7, .unused = {0, 0}, .params = kPageRouting},
+    // Mod slots at the end. Same group: the cursor keeps its row from slot to slot.
+    {.name = "Mod 1", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[0]},
+    {.name = "Mod 2", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[1]},
+    {.name = "Mod 3", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[2]},
+    {.name = "Mod 4", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[3]},
+    {.name = "Mod 5", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[4]},
+    {.name = "Mod 6", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[5]},
+    {.name = "Mod 7", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[6]},
+    {.name = "Mod 8", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[7]},
+    {.name = "Mod 9", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[8]},
+    {.name = "Mod 10", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[9]},
+    {.name = "Mod 11", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[10]},
+    {.name = "Mod 12", .numParams = kModParams + 1, .group = 9, .unused = {0, 0}, .params = kPageMod[11]},
 };
 
 const _NT_parameterPages kParameterPages = {
@@ -482,7 +549,16 @@ struct PerseidsAlgorithm : public _NT_algorithm
     // destination's full travel, internal LFO phases, smoothed CV.
     float mod_sum[kNumParams];
     float lfo_phase[kNumModSlots];
+
+    // Clock in: edge detector and period (samples), for synced mod LFOs.
+    bool     clock_gate;
+    bool     clock_valid;
+    bool     clock_seen;   // at least one edge since the clock was lost
+    uint32_t clock_since;  // samples since the last rising edge
+    float    clock_period; // samples between edges, 0 = not measured yet
+    uint32_t clock_count;  // edges since the clock (re)appeared
     float cv_smooth[kNumModSlots];
+    float mod_prev[kNumModSlots][3]; // last chunk's mod on amount / offset / rate
     int   mod_active;  // slots currently doing something (display)
     bool  mod_applied; // modulation was applied in the last chunk
 };
@@ -737,6 +813,12 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->out_gain     = 1.f;
     a->playing      = true;
     a->rec_gate     = false;
+    a->clock_gate   = false;
+    a->clock_valid  = false;
+    a->clock_seen   = false;
+    a->clock_since  = 0;
+    a->clock_period = 0.f;
+    a->clock_count  = 0;
     a->sample_clock = 0;
     a->slice_acc    = 0;
     a->gov_acc      = 0;
@@ -762,8 +844,9 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
         a->mod_sum[p] = 0.f;
     for(int m = 0; m < kNumModSlots; ++m)
     {
-        a->lfo_phase[m] = 0.25f * static_cast<float>(m); // slots start spread out
+        a->lfo_phase[m] = 0.25f * static_cast<float>(m % 4) + 0.0833f * static_cast<float>(m / 4); // spread out
         a->cv_smooth[m] = 0.f;
+        a->mod_prev[m][0] = a->mod_prev[m][1] = a->mod_prev[m][2] = 0.f;
     }
     a->mod_active  = 0;
     a->mod_applied = false;
@@ -814,18 +897,78 @@ float ModLfo(float phase)
 // Returns true if any slot is doing something.
 bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int at, int n)
 {
+    for(int m = 0; m < kNumModSlots; ++m)
+    {
+        a->mod_prev[m][0] = a->mod_sum[ModParam(m, kModAmount)];
+        a->mod_prev[m][1] = a->mod_sum[ModParam(m, kModOffset)];
+        a->mod_prev[m][2] = a->mod_sum[ModParam(m, kModRate)];
+    }
     for(int p = 0; p < kNumParams; ++p)
         a->mod_sum[p] = 0.f;
+    // A slot's own amount / offset / rate with last chunk's modulation on it.
+    auto Eff = [a](int m, int field, int k) {
+        const int   p  = ModParam(m, field);
+        const float lo = a->params[p].min;
+        const float hi = a->params[p].max;
+        return Clampf(static_cast<float>(ParamValue(a, p)) + a->mod_prev[m][k] * (hi - lo), lo, hi);
+    };
 
     const float sr     = static_cast<float>(NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000);
     int         active = 0;
+
+    // Clock in: rising edge above 1 V (re-armed below 0.5 V), at most one edge
+    // per chunk counts (chunks are ≤ 1.3 ms; faster clocks are not musical here).
+    bool       edge      = false;
+    const int  clock_bus = ParamValue(a, kParamClockIn);
+    if(clock_bus > 0)
+    {
+        const float* ck = busFrames + (clock_bus - 1) * numFrames + at;
+        for(int i = 0; i < n; ++i)
+        {
+            ++a->clock_since;
+            if(!a->clock_gate && ck[i] > 1.f)
+            {
+                a->clock_gate = true;
+                if(a->clock_since >= static_cast<uint32_t>(0.002f * sr)) // 2 ms debounce
+                {
+                    if(a->clock_seen)
+                    {
+                        // Second edge on: the period is known, the clock runs.
+                        a->clock_period = static_cast<float>(a->clock_since);
+                        if(!a->clock_valid)
+                        {
+                            a->clock_valid = true;
+                            a->clock_count = 0;
+                        }
+                        else
+                            ++a->clock_count;
+                        edge = true;
+                    }
+                    a->clock_seen  = true;
+                    a->clock_since = 0;
+                }
+            }
+            else if(a->clock_gate && ck[i] < 0.5f)
+                a->clock_gate = false;
+        }
+    }
+    else
+        a->clock_since += static_cast<uint32_t>(n);
+    {
+        const float lost = a->clock_period > 1.f ? Clampf(4.f * a->clock_period, 0.f, 3.f * sr) : 3.f * sr;
+        if(clock_bus <= 0 || static_cast<float>(a->clock_since) > lost)
+        {
+            a->clock_valid  = false;
+            a->clock_seen   = false;
+            a->clock_period = 0.f;
+        }
+    }
     for(int m = 0; m < kNumModSlots; ++m)
     {
-        const int   base   = kParamMod1 + m * kModParams;
-        const int   dest   = kModTargets[ParamValue(a, base + kModDest)];
-        const float amount = ParamValue(a, base + kModAmount) * 0.01f;
-        const float offset = ParamValue(a, base + kModOffset) * 0.01f;
-        const int   bus    = ParamValue(a, base + kModIn);
+        const int   dest   = kModTargets[ParamValue(a, ModParam(m, kModDest))];
+        const float amount = Eff(m, kModAmount, 0) * 0.01f;
+        const float offset = Eff(m, kModOffset, 1) * 0.01f;
+        const int   bus    = ParamValue(a, ModParam(m, kModIn));
 
         float source;
         if(bus > 0)
@@ -841,7 +984,18 @@ bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int 
         }
         else
         {
-            a->lfo_phase[m] += ParamValue(a, base + kModRate) * 0.01f * static_cast<float>(n) / sr;
+            const int sync = ParamValue(a, ModSyncParam(m));
+            if(sync > 0 && a->clock_valid && a->clock_period > 1.f)
+            {
+                // Locked: Mul cycles per Div pulses, phase reset on the bar.
+                const float cycles = static_cast<float>(kModSyncMul[sync]) / static_cast<float>(kModSyncDiv[sync]);
+                if(edge && a->clock_count % static_cast<uint32_t>(kModSyncDiv[sync]) == 0)
+                    a->lfo_phase[m] = 0.f;
+                else
+                    a->lfo_phase[m] += cycles * static_cast<float>(n) / a->clock_period;
+            }
+            else
+                a->lfo_phase[m] += Eff(m, kModRate, 2) * 0.01f * static_cast<float>(n) / sr;
             a->lfo_phase[m] -= static_cast<float>(static_cast<int>(a->lfo_phase[m]));
             source = ModLfo(a->lfo_phase[m]);
         }
@@ -1772,6 +1926,8 @@ bool draw(_NT_algorithm* self)
         NT_intToString(buff + 3, a->mod_active);
         NT_drawText(76, 61, buff, 12, kNT_textLeft, kNT_textTiny);
     }
+    if(a->clock_valid)
+        NT_drawText(179, 61, "CLK", 12, kNT_textLeft, kNT_textTiny);
     return true;
 }
 
