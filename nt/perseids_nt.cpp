@@ -226,7 +226,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.20"
+#define PERSEIDS_NT_VERSION "0.21"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -852,6 +852,7 @@ void calculateRequirements(_NT_algorithmRequirements& req, const int32_t* specif
 }
 
 bool BuildModOverview(struct PerseidsAlgorithm* a);
+void UpdateModMarks(struct PerseidsAlgorithm* a);
 void LayoutPages(struct PerseidsAlgorithm* a, bool mod_first);
 
 _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
@@ -970,6 +971,14 @@ void parameterChanged(_NT_algorithm* self, int p)
 {
     PerseidsAlgorithm* a = static_cast<PerseidsAlgorithm*>(self);
     a->dirty             = true;
+    // A destination changed: rebuild the Mod overview now. The host's menu
+    // is on screen then, and draw() (which also does it) may not run.
+    for(int m = 0; m < kNumModSlots; ++m)
+        if(p == ModParam(m, kModDest) && a->v && BuildModOverview(a))
+        {
+            NT_updateParameterPages(NT_algorithmIndex(a));
+            break;
+        }
     // A slot's input / dest / mode / sync: arm it later (kModArmS).
     for(int m = 0; m < kNumModSlots; ++m)
         for(int f = 0; f < kArmFields; ++f)
@@ -1456,6 +1465,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
     }
 
     a->sample_clock += static_cast<uint64_t>(numFrames);
+    // Menu marks ("Name ~") follow the armed slots also while the host's
+    // menu is open (draw() is not called then), ~20 times a second.
+    if((a->sample_clock & 2047u) < static_cast<uint64_t>(numFrames))
+        UpdateModMarks(a);
 
     // Swarm load governor, once per 256 samples. On the NT the load is this
     // algorithm's own share of the CPU; elsewhere (nt_emu) it stays idle.

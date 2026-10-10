@@ -167,6 +167,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.18 | Anhang „Wo steht was“ in der Anleitung (Seiten + nummerierte Mod-Ziele, erzeugt mit `./test/sim --list | python3 docs/appendix.py`); *Reset all mods* setzt jeden Slot ganz zurück (auch Eingang und Rate) und frischt die Menüs auf |
 | 0.19 | Mod-Ansicht (Encoder L hinter dem letzten Trail): Kacheln mit Oszilloskop-Spur je aktivem Slot, Encoder R = Amount, *Mod view* Graphic/Numbers; Pfeil-Hinweis; Mod overview als erste Menüseite, solange die Ansicht offen ist |
 | 0.20 | Mod-Ansicht: Pfeil links der ersten Kachel (zurück), rechts der vierten nur bei mehr als acht aktiven Slots (weitere Seite); Kacheln etwas schmaler |
+| 0.21 | Mod overview wird sofort neu gebaut, wenn im Menü ein Ziel geändert wird (vorher erst beim nächsten Zeichnen der Perseids-Oberfläche, im Menü also gar nicht); „ ~“-Markierungen werden auch bei offenem Menü nachgeführt |
 
 ## Stand
 

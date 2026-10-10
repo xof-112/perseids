@@ -1291,15 +1291,15 @@ int main(int argc, char** argv)
         CHECK(pg.numParams == 1 && pg.params[0] == kParamModReset,
               "Mod overview, nothing set: only the reset (%d entries)", pg.numParams);
         g_pageUpdates = 0;
-        SetP(I, ModParam(0, kModDest), 11);
-        SetP(I, ModParam(3, kModDest), 12);
-        draw(I.a);
+        SetMenu(I, ModParam(0, kModDest), 11); // from the menu, no draw() in between
+        SetMenu(I, ModParam(3, kModDest), 12);
         const bool ok = pg.numParams == 5 && pg.params[1] == ModParam(0, kModDest) && pg.params[2] == ModParam(0, kModAmount)
                         && pg.params[3] == ModParam(3, kModDest) && pg.params[4] == ModParam(3, kModAmount);
-        CHECK(ok && g_pageUpdates == 1, "Mod overview: only the active slots 1 and 4, each dest + amount (%d entries, %d update)",
+        CHECK(ok && g_pageUpdates == 2, "Mod overview follows the menu at once: active slots 1 and 4, dest + amount (%d entries, %d updates)",
               pg.numParams, g_pageUpdates);
         draw(I.a);
-        CHECK(g_pageUpdates == 1, "Mod overview: no host update while nothing changes");
+        draw(I.a);
+        CHECK(g_pageUpdates == 2, "Mod overview: no host update while nothing changes");
         g_alg = A.a;
     }
 
