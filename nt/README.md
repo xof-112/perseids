@@ -4,6 +4,8 @@ Der Kern von Perseids als Algorithmus für den Expert Sleepers **disting NT**: f
 
 Die Engines sind dieselben Quelldateien wie in der Daisy-Firmware (`../src/capture_engine.cpp`, `spectra_engine.cpp`, `swarm_engine.cpp`). Ein Fehler, der dort behoben wird, ist in beiden behoben. Dieser Ordner enthält nur die NT-Plattformschicht: Speicher, Routing, Parameter, Bedienung, Display.
 
+Anleitung für Spieler: [`docs/perseids-nt-anleitung.html`](docs/perseids-nt-anleitung.html).
+
 Gebaut gegen distingNT_API v14 (Submodul `distingNT_API`, Stand 6975a63). GPL-3.0 wie Perseids.
 
 ## Installation
