@@ -156,7 +156,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.7"
+#define PERSEIDS_NT_VERSION "0.8"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Hold: the top value means "infinite" (engine: > 30 s).
@@ -1000,10 +1000,14 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
 // 2 (which stay with the NT on the hardware) switch the pot targets instead:
 // Button 1 = Pot L Blend ↔ Dry/Wet, Button 2 = Pots C and R together
 // (Scan/Size ↔ Reso mix/Atmosphere).
+//
+// nt_emu also reports a pot "press" whenever a pot starts being dragged, so a
+// turn would flip the target straight back. The nt_emu build therefore
+// ignores pot presses completely and switches only with buttons 1/2.
 #ifdef NT_EMU_WIN
-constexpr uint32_t kPotLSwitch = kNT_potButtonL | kNT_button1;
-constexpr uint32_t kPotCSwitch = kNT_potButtonC;
-constexpr uint32_t kPotRSwitch = kNT_potButtonR | kNT_button2;
+constexpr uint32_t kPotLSwitch = kNT_button1;
+constexpr uint32_t kPotCSwitch = 0;
+constexpr uint32_t kPotRSwitch = kNT_button2;
 #else
 constexpr uint32_t kPotLSwitch = kNT_potButtonL;
 constexpr uint32_t kPotCSwitch = kNT_potButtonC;
@@ -1068,7 +1072,7 @@ void customUi(_NT_algorithm* self, const _NT_uiData& data)
     if(data.controls & kNT_potC)
         SetParamUi(a, a->pot_c_reso ? kParamResoMix : kParamScan,
                    static_cast<int>(data.pots[1] * 100.f + 0.5f));
-    if(Pressed(data, kPotCSwitch))
+    if(kPotCSwitch && Pressed(data, kPotCSwitch))
     {
         a->pot_c_reso = !a->pot_c_reso;
         NT_requestSetupUi();

@@ -899,6 +899,7 @@ int main(int argc, char** argv)
         CHECK(I.v[kParamBlend] == 30 && I.v[kParamScan] == 75 && I.v[kParamSize] == 24,
               "%s: pots → Blend %d, Scan %d, Size %d", host, I.v[kParamBlend], I.v[kParamScan],
               I.v[kParamSize]);
+#ifndef NT_EMU_WIN // pot presses are ignored in the nt_emu build (own block below)
         Press(I, kNT_potButtonR, emu);
         d.controls = kNT_potR;
         d.pots[2]  = 0.f;
@@ -929,6 +930,14 @@ int main(int argc, char** argv)
         setupUi(I.a, pots);
         CHECK(std::fabs(pots[0] - 0.3f) < 1e-6f && std::fabs(pots[2]) < 1e-6f,
               "%s: setupUi reports the pot targets", host);
+#else
+        {
+            _NT_float3 pots;
+            setupUi(I.a, pots);
+            CHECK(std::fabs(pots[0] - 0.3f) < 1e-6f && std::fabs(pots[2] - 1.f) < 1e-6f,
+                  "%s: setupUi reports the pot targets", host);
+        }
+#endif
 
         d          = Ui();
         d.encoders[0] = 1;
@@ -1019,6 +1028,27 @@ int main(int argc, char** argv)
         customUi(I.a, d);
         CHECK(I.a->pot_c_reso && I.v[kParamResoMix] == 90,
               "nt_emu: button 2 also puts Pot C on Reso mix (%d %%)", I.v[kParamResoMix]);
+        // nt_emu sends a pot "press" when a pot drag starts: it must not flip the target.
+        for(uint32_t pb : {kNT_potButtonL, kNT_potButtonC, kNT_potButtonR})
+        {
+            _NT_uiData p = Ui();
+            p.controls   = static_cast<uint16_t>(pb);
+            customUi(I.a, p);
+            p.lastButtons = static_cast<uint16_t>(pb);
+            customUi(I.a, p);
+            p.controls = 0;
+            customUi(I.a, p);
+        }
+        d.controls = kNT_potL | kNT_potC;
+        d.pots[0]  = 0.35f;
+        d.pots[1]  = 0.45f;
+        customUi(I.a, d);
+        CHECK(I.a->pot_l_mix && I.a->pot_c_reso && I.a->pot_r_atmo && I.v[kParamDryWet] == 35
+                  && I.v[kParamResoMix] == 45 && I.v[kParamBlend] == 50,
+              "nt_emu: pot drag/press keeps the target (Dry/Wet %d, Reso %d, Blend %d)",
+              I.v[kParamDryWet], I.v[kParamResoMix], I.v[kParamBlend]);
+        CHECK((hasCustomUi(I.a) & (kNT_potButtonL | kNT_potButtonC | kNT_potButtonR)) == 0,
+              "nt_emu build does not claim pot presses");
         EmuButton(kNT_button1);
         EmuButton(kNT_button2);
         CHECK(!I.a->pot_l_mix && !I.a->pot_r_atmo && !I.a->pot_c_reso, "nt_emu: buttons 1/2 switch back");
