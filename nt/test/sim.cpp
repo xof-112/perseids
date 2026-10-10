@@ -1112,6 +1112,14 @@ int main(int argc, char** argv)
         }
         CHECK(embers > 200, "recording embers drawn (%d draw calls while recording)", embers);
         CHECK(g_textOob == 0 && g_shapeOob == 0, "display: everything on screen (%d draws)", g_draws);
+        {
+            // Header: version label must end left of the REC box (nt_emu font widths).
+            int vw = 0;
+            for(const char* c = kVersion; *c; ++c)
+                vw += 4;
+            CHECK(48 + vw <= 67 && 70 + 35 <= 108,
+                  "header: version (48…%d) clear of REC box (67…102), 'next 5' clear of IN", 48 + vw);
+        }
         g_alg = A.a;
     }
 
