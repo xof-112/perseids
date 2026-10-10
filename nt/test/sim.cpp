@@ -1441,6 +1441,48 @@ int main(int argc, char** argv)
         g_alg = A.a;
     }
 
+    // --- host that does not call parameterChanged(); Random steps on the clock ---------
+    {
+        Inst I = Make(4, g_params);
+        g_alg  = I.a;
+        Signal s;
+        s.l.assign(4800, 0.f);
+        s.r = s.l;
+        Run(I, s, 24);
+        // Write v[] only, like a menu that does not report the change.
+        I.v[ModParam(0, kModDest)]   = 11;
+        I.v[ModParam(0, kModAmount)] = 50;
+        I.v[ModSyncParam(0)]         = 3; // /4
+        I.v[ModShapeParam(0)]        = kShapeRandom;
+        for(int k = 0; k < 20; ++k)
+            Run(I, s, 24); // 2 s
+        CHECK(I.a->mod_armed[0][kArmDest] == 11 && I.a->mod_armed[0][kArmSync] == 3 && I.a->mod_active == 1,
+              "slot settings take effect without parameterChanged() too (after the pause)");
+        CHECK(I.a->parameterPages->pages[OverviewPageIndex(I.a)].numParams == 3
+                  && !std::strcmp(I.a->parameters[kModTargets[11]].name, (std::string(kModTargetNames[11]) + " ~").c_str()),
+              "… and the Mod overview and the menu mark follow (%s)", I.a->parameters[kModTargets[11]].name);
+        // Random steps at /4 on a 4 Hz clock: one new value every 4 pulses (1 s).
+        const size_t       len = 48000 * 5;
+        std::vector<float> ck(len, 0.f);
+        for(size_t i = 1000; i < len; i += 12000)
+            for(size_t k = 0; k < 240 && i + k < len; ++k)
+                ck[i + k] = 10.f;
+        Signal one;
+        one.l.assign(240, 0.f);
+        one.r = one.l;
+        int   changes = 0;
+        float last    = I.a->mod_out[0];
+        for(size_t pos = 0; pos + 240 <= len; pos += 240)
+        {
+            Run(I, one, 24, ck.data() + pos);
+            if(pos > 48000 && std::fabs(I.a->mod_out[0] - last) > 1e-6f)
+                ++changes;
+            last = I.a->mod_out[0];
+        }
+        CHECK(changes >= 3 && changes <= 4, "Random steps with Mod sync /4: a new value every 4 clock pulses (%d in 4 s)", changes);
+        g_alg = A.a;
+    }
+
     // --- slot settings from the menu take effect after a pause ------------------------
     {
         Inst I = Make(4, g_params);

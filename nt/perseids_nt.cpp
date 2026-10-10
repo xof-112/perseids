@@ -246,7 +246,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.22"
+#define PERSEIDS_NT_VERSION "0.23"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -659,6 +659,7 @@ struct PerseidsAlgorithm : public _NT_algorithm
 
     // Armed (in effect) input / dest / mode / sync per slot, see kModArmS.
     int16_t  mod_armed[kNumModSlots][kArmFields];
+    int16_t  mod_seen[kNumModSlots][kArmFields]; // last values seen in v[] (change detection)
     uint64_t mod_pending_since[kNumModSlots]; // 0 = nothing pending
     volatile bool mod_arm_now;                // own screen used: arm at once
     volatile bool mod_reset_ui;               // after Reset all mods
@@ -988,7 +989,7 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
         a->lfo_rand[m]  = 0.f;
         a->mod_out[m]   = 0.f;
         for(int f = 0; f < kArmFields; ++f)
-            a->mod_armed[m][f] = 0;
+            a->mod_armed[m][f] = a->mod_seen[m][f] = 0;
         a->mod_pending_since[m] = 0;
         a->mod_prev[m][0] = a->mod_prev[m][1] = a->mod_prev[m][2] = 0.f;
         a->mod_prev_over[m][0] = a->mod_prev_over[m][1] = a->mod_prev_over[m][2] = 0;
@@ -1086,6 +1087,19 @@ float ModShape(int shape, float ph)
 bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int at, int n)
 {
     // Arm pending slot settings that stood still long enough (or at once).
+    // Changes are found by comparing with the values seen last time, so this
+    // does not depend on the host calling parameterChanged() (nt_emu's menu
+    // does not always).
+    for(int m = 0; m < kNumModSlots; ++m)
+        for(int f = 0; f < kArmFields; ++f)
+        {
+            const int16_t v = static_cast<int16_t>(ParamValue(a, ArmParam(m, f)));
+            if(v != a->mod_seen[m][f])
+            {
+                a->mod_seen[m][f]       = v;
+                a->mod_pending_since[m] = a->sample_clock + 1;
+            }
+        }
     {
         const bool     now  = a->mod_arm_now;
         const float    rate = static_cast<float>(NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000);
@@ -1540,7 +1554,13 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
     // Menu marks ("Name ~") follow the armed slots also while the host's
     // menu is open (draw() is not called then), ~20 times a second.
     if((a->sample_clock & 2047u) < static_cast<uint64_t>(numFrames))
+    {
         UpdateModMarks(a);
+        // Same for the Mod overview, in case the host's menu changed a
+        // destination without calling parameterChanged().
+        if(BuildModOverview(a))
+            NT_updateParameterPages(NT_algorithmIndex(a));
+    }
 
     // Swarm load governor, once per 256 samples. On the NT the load is this
     // algorithm's own share of the CPU; elsewhere (nt_emu) it stays idle.

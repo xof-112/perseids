@@ -169,6 +169,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.20 | Mod-Ansicht: Pfeil links der ersten Kachel (zurück), rechts der vierten nur bei mehr als acht aktiven Slots (weitere Seite); Kacheln etwas schmaler |
 | 0.21 | Mod overview wird sofort neu gebaut, wenn im Menü ein Ziel geändert wird (vorher erst beim nächsten Zeichnen der Perseids-Oberfläche, im Menü also gar nicht); „ ~“-Markierungen werden auch bei offenem Menü nachgeführt |
 | 0.22 | *Mod n shape*: Classic, Sine, Triangle, Saw up/down, Square, Shark, Shark rev, Exp, Log, Random steps; Kurvenbild in der Anleitung (aus dem Plug-in erzeugt, `./test/sim --shapes | python3 docs/shapes.py`) |
+| 0.23 | Fix: Eingang/Ziel/Mode/Sync eines Slots wurden nur scharf, wenn der Host `parameterChanged()` meldet – in nt_emu blieben Menü-Änderungen daher wirkungslos (kein „ ~“, keine Bewegung, kein Clock-Einfluss). Jetzt erkennt das Plug-in Änderungen selbst durch Vergleich; Mod overview und Markierungen werden zusätzlich aus `step()` nachgeführt. Random steps folgen den Teilern von Mod sync (Test) |
 
 ## Stand
 
