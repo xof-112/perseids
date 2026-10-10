@@ -101,6 +101,7 @@ enum
     kParamResoTuning,
     kParamResoVoct,
     kParamLevelMatch,
+    kParamMatchSpeed,
 
     kNumParams,
 };
@@ -157,7 +158,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.13"
+#define PERSEIDS_NT_VERSION "0.14"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -174,10 +175,15 @@ constexpr float kLevelMatchTarget = 0.35f; // engine / Trail-sum loudness (≈ �
 // follower reading; −2 dB on its target makes them sound equally loud.
 constexpr float kLevelMatchSwarmTrim = 0.8f;
 constexpr float kLevelMatchMax    = 4.f;   // ±12 dB
-constexpr float kLevelMatchShortS = 0.05f;
-constexpr float kLevelMatchAtkS   = 0.15f;
-constexpr float kLevelMatchRelS   = 2.5f;
-constexpr float kLevelMatchGainS  = 1.5f;
+// The measurement is the same at every speed (otherwise the balance itself
+// would shift with the speed); Match speed Slow / Medium / Fast only sets
+// how fast the gain follows. The first seconds with signal (after loading
+// or Clear trails) always run at Fast, so the match locks in at once.
+constexpr float kLevelMatchShortS   = 0.05f;
+constexpr float kLevelMatchAtkS     = 0.15f;
+constexpr float kLevelMatchRelS     = 1.2f;
+constexpr float kLevelMatchGainS[3] = {4.f, 1.5f, 0.4f};
+constexpr float kLevelMatchLockS    = 3.f; // first lock-in at Fast (≈ a Fade in)
 constexpr float kLevelMatchFloor  = 1e-6f; // below −60 dB: nothing to learn
 
 // Hold: the top value means "infinite" (engine: > 30 s).
@@ -190,6 +196,7 @@ const char* const kDirection[] = {"Fwd", "Rev", "Rnd", nullptr};
 const char* const kRecStyle[] = {"PRS", "PLR", "CTR", nullptr};
 const char* const kResoScales[]  = {"Major", "Minor", "Pentatonic", nullptr};
 const char* const kResoTunings[] = {"Equal", "Just", nullptr};
+const char* const kMatchSpeeds[] = {"Slow", "Medium", "Fast", nullptr};
 
 #define P_NUM(n, lo, hi, d, u, sc) \
     {.name = n, .min = lo, .max = hi, .def = d, .unit = u, .scaling = sc, .enumStrings = nullptr},
@@ -274,13 +281,14 @@ const _NT_parameter kParameterDefs[kNumParams] = {
     // Matches Spectra and Swarm in loudness while both are heard, so Blend
     // crossfades between equally loud engines (NT only, see step()).
     P_ENUM("Level match", 1, 1, kOffOn)
+    P_ENUM("Match speed", 2, 1, kMatchSpeeds)
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
                                 kParamOverwrite, kParamCapture, kParamPlay,
                                 kParamClear};
 const uint8_t kPageTime[]    = {kParamBuffer, kParamHold, kParamFadeIn, kParamFadeOut};
-const uint8_t kPageEngines[] = {kParamBlend, kParamDryWet, kParamLevelMatch, kParamPitchSpectra,
+const uint8_t kPageEngines[] = {kParamBlend, kParamDryWet, kParamLevelMatch, kParamMatchSpeed, kParamPitchSpectra,
                                 kParamPitchSwarm, kParamOutLevel};
 const uint8_t kPageSpectra[] = {kParamPartials, kParamWaveshape, kParamUmbra,
                                 kParamEnsemble};
@@ -428,6 +436,9 @@ struct PerseidsAlgorithm : public _NT_algorithm
         float env = 0.f; // follower on it (fast up, slow down)
     };
     Loudness lm_in, lm_sp, lm_sw;
+    int      match_speed;   // 0 Slow, 1 Medium, 2 Fast
+    float    lm_sp_lock;    // seconds of signal learned so far (lock-in)
+    float    lm_sw_lock;
     float    lm_g_sp; // gains applied right now
     float    lm_g_sw;
 
@@ -596,6 +607,7 @@ void ReadParams(PerseidsAlgorithm* a)
     a->out_gain = std::pow(10.f, Pv(a, kParamOutLevel) / 20.f);
     a->dry_wet  = Pv(a, kParamDryWet) * 0.01f;
     a->level_match = ParamValue(a, kParamLevelMatch) != 0;
+    a->match_speed = ParamValue(a, kParamMatchSpeed);
 
     ResoParamValues& r = a->reso_p;
     r.mix              = Pv(a, kParamResoMix) * 0.01f;
@@ -719,6 +731,9 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->lm_sw        = {};
     a->lm_g_sp      = 1.f;
     a->lm_g_sw      = 1.f;
+    a->match_speed  = 1;
+    a->lm_sp_lock   = 0.f;
+    a->lm_sw_lock   = 0.f;
     a->out_gain     = 1.f;
     a->playing      = true;
     a->rec_gate     = false;
@@ -868,6 +883,7 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
     if(a->v[kParamClear])
     {
         a->eng->capture.ClearAll();
+        a->lm_sp_lock = a->lm_sw_lock = 0.f; // new material: lock in again
         SetParamAudio(a, kParamClear, 0);
     }
 
@@ -980,9 +996,10 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
         {
             const float fn    = static_cast<float>(n);
             const float k_st  = 1.f - std::exp(-fn / (kLevelMatchShortS * sr));
-            const float k_atk = 1.f - std::exp(-fn / (kLevelMatchAtkS * sr));
-            const float k_rel = 1.f - std::exp(-fn / (kLevelMatchRelS * sr));
-            const float k_g   = 1.f - std::exp(-fn / (kLevelMatchGainS * sr));
+            const int   spd   = a->match_speed < 0 ? 0 : (a->match_speed > 2 ? 2 : a->match_speed);
+            auto K = [&](float secs) { return 1.f - std::exp(-fn / (secs * sr)); };
+            const float k_atk = K(kLevelMatchAtkS);
+            const float k_rel = K(kLevelMatchRelS);
             auto Follow = [&](PerseidsAlgorithm::Loudness& L, float ms) {
                 L.st += k_st * (ms - L.st);
                 L.env += (L.st > L.env ? k_atk : k_rel) * (L.st - L.env);
@@ -991,22 +1008,26 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
             for(int i = 0; i < n; ++i)
                 in_ms += e.trail_mix[i] * e.trail_mix[i];
             Follow(a->lm_in, in_ms / fn);
-            auto Learn = [&](PerseidsAlgorithm::Loudness& L, float ms, float& g, float target) {
+            auto Learn = [&](PerseidsAlgorithm::Loudness& L, float ms, float& g, float target, float& lock) {
+                const int sp = lock < kLevelMatchLockS ? 2 : spd;
                 Follow(L, ms);
                 float to = g;
                 if(!a->level_match)
                     to = 1.f;
                 else if(a->lm_in.env > kLevelMatchFloor && L.env > kLevelMatchFloor * 1e-2f)
+                {
                     to = Clampf(target * std::sqrt(a->lm_in.env / L.env),
                                 1.f / kLevelMatchMax, kLevelMatchMax);
-                g += k_g * (to - g);
+                    lock += fn / sr;
+                }
+                g += K(kLevelMatchGainS[sp]) * (to - g);
             };
             g_sp0 = a->lm_g_sp;
             g_sw0 = a->lm_g_sw;
             if(run_spectra)
-                Learn(a->lm_sp, sp_ms, a->lm_g_sp, kLevelMatchTarget);
+                Learn(a->lm_sp, sp_ms, a->lm_g_sp, kLevelMatchTarget, a->lm_sp_lock);
             if(run_swarm)
-                Learn(a->lm_sw, sw_ms, a->lm_g_sw, kLevelMatchTarget * kLevelMatchSwarmTrim);
+                Learn(a->lm_sw, sw_ms, a->lm_g_sw, kLevelMatchTarget * kLevelMatchSwarmTrim, a->lm_sw_lock);
         }
         const float inv_n    = 1.f / static_cast<float>(n);
 

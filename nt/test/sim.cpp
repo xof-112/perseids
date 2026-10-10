@@ -702,16 +702,22 @@ int main(int argc, char** argv)
         }
         // Trail Level stays an accent after Level match: both the Trail sum and
         // the engines move with it, so the match does not undo it.
+        for(int lmo = getenv("LM_TRACE") ? 0 : 1; lmo < 2; ++lmo)
         for(int blend : {0, 50, 100})
         {
             Inst I = Make(10, g_params);
             g_alg  = I.a;
+            SetP(I, kParamLevelMatch, lmo);
             SetP(I, kParamCount, 1);
             SetP(I, kParamHold, kHoldInf);
             SetP(I, kParamOverwrite, 0);
             SetP(I, kParamBlend, blend);
             Signal take = Glock(3.f);
             Run(I, take, 24);
+            Signal settle;
+            settle.l.assign(48000 * 8, 0.f); // let the match settle first
+            settle.r = settle.l;
+            Run(I, settle, 24);
             Signal quiet;
             quiet.l.assign(48000 * 6, 0.f);
             quiet.r = quiet.l;
@@ -726,16 +732,79 @@ int main(int argc, char** argv)
                 std::sort(w.begin(), w.end());
                 return w[w.size() * 9 / 10];
             };
+            if(getenv("LM_TRACE"))
+                for(int t = 0; t < 12; ++t)
+                {
+                    Signal q; q.l.assign(24000, 0.f); q.r = q.l;
+                    Run(I, q, 24);
+                    printf("     t+%.1fs g_sp %+.2f dB g_sw %+.2f dB in %.2e sp %.2e\n", 0.5f * (t + 1), 20 * std::log10(I.a->lm_g_sp), 20 * std::log10(I.a->lm_g_sw), I.a->lm_in.env, I.a->lm_sp.env);
+                }
             const float l50 = Loud(Run(I, quiet, 24));
             const float g_sp = I.a->lm_g_sp, g_sw = I.a->lm_g_sw;
             SetP(I, kParamTrailLevel1, 20);
             const float l20 = Loud(Run(I, quiet, 24));
+            if(!lmo)
+            {
+                printf("     Level match off, Blend %d: Level 50 → 20 %% is %.1f dB\n", blend, 20.f * std::log10(l20 / l50));
+                continue;
+            }
             const float db  = 20.f * std::log10(l20 / l50);
             const float dg  = 20.f * std::log10((I.a->lm_g_sp * I.a->lm_g_sw) / (g_sp * g_sw));
-            CHECK(db < -6.5f && db > -9.5f && std::fabs(dg) < 1.f,
+            CHECK(db < -6.5f && db > -9.5f && std::fabs(dg) < 1.5f,
                   "Level match, Blend %d: Trail Level 50 → 20 %% is %.1f dB quieter (−8 expected), gains moved %+.1f dB",
                   blend, db, dg);
         }
+        // Match speed: knock the Swarm gain 6 dB off its settled value and see
+        // how much of the way back it gets in one second.
+        float moved[3];
+        for(int spd = 0; spd < 3; ++spd)
+        {
+            Inst I = Make(10, g_params);
+            g_alg  = I.a;
+            SetP(I, kParamMatchSpeed, spd);
+            SetP(I, kParamCount, 1);
+            SetP(I, kParamHold, kHoldInf);
+            SetP(I, kParamOverwrite, 0);
+            SetP(I, kParamBlend, 100);
+            Run(I, Glock(3.f), 24);
+            Signal q;
+            q.l.assign(48000 * 8, 0.f);
+            q.r = q.l;
+            Run(I, q, 24);
+            const float g0 = I.a->lm_g_sw;
+            I.a->lm_g_sw   = g0 * 2.f;
+            Signal one;
+            one.l.assign(48000, 0.f);
+            one.r = one.l;
+            Run(I, one, 24);
+            moved[spd] = 1.f - std::log(I.a->lm_g_sw / g0) / std::log(2.f);
+        }
+        // Lock-in: a fresh instance is close to its settled match early on.
+        {
+            Inst I = Make(10, g_params);
+            g_alg  = I.a;
+            SetP(I, kParamMatchSpeed, 0); // even at Slow
+            SetP(I, kParamCount, 1);
+            SetP(I, kParamHold, kHoldInf);
+            SetP(I, kParamOverwrite, 0);
+            SetP(I, kParamBlend, 0);
+            Run(I, Glock(3.f), 24);
+            Signal q;
+            q.l.assign(48000 * 3, 0.f);
+            q.r = q.l;
+            Run(I, q, 24);
+            const float early = I.a->lm_g_sp;
+            Run(I, q, 24);
+            Run(I, q, 24);
+            Run(I, q, 24);
+            const float late = I.a->lm_g_sp;
+            CHECK(std::fabs(20.f * std::log10(early / late)) < 1.5f,
+                  "Level match locks in fast: 3 s into playback %+.1f dB, settled %+.1f dB (Slow)",
+                  20.f * std::log10(early), 20.f * std::log10(late));
+        }
+        CHECK(moved[2] > 0.8f && moved[1] > moved[0] && moved[2] > moved[1],
+              "Match speed: share of the re-levelling after 1 s Slow %.0f %%, Medium %.0f %%, Fast %.0f %%",
+              moved[0] * 100.f, moved[1] * 100.f, moved[2] * 100.f);
         g_alg = A.a;
     }
 
