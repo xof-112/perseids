@@ -1308,7 +1308,7 @@ int main(int argc, char** argv)
         const bool ok = pg.numParams == 3 && pg.params[1] == ModParam(0, kModAmount) && pg.params[2] == ModParam(3, kModAmount);
         char line[64];
         parameterString(I.a, ModParam(3, kModAmount), 0, line);
-        CHECK(ok && g_pageUpdates == 2 && !std::strncmp(line, kModTargetNames[12], std::strlen(kModTargetNames[12])),
+        CHECK(ok && g_pageUpdates == 2 && !std::strcmp(line, (std::string("0 % ") + kModTargetNames[12]).c_str()),
               "Mod overview: one line per active slot ('Mod 4 amount  %s'), follows the menu at once (%d updates)", line,
               g_pageUpdates);
         draw(I.a);
@@ -1335,7 +1335,7 @@ int main(int argc, char** argv)
         Run(I, s, 24);
         Run(I, s, 24);
         parameterString(I.a, ModParam(2, kModAmount), 40, b2);
-        CHECK(!std::strncmp(b1, (std::string(kModTargetNames[11]) + " 40 % > ").c_str(), std::strlen(kModTargetNames[11]) + 7)
+        CHECK(!std::strncmp(b1, (std::string("40 % ") + kModTargetNames[11] + " > ").c_str(), std::strlen(kModTargetNames[11]) + 8)
                   && std::strcmp(b1, b2) != 0,
               "amount of a working slot shows its output live: '%s' … '%s'", b1, b2);
         g_alg = A.a;

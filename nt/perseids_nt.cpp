@@ -246,7 +246,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.24"
+#define PERSEIDS_NT_VERSION "0.26"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -1850,18 +1850,18 @@ int parameterString(_NT_algorithm* self, int p, int v, char* buff)
         if(p != ModParam(m, kModAmount))
             continue;
         const PerseidsAlgorithm* a = static_cast<const PerseidsAlgorithm*>(self);
-        int n = 0;
-        // Destination first, so one line says it all (Mod overview).
+        // Amount first, then the destination, so one line says it all (Mod
+        // overview): "40 % Blend", while working "40 % Blend > +12 %".
+        int n = NT_intToString(buff, v);
+        std::strcpy(buff + n, " %");
+        n += 2;
         if(a && a->v && a->v[ModParam(m, kModDest)] != 0)
         {
             const char* d = kModTargetNames[a->v[ModParam(m, kModDest)]];
-            std::strcpy(buff, d);
-            n = static_cast<int>(std::strlen(d));
-            buff[n++] = ' ';
+            buff[n++]     = ' ';
+            std::strcpy(buff + n, d);
+            n += static_cast<int>(std::strlen(d));
         }
-        n += NT_intToString(buff + n, v);
-        std::strcpy(buff + n, " %");
-        n += 2;
         if(a && a->v && a->mod_armed[m][kArmDest] != 0 && (v != 0 || a->v[ModParam(m, kModOffset)] != 0))
         {
             const float o  = a->mod_out[m] * 100.f;
