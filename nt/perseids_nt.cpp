@@ -156,7 +156,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.9"
+#define PERSEIDS_NT_VERSION "0.10"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Hold: the top value means "infinite" (engine: > 30 s).
@@ -657,6 +657,9 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
         bank.data[t] = trails + t * l.capacity;
     bank.capacity = l.capacity;
     a->eng->capture.Init(sr, bank);
+    // Overwrite Off + Hold INF: Threshold / Cont. Rec keep INF Trails, only
+    // Rec (button 3, Rec trig in) replaces the oldest one.
+    a->eng->capture.SetProtectInfiniteHold(true);
 
     a->eng->spectra.Init(sr,
                          SpectraEngine::Buffers{reinterpret_cast<float*>(base + l.window),
@@ -1452,14 +1455,14 @@ bool draw(_NT_algorithm* self)
     {
         std::strcpy(buff, "REC ");
         NT_intToString(buff + 4, e.capture.RecTrailSlot());
-        NT_drawShapeI(kNT_rectangle, 67, 0, 102, 9, 15); // clear of the version label
-        NT_drawText(70, 8, buff, 0);
+        NT_drawShapeI(kNT_rectangle, 69, 0, 104, 9, 15); // clear of the version label
+        NT_drawText(72, 8, buff, 0);
     }
     else
     {
         std::strcpy(buff, "next ");
         NT_intToString(buff + 5, e.capture.RecTrailSlot());
-        NT_drawText(70, 8, buff, 5);
+        NT_drawText(72, 8, buff, 5);
     }
     NT_drawText(108, 7, "IN", 6, kNT_textLeft, kNT_textTiny);
     DrawBar(118, 1, 50, 4, e.capture.InputLevel(), 10);

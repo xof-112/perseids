@@ -23,7 +23,7 @@ Gebaut gegen distingNT_API v14 (Submodul `distingNT_API`, Stand 6975a63). GPL-3.
 | Encoder L drehen / klicken | Trail wählen / **Solo** für den gewählten Trail |
 | Encoder R drehen / klicken | **Level** des gewählten Trails (2 % pro Raste) / **Lock** |
 | Taste 3 | **Rec**: sofort in den nächsten Trail aufnehmen |
-| Taste 4 | **Hold** unendlich ein/aus (gilt ab der nächsten Aufnahme; laufende Trails hält **Lock** fest) |
+| Taste 4 | **Hold** unendlich ein/aus (wirkt sofort, auch auf laufende Trails) |
 
 Tasten 1/2 bleiben beim NT. Ein Encoder-Klick zählt nur ohne Drehen.
 
@@ -42,7 +42,7 @@ Alle Regler sind normale NT-Parameter, also per CV oder MIDI steuerbar.
 | Seite | Parameter |
 |---|---|
 | Trails | Count 1–5 · Threshold % · Cont. Rec · Overwrite · Capture · Play · Clear trails (bestätigen; auch per Gate) |
-| Time | Buffer 0,1–30 s (Obergrenze = *Trail seconds*) · Hold 0–30 s / INF · Fade in · Fade out (0–5 s) |
+| Time | Buffer 0,1–30 s (Obergrenze = *Trail seconds*) · Hold 0–30 s / INF (wirkt sofort auf laufende Trails) · Fade in · Fade out (0–5 s) |
 | Engines | Blend % · Dry/Wet % · Pitch Spectra ±24 HT · Pitch Swarm ±24 HT · Output level −24…+24 dB |
 | Spectra | Partials 4–32 · Waveshape (Saw ← 0 → Fold) · Umbra/Aurora · Ensemble |
 | Swarm | Size · Spread · Scan · Scatter · Atmosphere · Direction (Fwd/Rev/Rnd) |
@@ -144,6 +144,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.7 | Versionsanzeige; nt_emu: Fußzeile zeigt die Taste je Poti-Ziel |
 | 0.8 | nt_emu: Poti-Drücke werden ignoriert (nt_emu meldet beim Anfassen eines Potis einen Druck, Drehen schaltete das Ziel zurück); umgeschaltet wird nur mit Taste 1/2 |
 | 0.9 | REC-Anzeige im Kopf nach rechts, verdeckt die Versionsnummer nicht mehr; Version heller |
+| 0.10 | Hold wirkt sofort auf laufende Trails (INF stoppt den Countdown, kürzer als schon gespielt → Fade out, länger während des Fade out → Trail kommt zurück); Overwrite Off + INF: Threshold/Cont. Rec lassen INF-Trails stehen, nur Rec ersetzt den ältesten; Makefile mit Header-Abhängigkeiten |
 
 ## Stand
 
@@ -154,5 +155,6 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 ## Offene Fragen
 
 - **DRAM-Grenze des NT** für Plug-ins ist nicht dokumentiert; 5 × 30 s (14,5 MB) erst am Gerät ausprobieren.
-- **Taste 4:** Hold für neue Aufnahmen (jetzt) oder „alles festhalten“ wie Imprint in der Firmware (alle aktiven Trails locken)?
+- **Taste 4:** Hold INF (jetzt, wirkt sofort auf alle laufenden Trails) oder „alles festhalten“ wie Imprint in der Firmware (alle aktiven Trails locken)?
+- **Overwrite Off + INF:** Auf dem NT sind INF-Trails vor Threshold/Cont. Rec geschützt (nur Rec ersetzt den ältesten), ARCHITECTURE §4.8 sagt „INF still stealable“. Die Firmware hält sich weiter an §4.8 (`CaptureEngine::SetProtectInfiniteHold`, Standard aus). Soll die Firmware das übernehmen?
 - **CPU-Budget** des Governors (Hälfte des NT) ist geschätzt, am Gerät nachmessen.

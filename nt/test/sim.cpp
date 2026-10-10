@@ -464,6 +464,7 @@ int main(int argc, char** argv)
 {
     mkdir(g_out.c_str(), 0755);
 
+
     // --- construction ------------------------------------------------------
     {
         _NT_algorithmRequirements req{};
@@ -648,6 +649,74 @@ int main(int argc, char** argv)
         I.a->eng->capture.GetTrailLifeUi(life);
         CHECK(life[0].phase == TrailLifePhase::Empty && I.v[kParamClear] == 0,
               "Clear trails empties all Trails and returns to 0");
+        g_alg = A.a;
+    }
+
+
+    // --- Hold: INF keeps Trails, changes apply to playing Trails ---------------
+    {
+        Inst I = Make(10, g_params);
+        g_alg  = I.a;
+        TrailLifeUi life[kTrailCount];
+        // Overwrite Off + INF: threshold triggers fill the pool, then leave it alone.
+        SetP(I, kParamHold, kHoldInf);
+        SetP(I, kParamOverwrite, 0);
+        Signal m = Material(30.f);
+        Run(I, m, 24);
+        I.a->eng->capture.GetTrailLifeUi(life);
+        bool all_inf = true;
+        for(int k = 0; k < 3; ++k)
+            all_inf = all_inf && life[k].phase == TrailLifePhase::Hold && life[k].hold_sec < 0;
+        CHECK(all_inf && !I.a->eng->capture.RecActive(),
+              "Overwrite Off + Hold INF: Trails keep playing, no re-recording (%d %d %d)",
+              static_cast<int>(life[0].phase), static_cast<int>(life[1].phase), static_cast<int>(life[2].phase));
+        I.a->eng->capture.RequestManualTrigger();
+        Run(I, Material(0.5f), 24);
+        CHECK(I.a->eng->capture.RecActive(), "Overwrite Off + Hold INF: Rec still replaces the oldest Trail");
+
+        // Live changes on one playing Trail (Rec trig, quiet afterwards).
+        Inst J = Make(10, g_params);
+        g_alg  = J.a;
+        SetP(J, kParamCount, 1);
+        SetP(J, kParamThreshold, 100);
+        SetP(J, kParamRecIn, 3);
+        SetP(J, kParamBuffer, 10);
+        SetP(J, kParamFadeIn, 1);
+        SetP(J, kParamFadeOut, 3);
+        SetP(J, kParamHold, 15);
+        Signal             s = Tone(330.f, 1.5f, 3.f);
+        std::vector<float> trig(s.l.size(), 0.f);
+        for(size_t i = 480; i < 580; ++i)
+            trig[i] = 5.f;
+        Run(J, s, 24, trig.data()); // ~1.1 s recorded, ~0.4 s of Hold
+        Signal quiet;
+        quiet.l.assign(48000 * 3, 0.f);
+        quiet.r = quiet.l;
+        Run(J, quiet, 24); // ~3.4 s of Hold played
+        SetP(J, kParamHold, 10);
+        Run(J, Signal{std::vector<float>(4800, 0.f), std::vector<float>(4800, 0.f)}, 24);
+        J.a->eng->capture.GetTrailLifeUi(life);
+        CHECK(life[0].phase == TrailLifePhase::Hold && life[0].hold_sec >= 6 && life[0].hold_sec <= 7,
+              "Hold 15 → 10 s while playing: %d s left", life[0].hold_sec);
+        SetP(J, kParamHold, kHoldInf);
+        Run(J, quiet, 24);
+        Run(J, quiet, 24);
+        Run(J, quiet, 24); // 9 s more: would have run out at 10 s
+        J.a->eng->capture.GetTrailLifeUi(life);
+        CHECK(life[0].phase == TrailLifePhase::Hold && life[0].hold_sec < 0,
+              "Hold → INF while playing stops the countdown (phase %d, %d s)",
+              static_cast<int>(life[0].phase), life[0].hold_sec);
+        SetP(J, kParamHold, 5); // ~13 s played already → fade out at once
+        Run(J, Signal{std::vector<float>(4800, 0.f), std::vector<float>(4800, 0.f)}, 24);
+        J.a->eng->capture.GetTrailLifeUi(life);
+        CHECK(life[0].phase == TrailLifePhase::FadeOut, "Hold below the time played: fade-out starts at once (phase %d)",
+              static_cast<int>(life[0].phase));
+        SetP(J, kParamHold, 25); // back up during the fade: the Trail returns
+        Run(J, quiet, 24);
+        J.a->eng->capture.GetTrailLifeUi(life);
+        CHECK(life[0].phase == TrailLifePhase::Hold && life[0].hold_sec >= 9 && life[0].hold_sec <= 11,
+              "longer Hold during the fade-out brings the Trail back (phase %d, %d s)",
+              static_cast<int>(life[0].phase), life[0].hold_sec);
         g_alg = A.a;
     }
 
@@ -1117,8 +1186,8 @@ int main(int argc, char** argv)
             int vw = 0;
             for(const char* c = kVersion; *c; ++c)
                 vw += 4;
-            CHECK(48 + vw <= 67 && 70 + 35 <= 108,
-                  "header: version (48…%d) clear of REC box (67…102), 'next 5' clear of IN", 48 + vw);
+            CHECK(48 + vw <= 69 && 72 + 35 <= 108,
+                  "header: version (48…%d) clear of REC box (69…104), 'next 5' clear of IN", 48 + vw);
         }
         g_alg = A.a;
     }

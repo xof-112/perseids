@@ -34,6 +34,8 @@ INCS        := -I$(NT_API_PATH)/include -I$(ROOT)/include -I$(DAISYSP) -I$(DAISY
                -I$(CMSIS)/Include -I$(CMSIS)/PrivateInclude
 # Same float behaviour as the firmware (platformio.ini): no errno, fused multiply-add.
 MATH        := -fno-math-errno -ffp-contract=fast
+# Header dependencies, so a changed engine header rebuilds every object using it.
+DEPFLAGS    := -MMD -MP
 
 # --- disting NT (Cortex-M7) -------------------------------------------------
 ARM_CXX     := arm-none-eabi-c++
@@ -50,7 +52,7 @@ all: plugins/perseids.o
 
 build/arm/%.cpp.o: %.cpp
 	@mkdir -p $(@D)
-	$(ARM_CXX) $(ARM_FLAGS) $(ARM_CXXFLAGS) -c -o $@ $<
+	$(ARM_CXX) $(ARM_FLAGS) $(ARM_CXXFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 build/arm/%.c.o: %.c
 	@mkdir -p $(@D)
@@ -72,7 +74,7 @@ WIN_OBJ     := $(patsubst %,build/win/%.o,$(notdir $(ENGINE_SRC) $(PLUGIN_SRC) $
 
 build/win/%.cpp.o: %.cpp emu/nt_win_shim.h
 	@mkdir -p $(@D)
-	$(WINCXX) -std=c++17 -Wall -Wno-parentheses $(WIN_FLAGS) -c -o $@ $<
+	$(WINCXX) -std=c++17 -Wall -Wno-parentheses $(WIN_FLAGS) $(DEPFLAGS) -c -o $@ $<
 
 build/win/nt_win_shim.cpp.o: emu/nt_win_shim.cpp emu/nt_win_shim.h
 	@mkdir -p $(@D)
@@ -104,12 +106,14 @@ build/host/%.c.o: %.c
 	@mkdir -p $(@D)
 	gcc -std=gnu11 $(HOST_FLAGS) -Wno-unused -c -o $@ $<
 
-test/sim: test/sim.cpp test/stubs.cpp test/stubs.h $(PLUGIN_SRC) $(ENGINE_SRC) $(HOST_C)
+ENGINE_HDR  := $(wildcard $(ROOT)/include/*.h $(ROOT)/include/platform/*.h)
+
+test/sim: test/sim.cpp test/stubs.cpp test/stubs.h $(PLUGIN_SRC) $(ENGINE_SRC) $(ENGINE_HDR) $(HOST_C)
 	g++ -std=c++17 -Wall $(HOST_FLAGS) -o $@ test/sim.cpp test/stubs.cpp $(ENGINE_SRC) $(HOST_C)
 
 # Same simulation built like the nt_emu DLL (NT_EMU_WIN: own v[] writes,
 # buttons 1/2 switch the pot targets).
-test/sim_emu: test/sim.cpp test/stubs.cpp test/stubs.h $(PLUGIN_SRC) $(ENGINE_SRC) $(HOST_C)
+test/sim_emu: test/sim.cpp test/stubs.cpp test/stubs.h $(PLUGIN_SRC) $(ENGINE_SRC) $(ENGINE_HDR) $(HOST_C)
 	g++ -std=c++17 -Wall -DNT_EMU_WIN $(HOST_FLAGS) -o $@ test/sim.cpp test/stubs.cpp $(ENGINE_SRC) $(HOST_C)
 
 test: test/sim test/sim_emu
@@ -124,5 +128,7 @@ render: render/render
 
 clean:
 	rm -rf build plugins emu/*.dll emu/*.exe test/sim test/sim_emu render/render render/frames.txt
+
+-include $(wildcard build/arm/*.d build/win/*.d)
 
 .PHONY: all win wintest test render clean
