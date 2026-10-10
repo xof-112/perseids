@@ -974,8 +974,13 @@ void SpectraEngine::Process(float* out_l, float* out_r, size_t size)
             phase_inc_[i] = osc_freq_[i] * sample_rate_inv_;
         }
 
+        // Render every oscillator that is still audible, not only the first
+        // n_act: when a frame shrinks the active count (down to 0 on a silent
+        // or unmatched frame), the dropped partials must fade on the amp slew
+        // above. Stopping at n_act cut them off mid-wave and restarted them
+        // mid-fade when the count grew again — a click both ways.
         float mix = 0.f;
-        for(size_t i = 0; i < n_act; ++i)
+        for(size_t i = 0; i < kMaxPartials; ++i)
         {
             if(osc_amp_[i] < 1e-4f)
                 continue;
