@@ -1239,10 +1239,12 @@ int main(int argc, char** argv)
         // Menu marks: the modulated parameter's name gets " ~", back after a reset.
         g_paramDefUpdates = 0;
         draw(I.a);
-        CHECK(!std::strcmp(I.a->parameters[kParamBlend].name, "Blend ~") && g_paramDefUpdates == 1,
-              "menu mark: '%s' while modulated (%d update)", I.a->parameters[kParamBlend].name, g_paramDefUpdates);
+        CHECK(!std::strcmp(I.a->parameters[kParamBlend].name, "Blend ~") && g_paramDefUpdates == 2
+                  && !std::strcmp(I.a->parameters[ModParam(0, kModAmount)].name, "Mod 1 Blend"),
+              "menu mark: '%s' while modulated, slot amount named '%s' (%d updates)", I.a->parameters[kParamBlend].name,
+              I.a->parameters[ModParam(0, kModAmount)].name, g_paramDefUpdates);
         draw(I.a);
-        CHECK(g_paramDefUpdates == 1, "menu mark: no further updates while nothing changes");
+        CHECK(g_paramDefUpdates == 2, "menu mark: no further updates while nothing changes");
         SetP(I, ModParam(5, kModDest), Dest(kParamScan));
         SetP(I, ModParam(5, kModAmount), 30);
         SetP(I, ModSyncParam(5), 3);
@@ -1308,8 +1310,10 @@ int main(int argc, char** argv)
         const bool ok = pg.numParams == 3 && pg.params[1] == ModParam(0, kModAmount) && pg.params[2] == ModParam(3, kModAmount);
         char line[64];
         parameterString(I.a, ModParam(3, kModAmount), 0, line);
-        CHECK(ok && g_pageUpdates == 2 && !std::strcmp(line, (std::string("0 % ") + kModTargetNames[12]).c_str()),
-              "Mod overview: one line per active slot ('Mod 4 amount  %s'), follows the menu at once (%d updates)", line,
+        Run(I, Signal{std::vector<float>(2048, 0.f), std::vector<float>(2048, 0.f)}, 24); // names follow in step()
+        const std::string nm = I.a->parameters[ModParam(3, kModAmount)].name;
+        CHECK(ok && g_pageUpdates == 2 && nm == std::string("Mod 4 ") + kModTargetNames[12] && !std::strcmp(line, "0 %"),
+              "Mod overview: one line per active slot ('%s  %s'), follows the menu at once (%d updates)", nm.c_str(), line,
               g_pageUpdates);
         draw(I.a);
         draw(I.a);
@@ -1335,7 +1339,7 @@ int main(int argc, char** argv)
         Run(I, s, 24);
         Run(I, s, 24);
         parameterString(I.a, ModParam(2, kModAmount), 40, b2);
-        CHECK(!std::strncmp(b1, (std::string("40 % ") + kModTargetNames[11] + " > ").c_str(), std::strlen(kModTargetNames[11]) + 8)
+        CHECK(!std::strncmp(b1, "40 % > ", 7)
                   && std::strcmp(b1, b2) != 0,
               "amount of a working slot shows its output live: '%s' … '%s'", b1, b2);
         g_alg = A.a;

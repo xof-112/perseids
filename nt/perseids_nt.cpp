@@ -246,7 +246,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.26"
+#define PERSEIDS_NT_VERSION "0.27"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -651,6 +651,10 @@ struct PerseidsAlgorithm : public _NT_algorithm
     float   mod_sum[kNumParams];
     uint8_t mod_over[kNumParams];  // an Override slot aims at this parameter
     uint8_t mod_marked[kNumParams]; // name shown with " ~" (display thread)
+    // "Mod n <destination>": name of each slot's amount while it has a
+    // destination (one line in the Mod overview: name, destination, amount).
+    char    amount_name[kNumModSlots][28];
+    int16_t amount_name_dest[kNumModSlots]; // destination the name was made for
     float lfo_phase[kNumModSlots];
     int      lfo_sub[kNumModSlots]; // "Rst xN": last sub-pulse a reset fired on
     float    lfo_last[kNumModSlots]; // phase of the last chunk (cycle start = wrap)
@@ -979,6 +983,11 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
         a->mod_sum[p]    = 0.f;
         a->mod_over[p]   = 0;
         a->mod_marked[p] = 0;
+    }
+    for(int m = 0; m < kNumModSlots; ++m)
+    {
+        a->amount_name[m][0]   = 0;
+        a->amount_name_dest[m] = 0;
     }
     for(int m = 0; m < kNumModSlots; ++m)
     {
@@ -1850,18 +1859,11 @@ int parameterString(_NT_algorithm* self, int p, int v, char* buff)
         if(p != ModParam(m, kModAmount))
             continue;
         const PerseidsAlgorithm* a = static_cast<const PerseidsAlgorithm*>(self);
-        // Amount first, then the destination, so one line says it all (Mod
-        // overview): "40 % Blend", while working "40 % Blend > +12 %".
+        // "40 %", while working "40 % > +12 %" (the destination is in the
+        // parameter's name then, "Mod 1 Blend", see UpdateModMarks).
         int n = NT_intToString(buff, v);
         std::strcpy(buff + n, " %");
         n += 2;
-        if(a && a->v && a->v[ModParam(m, kModDest)] != 0)
-        {
-            const char* d = kModTargetNames[a->v[ModParam(m, kModDest)]];
-            buff[n++]     = ' ';
-            std::strcpy(buff + n, d);
-            n += static_cast<int>(std::strlen(d));
-        }
         if(a && a->v && a->mod_armed[m][kArmDest] != 0 && (v != 0 || a->v[ModParam(m, kModOffset)] != 0))
         {
             const float o  = a->mod_out[m] * 100.f;
@@ -2365,6 +2367,28 @@ bool BuildModOverview(PerseidsAlgorithm* a)
 // is aimed at them (and back when it stops). Display thread, only on change.
 void UpdateModMarks(PerseidsAlgorithm* a)
 {
+    // Amount names: "Mod 3 Blend" while slot 3 has a destination.
+    for(int m = 0; m < kNumModSlots && a->v; ++m)
+    {
+        const int16_t d = a->v[ModParam(m, kModDest)];
+        if(d == a->amount_name_dest[m])
+            continue;
+        a->amount_name_dest[m] = d;
+        const int p            = ModParam(m, kModAmount);
+        if(d > 0 && d < kNumModTargets)
+        {
+            char* b = a->amount_name[m];
+            std::strcpy(b, "Mod ");
+            int n = 4 + NT_intToString(b + 4, m + 1);
+            b[n++] = ' ';
+            std::strncpy(b + n, kModTargetNames[d], sizeof(a->amount_name[m]) - 1 - n);
+            b[sizeof(a->amount_name[m]) - 1] = 0;
+            a->params[p].name = b;
+        }
+        else
+            a->params[p].name = kParameterDefs[p].name;
+        NT_updateParameterDefinition(NT_algorithmIndex(a), p + NT_parameterOffset());
+    }
     for(int k = 1; k < kNumModTargets; ++k)
     {
         const int p = kModTargets[k];
