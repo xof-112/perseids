@@ -108,7 +108,7 @@ Im Firmware-Code kam dafür nur `SetRootOffset()` dazu (auf dem Daisy nie aufger
 - **CPU-Governor:** Am NT misst `step()` seine eigenen Zyklen (`NT_getCpuCycleCount`) und gibt Swarm als Last den Anteil an der Hälfte eines 600-MHz-Kerns. Ab 88 % davon (also ~44 % des NT) dünnt Swarm die Wolke aus, Untergrenze 6 Grains. In nt_emu ist er aus.
 - **Speicher:** SRAM nur für die Instanz (2,3 KB); Engines (31 KB), FFT-Puffer (48 KB) und Trails im DRAM. Keine statischen Variablen, mehrere Instanzen teilen nichts.
 - **FFT:** dieselbe CMSIS-DSP-Teilmenge wie die Firmware (RFFT 2048), als Quelltext mit eingebaut.
-- **Offene Symbole**, die die NT-Firmware auflösen muss: die NT-API, dazu `sinf cosf tanf expf powf tanhf memcpy memset strlen` (gleiche Art wie bei den Airwindows-Beispielen und Duett). `make` listet sie nach jedem Build.
+- **Offene Symbole**, die die NT-Firmware auflösen muss: die NT-API, dazu `sinf cosf expf powf memcpy memset strcpy strlen strncpy` – alles Symbole, die auch die offiziellen Beispiele bzw. die Airwindows-Ports auf dem NT nutzen (Liste: `hw_symbols.txt`). `tanhf`/`tanf` aus den Engines werden per `objcopy --redefine-sym` auf eigene Fassungen in `perseids_nt.cpp` umgelenkt (Genauigkeit wie libm, Daisy-Build unverändert); 64-Bit-Divisionen und `memcmp`/`strcat` sind vermieden. `make` bricht ab, wenn ein Symbol außerhalb dieser Liste auftaucht (`make check-syms`).
 
 ## Bauen
 

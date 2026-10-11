@@ -1,6 +1,7 @@
 # Perseids-core for the disting NT
 #
 #   make         plugins/perseids.o  → microSD: /programs/plug-ins/
+#                (fails if the object needs a symbol not in hw_symbols.txt)
 #   make win     emu/perseids.dll    → %LOCALAPPDATA%\Rack2\disting-nt-plugins\ (nt_emu, Windows)
 #   make wintest smoke test of the DLL under Wine
 #   make test    native simulation with audio checks (needs nt_emu fonts, see NT_EMU_PATH)
@@ -44,6 +45,10 @@ ARM_FLAGS   := -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -fPIC -O2
                -fdata-sections -ffunction-sections -Wall $(DEFS) -DARM_MATH_CM7 $(INCS) -I$(CMSIS_CORE)
 ARM_CXXFLAGS := -std=c++17 -fno-rtti -fno-exceptions -fno-threadsafe-statics -fno-use-cxa-atexit
 
+# std::tanh / std::tan in the shared engines → stand-ins in perseids_nt.cpp
+# (tanhf / tanf are not known to be exported by the NT firmware).
+ARM_REDEFINE := --redefine-sym tanhf=perseids_nt_tanhf --redefine-sym tanf=perseids_nt_tanf
+
 ARM_OBJ     := $(patsubst %,build/arm/%.o,$(notdir $(ENGINE_SRC) $(PLUGIN_SRC) $(CMSIS_SRC)))
 vpath %.cpp $(ROOT)/src $(DAISYSP)/Effects $(DAISYSP)/Filters .
 vpath %.c   $(sort $(dir $(CMSIS_SRC)))
@@ -53,17 +58,28 @@ all: plugins/perseids.o
 build/arm/%.cpp.o: %.cpp
 	@mkdir -p $(@D)
 	$(ARM_CXX) $(ARM_FLAGS) $(ARM_CXXFLAGS) $(DEPFLAGS) -c -o $@ $<
+	arm-none-eabi-objcopy $(ARM_REDEFINE) $@
 
 build/arm/%.c.o: %.c
 	@mkdir -p $(@D)
 	$(ARM_CC) $(ARM_FLAGS) -std=gnu11 -Wno-unused -c -o $@ $<
+	arm-none-eabi-objcopy $(ARM_REDEFINE) $@
 
-# One relocatable object, as the NT expects.
-plugins/perseids.o: $(ARM_OBJ)
+# One relocatable object, as the NT expects. Every undefined symbol must be
+# either an NT_* function declared in api.h or listed in hw_symbols.txt
+# (symbols that official examples / airwindows ports already use on the NT).
+plugins/perseids.o: $(ARM_OBJ) hw_symbols.txt
 	@mkdir -p $(@D)
-	arm-none-eabi-ld -r -o $@ $^
+	arm-none-eabi-ld -r -o $@ $(ARM_OBJ)
+	@$(MAKE) --no-print-directory check-syms || (rm -f $@; false)
+
+check-syms:
 	@echo "Undefined symbols (resolved by the NT firmware):"
-	@arm-none-eabi-nm -u $@ | awk '{print "  " $$2}'
+	@bad=0; for s in $$(arm-none-eabi-nm -u plugins/perseids.o | awk '{print $$2}'); do \
+	  if grep -qx "$$s" hw_symbols.txt; then echo "  $$s"; \
+	  elif echo "$$s" | grep -q '^NT_' && grep -qw "$$s" $(NT_API_PATH)/include/distingnt/api.h; then echo "  $$s"; \
+	  else echo "  $$s   <-- not known to be exported by the NT"; bad=1; fi; done; \
+	exit $$bad
 
 # --- nt_emu on Windows (VCV Rack) ------------------------------------------
 WINCXX      ?= x86_64-w64-mingw32-g++
@@ -131,4 +147,4 @@ clean:
 
 -include $(wildcard build/arm/*.d build/win/*.d)
 
-.PHONY: all win wintest test render clean
+.PHONY: all check-syms win wintest test render clean

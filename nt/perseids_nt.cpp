@@ -27,6 +27,51 @@ using namespace perseids;
 namespace
 {
 
+// --- Hardware symbol hygiene -------------------------------------------------
+// The NT resolves a plug-in's undefined symbols against the firmware's export
+// table. memcmp, strcat, tanhf and tanf are used by none of the official
+// examples or airwindows ports, so they are avoided here (memcpy, strcpy,
+// strlen, expf, sinf, cosf are). See `make check-syms`.
+
+bool SameBytes(const uint8_t* x, const uint8_t* y, int n)
+{
+    for(int i = 0; i < n; ++i)
+        if(x[i] != y[i])
+            return false;
+    return true;
+}
+
+void AppendStr(char* dst, const char* src)
+{
+    std::strcpy(dst + std::strlen(dst), src);
+}
+
+} // namespace
+
+// Stand-ins for tanhf / tanf. The engines in ../src keep calling std::tanh /
+// std::tan (the Daisy build is untouched); the NT Makefile renames those
+// references to these functions with objcopy before linking.
+extern "C" float perseids_nt_tanhf(float x)
+{
+    const float ax = x < 0.f ? -x : x;
+    if(ax < 0.0625f)
+    {
+        // Taylor series: exact to float precision here, no cancellation.
+        const float x2 = x * x;
+        return x * (1.f + x2 * (-1.f / 3.f + x2 * (2.f / 15.f + x2 * (-17.f / 315.f))));
+    }
+    const float r = ax > 9.f ? 1.f : 1.f - 2.f / (std::exp(2.f * ax) + 1.f);
+    return x < 0.f ? -r : r;
+}
+
+extern "C" float perseids_nt_tanf(float x)
+{
+    return std::sin(x) / std::cos(x);
+}
+
+namespace
+{
+
 // ---------------------------------------------------------------------------
 // Parameters
 
@@ -623,6 +668,10 @@ struct PerseidsAlgorithm : public _NT_algorithm
 
     // Housekeeping counters (samples).
     uint64_t sample_clock; // also the display's animation clock
+    // Display clock in ms, kept in 32 bits: a 64-bit division would need
+    // __aeabi_uldivmod, which no reference plug-in uses on the NT.
+    uint32_t ms_clock;
+    uint32_t ms_frac; // remainder, in samples × 1000
     uint32_t slice_acc;
     uint32_t gov_acc;
     uint32_t gov_cycles;
@@ -975,6 +1024,8 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->clock_period = 0.f;
     a->clock_count  = 0;
     a->sample_clock = 0;
+    a->ms_clock     = 0;
+    a->ms_frac      = 0;
     a->slice_acc    = 0;
     a->gov_acc      = 0;
     a->gov_cycles   = 0;
@@ -1152,7 +1203,8 @@ bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int 
     {
         const bool     now  = a->mod_arm_now;
         const float    rate = static_cast<float>(NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000);
-        const uint64_t wait = static_cast<uint64_t>(kModArmS * rate);
+        // Via uint32_t: a direct float → uint64_t cast needs __aeabi_f2ulz.
+        const uint64_t wait = static_cast<uint32_t>(kModArmS * rate);
         for(int m = 0; m < kNumModSlots; ++m)
         {
             const uint64_t since = a->mod_pending_since[m];
@@ -1601,6 +1653,13 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
     }
 
     a->sample_clock += static_cast<uint64_t>(numFrames);
+    {
+        const uint32_t sr = NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000u;
+        a->ms_frac += static_cast<uint32_t>(numFrames) * 1000u;
+        const uint32_t q = a->ms_frac / sr;
+        a->ms_clock += q;
+        a->ms_frac -= q * sr;
+    }
     // Menu marks ("Name ~") follow the armed slots also while the host's
     // menu is open (draw() is not called then), ~20 times a second.
     if((a->sample_clock & 2047u) < static_cast<uint64_t>(numFrames))
@@ -2390,7 +2449,7 @@ void DrawModView(PerseidsAlgorithm* a)
         NT_drawText(x0 + 2, y0 + 7, buff, 15, kNT_textLeft, kNT_textTiny);
         const int amt = ParamValue(a, ModParam(m, kModAmount));
         NT_intToString(buff, amt);
-        std::strcat(buff, "%");
+        AppendStr(buff, "%");
         NT_drawText(x1 - 2, y0 + 7, buff, sel ? 15 : 12, kNT_textRight, kNT_textTiny);
         // Destination name, cut to the room left of the amount (4 px a character).
         const int room = (x1 - 2 - 4 * static_cast<int>(std::strlen(buff)) - 4 - (x0 + 11)) / 4;
@@ -2432,12 +2491,12 @@ void DrawModView(PerseidsAlgorithm* a)
             FormatParamValue(a, dest, lo + ModDestBase(a, dest) * (hi - lo), b1);
             FormatParamValue(a, dest, lo + ModDestNow(a, dest) * (hi - lo), b2);
             std::strcpy(buff, b1);
-            std::strcat(buff, " > ");
-            std::strcat(buff, b2);
+            AppendStr(buff, " > ");
+            AppendStr(buff, b2);
             NT_drawText(x0 + 2, y0 + 13, buff, armed ? 15 : 6, kNT_textLeft, kNT_textTiny);
             std::strcpy(buff, "off ");
             NT_intToString(buff + 4, ParamValue(a, ModParam(m, kModOffset)));
-            std::strcat(buff, ParamValue(a, ModModeParam(m)) ? "% ovr" : "%");
+            AppendStr(buff, ParamValue(a, ModModeParam(m)) ? "% ovr" : "%");
             NT_drawText(x0 + 2, y0 + 19, buff, 8, kNT_textLeft, kNT_textTiny);
         }
     }
@@ -2485,7 +2544,7 @@ bool BuildModOverview(PerseidsAlgorithm* a)
         if(a->v && a->v[ModParam(m, kModDest)] != 0)
             list[n++] = static_cast<uint8_t>(ModLineParam(m)); // one line: "Mod n   Blend 40 % > +12 %"
     }
-    if(a->overview_count == n && !std::memcmp(a->overview, list, static_cast<size_t>(n)))
+    if(a->overview_count == n && SameBytes(a->overview, list, n))
         return false;
     std::memcpy(a->overview, list, static_cast<size_t>(n));
     a->overview_count = static_cast<uint8_t>(n);
@@ -2556,8 +2615,7 @@ bool draw(_NT_algorithm* self)
     // Trails: one column each.
     TrailLifeUi life[kTrailCount];
     e.capture.GetTrailLifeUi(life);
-    const uint32_t now_ms = static_cast<uint32_t>(
-        a->sample_clock * 1000u / (NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000u));
+    const uint32_t now_ms = a->ms_clock;
     SampleModHistory(a, now_ms);
     if(a->mod_view)
         DrawModView(a);
@@ -2587,7 +2645,7 @@ bool draw(_NT_algorithm* self)
                 else
                 {
                     NT_intToString(buff, life[t].hold_sec);
-                    std::strcat(buff, "s");
+                    AppendStr(buff, "s");
                     phase = buff;
                 }
                 pc = 12;
@@ -2611,7 +2669,7 @@ bool draw(_NT_algorithm* self)
         NT_drawText(x0 + 4, 48, "L", locked ? 15 : 2, kNT_textLeft, kNT_textTiny);
         NT_drawText(x0 + 12, 48, "S", solo ? 15 : 2, kNT_textLeft, kNT_textTiny);
         NT_intToString(buff, level);
-        std::strcat(buff, "%");
+        AppendStr(buff, "%");
         NT_drawText(x0 + 46, 48, buff, active ? 8 : 2, kNT_textRight, kNT_textTiny);
     }
 
