@@ -8,6 +8,9 @@
 
 #include "pixelmix_baseline.h"
 #include "selawik_aa.h"
+#ifdef RENDER_LOG
+#include "../render/nt_raster.h" // pixel-exact NT_screen like nt_emu
+#endif
 
 const _NT_globals NT_globals = {48000, 128, nullptr, 0, 0, 0};
 uint8_t           NT_screen[128 * 64];
@@ -62,6 +65,9 @@ void NT_drawText(int x, int y, const char* s, int c, _NT_textAlignment al, _NT_t
     ++g_draws;
     if(g_logDraw)
         printf("T %d %d %d %d %d %s\n", x, y, c, static_cast<int>(al), static_cast<int>(z), s);
+#ifdef RENDER_LOG
+    nt_raster::Text(x, y, s, c, al, z);
+#endif
     const int w   = textWidth(s, z);
     const int x0  = al == kNT_textCentre ? x - w / 2 : (al == kNT_textRight ? x - w : x);
     const int asc = z == kNT_textTiny ? 5 : (z == kNT_textLarge ? 18 : 8);
@@ -78,6 +84,9 @@ void NT_drawShapeI(_NT_shape sh, int x0, int y0, int x1, int y1, int c)
     ++g_draws;
     if(g_logDraw)
         printf("S %d %d %d %d %d %d\n", static_cast<int>(sh), x0, y0, x1, y1, c);
+#ifdef RENDER_LOG
+    nt_raster::Shape(sh, x0, y0, x1, y1, c);
+#endif
     if(sh == kNT_line) // lines may run in any direction
     {
         if(x1 < x0) std::swap(x0, x1);

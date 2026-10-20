@@ -1,0 +1,11 @@
+build/
+dist/
+plugin.dll
+plugin.so
+plugin.dylib
+test/build/
+test/host_test
+test/preview
+test/frames.txt
+test/screens/
+test/*.ppm
