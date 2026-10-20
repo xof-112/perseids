@@ -128,6 +128,16 @@ int main()
     CHECK(Lit(h) > 300, "Perseids draws its screen (%d lit)", Lit(h));
     Frame(h, "Perseids screen in the VCV host");
 
+    // Bus names after the panel jacks (as the module sets them).
+    {
+        std::vector<std::string> names = {"In L", "In R"};
+        for(int k = 1; k <= 10; ++k)
+            names.push_back("CV " + std::to_string(k));
+        h.SetBusNames(names);
+        const int clk = Param(h, "Clock in");
+        CHECK(h.ValueString(clk) == "CV 1", "menu: Clock in = '%s' (bus 3 = jack CV 1)", h.ValueString(clk).c_str());
+    }
+
     // Pots: Pot L moves Blend once it has caught up.
     c.pots[0] = 0.5f;
     Run(h, 0.05f, c);

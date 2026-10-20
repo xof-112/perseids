@@ -15,7 +15,7 @@ inline Vec EncStep(int k, int dir) { const float x[2] = {22.000f, 89.760f}; retu
 inline Vec EncPush(int k) { const float x[2] = {22.000f, 89.760f}; return mm2px(Vec(x[k], 93.800f)); }
 // 0 = REC (NT button 3), 1 = HOLD INF (button 4), 2 = MENU
 inline Vec CenterButton(int k) { const float x[3] = {44.880f, 55.880f, 66.880f}; return mm2px(Vec(x[k], 80.000f)); }
-// Inputs 0…11 = NT busses 1…12 (In L, In R, CV 3…12); outputs 0/1 = busses 13/14.
+// Inputs 0…11 = NT busses 1…12 (In L, In R, CV 1…10); outputs 0/1 = busses 13/14.
 inline Vec InputPos(int k)
 {
     const float x[12] = {14.000f, 28.000f, 14.000f, 28.000f, 42.000f, 56.000f, 70.000f, 84.000f, 98.000f, 42.000f, 56.000f, 70.000f};

@@ -40,9 +40,9 @@ CENTER_BTN_X = (CX - 11.0, CX, CX + 11.0)  # REC (button 3), HOLD INF (button 4)
 SCREWS = [(7.5, 3.0), (W - 7.5, 3.0)]  # top only: the bottom row is all jacks
 JACK_X = [14.0 + 14.0 * k for k in range(7)]
 JACK_Y = (108.0, 120.0)  # clear of the stripe
-# Inputs 0…11 = NT busses 1…12: In L, In R, CV 3…12. Outputs 0/1 = busses 13/14.
-INPUTS = [("IN L", 0, 1), ("IN R", 1, 1)] + [("CV %d" % (3 + k), k, 0) for k in range(7)] + \
-         [("CV 10", 2, 1), ("CV 11", 3, 1), ("CV 12", 4, 1)]
+# Inputs 0…11 = NT busses 1…12: In L, In R, CV 1…10. Outputs 0/1 = busses 13/14.
+INPUTS = [("IN L", 0, 1), ("IN R", 1, 1)] + [("CV %d" % (1 + k), k, 0) for k in range(7)] + \
+         [("CV 8", 2, 1), ("CV 9", 3, 1), ("CV 10", 4, 1)]
 OUTPUTS = [("OUT L", 5, 1), ("OUT R", 6, 1)]
 
 fonts = {}
@@ -176,7 +176,7 @@ inline Vec EncStep(int k, int dir) { const float x[2] = {%s}; return mm2px(Vec(x
 inline Vec EncPush(int k) { const float x[2] = {%s}; return mm2px(Vec(x[k], %.3ff)); }
 // 0 = REC (NT button 3), 1 = HOLD INF (button 4), 2 = MENU
 inline Vec CenterButton(int k) { const float x[3] = {%s}; return mm2px(Vec(x[k], %.3ff)); }
-// Inputs 0…11 = NT busses 1…12 (In L, In R, CV 3…12); outputs 0/1 = busses 13/14.
+// Inputs 0…11 = NT busses 1…12 (In L, In R, CV 1…10); outputs 0/1 = busses 13/14.
 inline Vec InputPos(int k)
 {
     const float x[12] = {%s};

@@ -49,7 +49,7 @@ class Host
     void Destroy();
     bool Ok() const { return alg_ != nullptr; }
 
-    // One frame of audio: inputs[0…11] are busses 1…12 (In L, In R, CV 3…12),
+    // One frame of audio: inputs[0…11] are busses 1…12 (In L, In R, CV 1…10),
     // outputs[0…1] come from busses 13/14 (Output 1/2). One block of latency.
     void Frame(const float in[kNT_numInputBusses], float out[2]);
 
@@ -67,6 +67,16 @@ class Host
     void        SetParam(int p, int v); // clamped, calls parameterChanged()
     void        ResetParams();          // all to their defaults
     std::vector<std::pair<std::string, int>> Values() const;
+
+    // Names of the busses in the menu (index 0 = bus 1); empty = "Input n" / "Output n".
+    void SetBusNames(std::vector<std::string> names) { bus_names_ = std::move(names); }
+    // The value as the menu shows it.
+    std::string ValueString(int p) const
+    {
+        char b[kNT_parameterStringSize + 4];
+        FormatValue(p, values_[p], b);
+        return b;
+    }
 
     const std::vector<int32_t>& Specs() const { return specs_; }
     bool                        MenuOpen() const { return menu_open_; }
@@ -95,7 +105,8 @@ class Host
     std::vector<int32_t> specs_;
     void*                mem_[4]  = {nullptr, nullptr, nullptr, nullptr};
     std::vector<int16_t> values_;
-    std::vector<std::string> names_; // parameter names as constructed (persistence keys)
+    std::vector<std::string> names_;
+    std::vector<std::string> bus_names_; // parameter names as constructed (persistence keys)
     std::vector<uint8_t> audio_changed_;
     uint32_t             custom_ = 0; // hasCustomUi()
 

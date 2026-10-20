@@ -43,10 +43,10 @@ Alle Bedienelemente sind normale Rack-Parameter. **MIDI-Map** lernt jedes davon:
 | Panel | NT-Eingang | ab Werk |
 |---|---|---|
 | IN L, IN R | Input 1, 2 | Audio *In L* / *In R* |
-| CV 3 … CV 12 | Input 3 … 12 | *Clock in* = Input 3, alle anderen frei |
+| CV 1 … CV 10 | Input 3 … 12 | *Clock in* = CV 1, alle anderen frei |
 | OUT L, OUT R | Output 1, 2 | *Out L* / *Out R* |
 
-Die CV-Eingänge sind frei zuweisbar, über dieselben Routing-Parameter wie am NT. Die Parameter stehen auf der Seite *Routing* (*Rec trig in*, *Clock in*, *Reso V/Oct in*) und auf den Seiten *Mod 1 … Mod 12* (*Mod n in*). Dort Input 3 … 12 wählen, dann wirkt die Buchse CV 3 … CV 12. Damit sind alle 12 NT-Eingänge auf dem Panel.
+Die CV-Eingänge sind frei zuweisbar, über dieselben Routing-Parameter wie am NT. Die Parameter stehen auf der Seite *Routing* (*Rec trig in*, *Clock in*, *Reso V/Oct in*) und auf den Seiten *Mod 1 … Mod 12* (*Mod n in*). Das Menü nennt die Eingänge wie die Buchsen: *In L*, *In R*, *CV 1* … *CV 10*. Damit liegen alle 12 NT-Eingänge auf dem Panel. Ein vom NT übernommenes Preset mit „Input 3“ landet auf CV 1, „Input 12“ auf CV 10.
 
 ## Speichern, Kontextmenü
 

@@ -504,6 +504,8 @@ int Host::FormatValue(int p, int v, char* buff) const
         case kNT_unitCvOutput:
             if(v <= 0)
                 return std::snprintf(buff, kNT_parameterStringSize, "None");
+            if(v <= static_cast<int>(bus_names_.size()) && !bus_names_[v - 1].empty())
+                return std::snprintf(buff, kNT_parameterStringSize, "%s", bus_names_[v - 1].c_str());
             if(v <= kNT_numInputBusses)
                 return std::snprintf(buff, kNT_parameterStringSize, "Input %d", v);
             if(v <= kNT_numInputBusses + kNT_numOutputBusses)
