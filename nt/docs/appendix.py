@@ -51,7 +51,7 @@ for idx, name in targets:
 
 block = """<!-- appendix:start -->
 <article class="patch-card" id="anhang">
-  <div class="ph"><div class="num">12</div><div class="ph-main"><h2>Anhang: Wo steht was</h2></div></div>
+  <div class="ph"><div class="num">13</div><div class="ph-main"><h2>Anhang: Wo steht was</h2></div></div>
   <div class="pb">
   <p>Erzeugt aus den Tabellen des Plug-ins (<code>./test/sim --list | python3 docs/appendix.py …</code>), passt also immer zur Version.</p>
   <h3>Parameterseiten in Menü-Reihenfolge</h3>
@@ -73,7 +73,7 @@ if "<!-- appendix:start -->" in doc:
     doc = re.sub(r"<!-- appendix:start -->.*?<!-- appendix:end -->", lambda m: block, doc, flags=re.S)
 else:
     doc = doc.replace("</section>\n<footer>", block + "\n</section>\n<footer>", 1)
-toc = '<li><a class="tl" href="#anhang"><span class="tn">12</span><span class="tt">Anhang: Wo steht was</span></a></li>'
+toc = '<li><a class="tl" href="#anhang"><span class="tn">13</span><span class="tt">Anhang: Wo steht was</span></a></li>'
 if toc not in doc:
     doc = re.sub(r'(<li><a class="tl" href="#grenzen">.*?</li>)', lambda m: m.group(1) + "\n" + toc, doc, count=1, flags=re.S)
 open(path, "w", encoding="utf-8").write(doc)
