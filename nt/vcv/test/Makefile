@@ -17,7 +17,7 @@ all: host_test
 
 build/%.cpp.o: %.cpp
 	@mkdir -p build
-	g++ $(CXXFLAGS) -c -o $@ $<
+	g++ $(CXXFLAGS) -MMD -MP -c -o $@ $<
 build/%.c.o: %.c
 	@mkdir -p build
 	gcc $(CFLAGS) -c -o $@ $<
@@ -32,3 +32,4 @@ clean:
 	rm -rf build host_test frames.txt
 
 .PHONY: all render clean
+-include $(wildcard build/*.d)

@@ -35,3 +35,5 @@ build/ext/%.cpp.o: %.cpp
 build/ext/%.c.o: %.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c -o $@ $<
+
+-include $(wildcard build/ext/*.d)

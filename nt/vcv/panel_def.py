@@ -32,12 +32,12 @@ ENC_STEP_DX = 11.5     # ◀ / ▶ buttons left and right of each encoder
 ENC_PUSH_Y = 93.8
 CENTER_BTN_Y = 80.0
 CENTER_BTN_X = (CX - 11.0, CX, CX + 11.0)  # REC (button 3), HOLD INF (button 4), MENU
-SCREWS = [(7.5, 3.0), (W - 7.5, 3.0), (70.0, H - 3.0)]  # bottom one in the free jack column
+SCREWS = [(7.5, 3.0), (W - 7.5, 3.0)]  # top only: the bottom row is all jacks
 JACK_X = [14.0 + 14.0 * k for k in range(7)]
 JACK_Y = (109.0, 121.5)
-# Inputs 0…10 = NT busses 1…11: In L, In R, CV 3…11. Outputs 0/1 = busses 13/14.
+# Inputs 0…11 = NT busses 1…12: In L, In R, CV 3…12. Outputs 0/1 = busses 13/14.
 INPUTS = [("IN L", 0, 1), ("IN R", 1, 1)] + [("CV %d" % (3 + k), k, 0) for k in range(7)] + \
-         [("CV 10", 2, 1), ("CV 11", 3, 1)]
+         [("CV 10", 2, 1), ("CV 11", 3, 1), ("CV 12", 4, 1)]
 OUTPUTS = [("OUT L", 5, 1), ("OUT R", 6, 1)]
 
 fonts = {}
@@ -143,15 +143,15 @@ inline Vec EncStep(int k, int dir) { const float x[2] = {%s}; return mm2px(Vec(x
 inline Vec EncPush(int k) { const float x[2] = {%s}; return mm2px(Vec(x[k], %.3ff)); }
 // 0 = REC (NT button 3), 1 = HOLD INF (button 4), 2 = MENU
 inline Vec CenterButton(int k) { const float x[3] = {%s}; return mm2px(Vec(x[k], %.3ff)); }
-// Inputs 0…10 = NT busses 1…11 (In L, In R, CV 3…11); outputs 0/1 = busses 13/14.
+// Inputs 0…11 = NT busses 1…12 (In L, In R, CV 3…12); outputs 0/1 = busses 13/14.
 inline Vec InputPos(int k)
 {
-    const float x[11] = {%s};
-    const float y[11] = {%s};
+    const float x[12] = {%s};
+    const float y[12] = {%s};
     return mm2px(Vec(x[k], y[k]));
 }
-inline Vec Screw(int k) { const float x[3] = {%s}; const float y[3] = {%s}; return mm2px(Vec(x[k], y[k])); }
-constexpr int kNumScrews = 3;
+inline Vec Screw(int k) { const float x[2] = {%s}; const float y[2] = {%s}; return mm2px(Vec(x[k], y[k])); }
+constexpr int kNumScrews = 2;
 inline Vec OutputPos(int k) { const float x[2] = {%s}; return mm2px(Vec(x[k], %.3ff)); }
 } // namespace panel_layout
 """ % (HP, DISPLAY[0], DISPLAY[1], DISPLAY[2], DISPLAY[3], arr(POT_X), POT_Y, arr(POT_X), POT_PUSH[0],

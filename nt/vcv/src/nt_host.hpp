@@ -49,9 +49,9 @@ class Host
     void Destroy();
     bool Ok() const { return alg_ != nullptr; }
 
-    // One frame of audio: inputs[0…10] are busses 1…11 (In L, In R, CV 3…11),
+    // One frame of audio: inputs[0…11] are busses 1…12 (In L, In R, CV 3…12),
     // outputs[0…1] come from busses 13/14 (Output 1/2). One block of latency.
-    void Frame(const float in[11], float out[2]);
+    void Frame(const float in[kNT_numInputBusses], float out[2]);
 
     // Controls, at any rate (the module calls it every 32 frames or so).
     void Ui(const Controls& c);
@@ -100,7 +100,7 @@ class Host
     uint32_t             custom_ = 0; // hasCustomUi()
 
     float bus_[kNumBusses * kBlockFrames] = {};
-    float in_[11][kBlockFrames]           = {};
+    float in_[kNT_numInputBusses][kBlockFrames]           = {};
     float out_[2][kBlockFrames]           = {};
     int   pos_                            = 0;
 

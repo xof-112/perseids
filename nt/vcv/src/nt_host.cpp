@@ -239,9 +239,9 @@ std::vector<std::pair<std::string, int>> Host::Values() const
 }
 
 // --- audio ---------------------------------------------------------------------
-void Host::Frame(const float in[11], float out[2])
+void Host::Frame(const float in[kNT_numInputBusses], float out[2])
 {
-    for(int k = 0; k < 11; ++k)
+    for(int k = 0; k < kNT_numInputBusses; ++k)
         in_[k][pos_] = in[k];
     out[0] = out_[0][pos_];
     out[1] = out_[1][pos_];
@@ -260,7 +260,7 @@ void Host::Step()
         return;
     }
     std::memset(bus_, 0, sizeof(bus_));
-    for(int k = 0; k < 11; ++k)
+    for(int k = 0; k < kNT_numInputBusses; ++k)
         std::memcpy(bus_ + k * kBlockFrames, in_[k], sizeof(in_[k]));
     {
         Guard g(this);

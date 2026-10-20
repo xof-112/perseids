@@ -52,8 +52,8 @@ struct Perseids : Module
     {
         IN_L_INPUT,
         IN_R_INPUT,
-        CV_3_INPUT, // … CV 11: NT busses 3…11
-        INPUTS_LEN = CV_3_INPUT + 9
+        CV_3_INPUT, // … CV 12: NT busses 3…12
+        INPUTS_LEN = CV_3_INPUT + 10
     };
     enum OutputId
     {
@@ -103,7 +103,7 @@ struct Perseids : Module
             getParamQuantity(ENC_L_PARAM + k)->snapEnabled = false;
         configInput(IN_L_INPUT, "In L (NT input 1)");
         configInput(IN_R_INPUT, "In R (NT input 2)");
-        for(int k = 0; k < 9; ++k)
+        for(int k = 0; k < 10; ++k)
             configInput(CV_3_INPUT + k, string::f("CV %d (NT input %d)", 3 + k, 3 + k));
         configOutput(OUT_L_OUTPUT, "Out L (NT output 1)");
         configOutput(OUT_R_OUTPUT, "Out R (NT output 2)");
@@ -182,8 +182,8 @@ struct Perseids : Module
             outputs[OUT_R_OUTPUT].setVoltage(0.f);
             return;
         }
-        float in[11];
-        for(int k = 0; k < 11; ++k)
+        float in[kNT_numInputBusses];
+        for(int k = 0; k < kNT_numInputBusses; ++k)
             in[k] = inputs[k].getVoltage();
         float out[2];
         host.Frame(in, out);

@@ -45,7 +45,7 @@ static float Run(nt_host::Host& h, float secs, nt_host::Controls& c, bool tone =
     const long n   = static_cast<long>(secs * 48000);
     for(long i = 0; i < n; ++i, ++g_t)
     {
-        float in[11] = {};
+        float in[kNT_numInputBusses] = {};
         if(tone)
             in[0] = in[1] = 5.f * std::sin(6.2831853f * 220.f * g_t / 48000.f);
         float out[2];

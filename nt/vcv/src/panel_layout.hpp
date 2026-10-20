@@ -15,14 +15,14 @@ inline Vec EncStep(int k, int dir) { const float x[2] = {22.000f, 89.760f}; retu
 inline Vec EncPush(int k) { const float x[2] = {22.000f, 89.760f}; return mm2px(Vec(x[k], 93.800f)); }
 // 0 = REC (NT button 3), 1 = HOLD INF (button 4), 2 = MENU
 inline Vec CenterButton(int k) { const float x[3] = {44.880f, 55.880f, 66.880f}; return mm2px(Vec(x[k], 80.000f)); }
-// Inputs 0…10 = NT busses 1…11 (In L, In R, CV 3…11); outputs 0/1 = busses 13/14.
+// Inputs 0…11 = NT busses 1…12 (In L, In R, CV 3…12); outputs 0/1 = busses 13/14.
 inline Vec InputPos(int k)
 {
-    const float x[11] = {14.000f, 28.000f, 14.000f, 28.000f, 42.000f, 56.000f, 70.000f, 84.000f, 98.000f, 42.000f, 56.000f};
-    const float y[11] = {121.500f, 121.500f, 109.000f, 109.000f, 109.000f, 109.000f, 109.000f, 109.000f, 109.000f, 121.500f, 121.500f};
+    const float x[12] = {14.000f, 28.000f, 14.000f, 28.000f, 42.000f, 56.000f, 70.000f, 84.000f, 98.000f, 42.000f, 56.000f, 70.000f};
+    const float y[12] = {121.500f, 121.500f, 109.000f, 109.000f, 109.000f, 109.000f, 109.000f, 109.000f, 109.000f, 121.500f, 121.500f, 121.500f};
     return mm2px(Vec(x[k], y[k]));
 }
-inline Vec Screw(int k) { const float x[3] = {7.500f, 104.260f, 70.000f}; const float y[3] = {3.000f, 3.000f, 125.500f}; return mm2px(Vec(x[k], y[k])); }
-constexpr int kNumScrews = 3;
+inline Vec Screw(int k) { const float x[2] = {7.500f, 104.260f}; const float y[2] = {3.000f, 3.000f}; return mm2px(Vec(x[k], y[k])); }
+constexpr int kNumScrews = 2;
 inline Vec OutputPos(int k) { const float x[2] = {84.000f, 98.000f}; return mm2px(Vec(x[k], 121.500f)); }
 } // namespace panel_layout
