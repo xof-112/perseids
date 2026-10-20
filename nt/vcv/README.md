@@ -59,7 +59,7 @@ Die CV-Eingänge sind frei zuweisbar, über dieselben Routing-Parameter wie am N
 - `src/nt_host.*`: der NT-Host. Er verwaltet Speicher, Parameter, 64 Busse (12 Eingänge, 8 Ausgänge, 44 Aux), die Bedienung (`customUi`), das Parametermenü und das Display. Alles läuft im Audio-Thread von Rack, das Panel liest nur eine Kopie des Bildschirms. Der Host ist portables C++ ohne Rack-Header.
 - `src/nt_api.cpp`, `src/nt_globals.cpp`: die NT-API, wie das Plug-in sie sieht. Die Zeichenfunktionen sind die von nt_emu, siehe `../render/nt_raster.h`. Mehrere Module teilen keinen Zustand.
 - `src/Perseids.cpp`: das Rack-Modul, Panel-Widget, Endlos-Encoder und Display.
-- `panel_def.py` erzeugt `res/Perseids.svg` und `src/panel_layout.hpp`. Positionen nur dort ändern.
+- `panel_def.py` erzeugt `res/Perseids.svg` und `src/panel_layout.hpp`. Positionen nur dort ändern. Farben, Schriften, Bauteilgrößen und Abstände kommen aus dem 3F4-Panel-Kit `style/panel_3f4.py`, die Regeln dazu in `style/3F4_PANEL_STYLE.md`.
 - `src/fonts/`: die NT-Schriften aus nt_emu (MIT, © Neal Sanche). Tom Thumb ist MIT, Selawik steht unter OFL, pixelmix ist freeware von Andrew Tyler.
 - `tools/mklibrack.py`: Import-Bibliothek für libRack.dll, damit die Windows-DLL ohne Rack SDK gebaut werden kann (Cross-Build unter Linux).
 
