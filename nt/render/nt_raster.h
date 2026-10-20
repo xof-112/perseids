@@ -12,6 +12,12 @@
 #include "selawik_aa.h"
 #include "tom_thumb_4x6.h"
 
+// The screen to draw into: NT_screen by default; the VCV host points it at
+// the instance's own buffer.
+#ifndef NT_RASTER_SCREEN
+#define NT_RASTER_SCREEN NT_screen
+#endif
+
 namespace nt_raster
 {
 constexpr int W = 256, H = 64;
@@ -22,8 +28,8 @@ inline void Pixel(int x, int y, int c)
         return;
     const int i = y * 128 + x / 2;
     c &= 0x0F;
-    NT_screen[i] = (x & 1) ? static_cast<uint8_t>((NT_screen[i] & 0xF0) | c)
-                           : static_cast<uint8_t>((NT_screen[i] & 0x0F) | (c << 4));
+    uint8_t* const scr = NT_RASTER_SCREEN;
+    scr[i] = (x & 1) ? static_cast<uint8_t>((scr[i] & 0xF0) | c) : static_cast<uint8_t>((scr[i] & 0x0F) | (c << 4));
 }
 
 inline int OutCode(int x, int y)

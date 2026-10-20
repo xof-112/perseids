@@ -6,6 +6,8 @@ Die Engines sind dieselben Quelldateien wie in der Daisy-Firmware (`../src/captu
 
 Handbuch für Spieler: [`docs/perseids-nt-anleitung.html`](docs/perseids-nt-anleitung.html).
 
+Als natives **VCV-Rack-2-Modul** (derselbe Code, NT-artiges Panel, MIDI-Map-fähig): [`vcv/`](vcv/README.md).
+
 Gebaut gegen distingNT_API v14 (Submodul `distingNT_API`, Stand 6975a63). GPL-3.0 wie Perseids.
 
 ## Installation
