@@ -18,8 +18,13 @@ HP = 22
 W, H = HP * 5.08, 128.5
 CX = W / 2
 
-# Dark panel, amber print, coloured rings for audio in/out.
-BG, BG2, AMBER, DIM, BEZEL = "#1b1c1f", "#232428", "#e3a43f", "#8d8577", "#060607"
+# Dark panel, light-blue print, the 3F4 navy stripe along the bottom,
+# coloured rings for audio in/out.
+BG, BG2, BEZEL = "#1b1c1f", "#232428", "#060607"
+INK = "#8fb8ff"     # labels and title: light blue
+DIM = "#7388aa"     # secondary print (PUSH …, INF)
+NAVY = "#000041"    # stripe from the 3F4 logo
+STRIPE_H = 3.0      # mm, full width at the bottom edge
 RING_IN, RING_OUT = ("#d4314f", "#e8b52c"), ("#8a4fd1", "#e8b52c")
 
 # --- positions (mm, centres) ---------------------------------------------------
@@ -34,7 +39,7 @@ CENTER_BTN_Y = 80.0
 CENTER_BTN_X = (CX - 11.0, CX, CX + 11.0)  # REC (button 3), HOLD INF (button 4), MENU
 SCREWS = [(7.5, 3.0), (W - 7.5, 3.0)]  # top only: the bottom row is all jacks
 JACK_X = [14.0 + 14.0 * k for k in range(7)]
-JACK_Y = (109.0, 121.5)
+JACK_Y = (108.0, 120.0)  # clear of the stripe
 # Inputs 0…11 = NT busses 1…12: In L, In R, CV 3…12. Outputs 0/1 = busses 13/14.
 INPUTS = [("IN L", 0, 1), ("IN R", 1, 1)] + [("CV %d" % (3 + k), k, 0) for k in range(7)] + \
          [("CV 10", 2, 1), ("CV 11", 3, 1), ("CV 12", 4, 1)]
@@ -49,7 +54,7 @@ def font(name):
     return fonts[name]
 
 
-def text(s, x, y, size, fill=AMBER, anchor="middle", face="DejaVuSansCondensed-Bold.ttf", spacing=0.0):
+def text(s, x, y, size, fill=INK, anchor="middle", face="DejaVuSansCondensed-Bold.ttf", spacing=0.0):
     """Text as one SVG path; y is the baseline, size the cap height in mm."""
     f = font(face)
     gs, cmap = f.getGlyphSet(), f.getBestCmap()
@@ -77,7 +82,7 @@ def line(x0, y0, x1, y1, col=DIM, sw=0.3):
     return '<line x1="%.3f" y1="%.3f" x2="%.3f" y2="%.3f" stroke="%s" stroke-width="%.2f"/>' % (x0, y0, x1, y1, col, sw)
 
 
-def triangle(x, y, left, col=AMBER):
+def triangle(x, y, left, col=INK):
     d = 1.0
     pts = [(x + d, y - d), (x - d, y), (x + d, y + d)] if left else [(x - d, y - d), (x + d, y), (x - d, y + d)]
     return '<path fill="%s" d="M%s Z"/>' % (col, " L".join("%.2f %.2f" % p for p in pts))
@@ -103,8 +108,8 @@ def logo_3f4(x0, y0, h, ink="#dcdcdc", light="#dcdcdc", dark="#3b3c41", grey="#5
     return parts, 1459 * k  # elements, width
 
 
-out = [rect(0, 0, W, H, BG)]
-out.append(text("PERSEIDS", CX, 8.6, 4.0, AMBER, face="DejaVuSans-Bold.ttf", spacing=0.9))
+out = [rect(0, 0, W, H, BG), rect(0, H - STRIPE_H, W, STRIPE_H, NAVY)]
+out.append(text("PERSEIDS", CX, 8.6, 4.0, INK, face="DejaVuSans-Bold.ttf", spacing=0.9))
 LOGO_H = 3.2
 _logo, _lw = logo_3f4(0, 0, LOGO_H)
 out += logo_3f4(W - 12.5 - _lw, 8.6 - LOGO_H, LOGO_H)[0]
@@ -128,7 +133,7 @@ for x, name in zip(CENTER_BTN_X, ("REC", "HOLD", "MENU")):
 out.append(text("INF", CENTER_BTN_X[1], CENTER_BTN_Y + 10.0, 1.5, DIM))
 
 # Jacks
-out.append(line(6.0, 100.4, W - 6.0, 100.4, "#34353a", 0.3))
+out.append(line(6.0, 99.4, W - 6.0, 99.4, "#34353a", 0.3))
 for xs in ((JACK_X[1] + JACK_X[2]) / 2, (JACK_X[4] + JACK_X[5]) / 2):
     out.append(line(xs, JACK_Y[1] - 6.5, xs, JACK_Y[1] + 4.5, "#4a4b50", 0.3))
 for (label, col, row), ring in zip(INPUTS[:2], RING_IN):

@@ -19,10 +19,10 @@ inline Vec CenterButton(int k) { const float x[3] = {44.880f, 55.880f, 66.880f};
 inline Vec InputPos(int k)
 {
     const float x[12] = {14.000f, 28.000f, 14.000f, 28.000f, 42.000f, 56.000f, 70.000f, 84.000f, 98.000f, 42.000f, 56.000f, 70.000f};
-    const float y[12] = {121.500f, 121.500f, 109.000f, 109.000f, 109.000f, 109.000f, 109.000f, 109.000f, 109.000f, 121.500f, 121.500f, 121.500f};
+    const float y[12] = {120.000f, 120.000f, 108.000f, 108.000f, 108.000f, 108.000f, 108.000f, 108.000f, 108.000f, 120.000f, 120.000f, 120.000f};
     return mm2px(Vec(x[k], y[k]));
 }
 inline Vec Screw(int k) { const float x[2] = {7.500f, 104.260f}; const float y[2] = {3.000f, 3.000f}; return mm2px(Vec(x[k], y[k])); }
 constexpr int kNumScrews = 2;
-inline Vec OutputPos(int k) { const float x[2] = {84.000f, 98.000f}; return mm2px(Vec(x[k], 121.500f)); }
+inline Vec OutputPos(int k) { const float x[2] = {84.000f, 98.000f}; return mm2px(Vec(x[k], 120.000f)); }
 } // namespace panel_layout

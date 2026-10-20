@@ -62,3 +62,20 @@ Die CV-Eingänge sind frei zuweisbar, über dieselben Routing-Parameter wie am N
 - `panel_def.py` erzeugt `res/Perseids.svg` und `src/panel_layout.hpp`. Positionen nur dort ändern.
 - `src/fonts/`: die NT-Schriften aus nt_emu (MIT, © Neal Sanche). Tom Thumb ist MIT, Selawik steht unter OFL, pixelmix ist freeware von Andrew Tyler.
 - `tools/mklibrack.py`: Import-Bibliothek für libRack.dll, damit die Windows-DLL ohne Rack SDK gebaut werden kann (Cross-Build unter Linux).
+
+## Panel-Farben (3F4-Stil)
+
+| Rolle | Farbe |
+|---|---|
+| Panel | `#1b1c1f` |
+| Flächen hinter Tastern | `#232428` |
+| Display-Rahmen | `#060607` |
+| Beschriftung, Titel, Pfeile | `#8fb8ff` (hellblau) |
+| Nebentexte (PUSH …, INF) | `#7388aa` |
+| Streifen unten (aus dem Logo), 3 mm, volle Breite | `#000041` |
+| Trennlinien | `#34353a`, `#4a4b50` |
+| Ringe IN L / IN R | `#d4314f` / `#e8b52c` |
+| Ringe OUT L / OUT R | `#8a4fd1` / `#e8b52c` |
+| Logo: oberer Balken und „3F4“ | `#dcdcdc` |
+| Logo: dunkler / grauer Balkenteil (für dunkles Panel aufgehellt) | `#3b3c41` / `#5b5c67` |
+| Logo-Original: Balken hell / dunkel / grau, Streifen | `#dddddd` / `#292929` / `#4d4e57`, `#000041` |
