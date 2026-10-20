@@ -56,7 +56,7 @@ SCREW_INSET = (7.5, 3.0)            # x from left/right edge, y from top
 STRIPE_H = 3.0                      # navy stripe along the bottom edge
 DISPLAY_W = 86.7                    # 256 px at Rack's 75 dpi → 1:1 at 100 % zoom
 BEZEL_PAD, BEZEL_R = 2.0, 1.5
-JACK_PITCH, JACK_ROW_PITCH = 14.0, 12.0
+JACK_PITCH, JACK_ROW_PITCH = 14.0, 13.0
 JACK_LAST_ROW_Y = PANEL_H - STRIPE_H - 5.5   # 120.0: ring stays clear of the stripe
 RING_R = 4.9
 
@@ -82,7 +82,7 @@ ENC_STEP_DX, ENC_ARROW_DY = 11.5, -4.6
 ENC_PUSH_DY, ENC_PUSH_LABEL = 13.8, 4.8
 BUTTON_LABEL, BUTTON_SUB = 7.0, 10.0
 BUTTON_PITCH = 11.0
-JACK_LABEL = -6.2
+JACK_LABEL = -5.8
 
 _fonts = {}
 

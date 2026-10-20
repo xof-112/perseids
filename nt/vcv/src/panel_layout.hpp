@@ -10,16 +10,16 @@ inline Vec DisplayPos() { return mm2px(Vec(12.530f, 13.000f)); }
 inline Vec DisplaySize() { return mm2px(Vec(86.700f, 21.675f)); }
 inline Vec Pot(int k) { const float x[3] = {20.000f, 55.880f, 91.760f}; return mm2px(Vec(x[k], 50.000f)); }
 inline Vec PotPush(int k) { const float x[3] = {20.000f, 55.880f, 91.760f}; return mm2px(Vec(x[k] + 9.600f, 56.000f)); }
-inline Vec Enc(int k) { const float x[2] = {22.000f, 89.760f}; return mm2px(Vec(x[k], 80.000f)); }
-inline Vec EncStep(int k, int dir) { const float x[2] = {22.000f, 89.760f}; return mm2px(Vec(x[k] + dir * 11.500f, 80.000f)); }
-inline Vec EncPush(int k) { const float x[2] = {22.000f, 89.760f}; return mm2px(Vec(x[k], 93.800f)); }
+inline Vec Enc(int k) { const float x[2] = {22.000f, 89.760f}; return mm2px(Vec(x[k], 79.000f)); }
+inline Vec EncStep(int k, int dir) { const float x[2] = {22.000f, 89.760f}; return mm2px(Vec(x[k] + dir * 11.500f, 79.000f)); }
+inline Vec EncPush(int k) { const float x[2] = {22.000f, 89.760f}; return mm2px(Vec(x[k], 92.800f)); }
 // 0 = REC (NT button 3), 1 = HOLD INF (button 4), 2 = MENU
-inline Vec CenterButton(int k) { const float x[3] = {44.880f, 55.880f, 66.880f}; return mm2px(Vec(x[k], 80.000f)); }
+inline Vec CenterButton(int k) { const float x[3] = {44.880f, 55.880f, 66.880f}; return mm2px(Vec(x[k], 79.000f)); }
 // Inputs 0…11 = NT busses 1…12 (In L, In R, CV 1…10); outputs 0/1 = busses 13/14.
 inline Vec InputPos(int k)
 {
     const float x[12] = {14.000f, 28.000f, 14.000f, 28.000f, 42.000f, 56.000f, 70.000f, 84.000f, 98.000f, 42.000f, 56.000f, 70.000f};
-    const float y[12] = {120.000f, 120.000f, 108.000f, 108.000f, 108.000f, 108.000f, 108.000f, 108.000f, 108.000f, 120.000f, 120.000f, 120.000f};
+    const float y[12] = {120.000f, 120.000f, 107.000f, 107.000f, 107.000f, 107.000f, 107.000f, 107.000f, 107.000f, 120.000f, 120.000f, 120.000f};
     return mm2px(Vec(x[k], y[k]));
 }
 inline Vec Screw(int k) { const float x[2] = {7.500f, 104.260f}; const float y[2] = {3.000f, 3.000f}; return mm2px(Vec(x[k], y[k])); }

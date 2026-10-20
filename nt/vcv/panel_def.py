@@ -21,10 +21,10 @@ HP, W, H, CX = pn.hp, pn.W, pn.H, pn.CX
 DISPLAY = pn.display(y=13.0)  # 256 × 64 NT pixels, 1:1 at 100 % zoom
 POT_Y, POT_X = 50.0, (20.0, CX, W - 20.0)
 POT_PUSH = p.BIG_KNOB_PUSH
-ENC_Y, ENC_X = 80.0, (22.0, W - 22.0)
+ENC_Y, ENC_X = 79.0, (22.0, W - 22.0)
 ENC_STEP_DX = p.ENC_STEP_DX
 ENC_PUSH_Y = ENC_Y + p.ENC_PUSH_DY
-CENTER_BTN_Y = 80.0
+CENTER_BTN_Y = 79.0
 CENTER_BTN_X = (CX - p.BUTTON_PITCH, CX, CX + p.BUTTON_PITCH)  # REC (button 3), HOLD INF (button 4), MENU
 SCREWS = pn.screws  # top only: the bottom row is all jacks
 JACK_X = pn.jack_columns(7)
@@ -43,7 +43,7 @@ for x, name, push in zip(ENC_X, ("TRAIL", "LEVEL"), ("SOLO", "LOCK")):
 for x, name, sub in zip(CENTER_BTN_X, ("REC", "HOLD", "MENU"), (None, "INF", None)):
     pn.button(x, CENTER_BTN_Y, name, sub)
 # Jacks
-pn.rule(99.4)
+pn.rule(98.6)
 for xs in ((JACK_X[1] + JACK_X[2]) / 2, (JACK_X[4] + JACK_X[5]) / 2):
     pn.separator(xs, JACK_Y[1])
 rings = {"IN L": p.RING_IN_L, "IN R": p.RING_IN_R, "OUT L": p.RING_OUT_L, "OUT R": p.RING_OUT_R}

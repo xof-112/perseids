@@ -60,7 +60,7 @@ Die Werte sind vom Mittelpunkt aus gemessen, + heißt nach unten. „Grundlinie�
 | Hauptpoti | Grundlinie +12,4, Unterzeile +16,0 | Push-Taster rechts unten bei (+9,6 / +6,0), Scheibe `BG2` mit r 3,4 dahinter |
 | Encoder | Grundlinie +9,6 | ◀/▶ bei ±11,5 auf gleicher Höhe, Pfeil-Dreiecke 4,6 darüber (Kantenlänge 2), Push 13,8 unter dem Encoder, „PUSH …“ 4,8 unter dem Push |
 | Haupttaster | Grundlinie +7,0, Unterzeile +10,0 | Taster nebeneinander im Raster 11 |
-| Buchse | Grundlinie −6,2 (über der Buchse) | Audio-Buchsen mit Farbring r 4,9 |
+| Buchse | Grundlinie −5,8 (über der Buchse) | Audio-Buchsen mit Farbring r 4,9 |
 
 ## 5. Raster und Ränder
 
@@ -71,8 +71,8 @@ Die Werte sind vom Mittelpunkt aus gemessen, + heißt nach unten. „Grundlinie�
 - **Streifen unten:** 3,0 hoch, volle Breite, `NAVY`.
 - **Buchsenfeld:**
   - Spalten im Raster 14, die erste 14 vom linken Rand (bei 22 HP 7 Spalten).
-  - Reihen im Abstand 12, die unterste bei y = 120,0, damit der Ring 4,9 den Streifen nicht berührt.
-  - Darüber eine Trennlinie (`RULE`, 0,3) bei 99,4 von x 6 bis Breite − 6.
+  - Reihen im Abstand 13, die unterste bei y = 120,0, damit der Ring 4,9 den Streifen nicht berührt. Mit 13 bleiben gut 1,5 mm zwischen einer Buchse und der Beschriftung der Reihe darunter.
+  - Darüber eine Trennlinie (`RULE`, 0,3) bei 98,6 von x 6 bis Breite − 6, mit etwa 1 mm Luft zur Schrift darüber und darunter.
   - Gruppen (IN | CV | OUT) trennen senkrechte Linien `SEP`, mittig zwischen den Spalten, von 6,5 über bis 4,5 unter der Reihenmitte.
 - **Reihenfolge der Buchsen:** In der unteren Reihe links IN L, IN R mit roten/gelben Ringen, rechts OUT L, OUT R mit violetten/gelben Ringen, CV dazwischen und darüber. CV-Buchsen zählen ab **1**.
 - **Freiraum:** Zwischen Beschriftung und dem nächsten Element mindestens etwa 1 mm. Linien laufen nie durch Text.
@@ -98,7 +98,7 @@ pn.big_knob(20, 50, "DENSITY", sub="PUSH ⇄ …", push=True)
 enc = pn.encoder(22, 80, "STEP", steps=True, push="…")
 pn.button(pn.CX, 80, "MENU")
 cols = pn.jack_columns(7)
-pn.rule(99.4)
+pn.rule(98.6)
 pn.jack(cols[0], p.JACK_LAST_ROW_Y, "IN L", ring=p.RING_IN_L)
 pn.save("res/Collage.svg", "test/panel_parts.txt")
 ```
