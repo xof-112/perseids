@@ -15,7 +15,7 @@ cd nt/vcv
 make RACK_DIR=<Pfad zum Rack-SDK> install
 ```
 
-`make -C test` prüft den Host nativ ohne Rack (Audio, Bedienung, Menü, zwei Instanzen, Speichern).
+`make -C test` prüft den Host nativ ohne Rack (Audio, Bedienung, Menü, zuweisbare Regler, zwei Instanzen, Speichern). `python3 test/preview_panels.py <Rack>/res/ComponentLibrary` rendert beide Panels mit Racks eigenem SVG-Renderer nach `test/panel-preview*.png`.
 
 ## Bedienelemente
 
@@ -38,6 +38,35 @@ Alle Bedienelemente sind normale Rack-Parameter. **MIDI-Map** lernt jedes davon:
 - **Encoder**: Ein absoluter CC über den ganzen Weg ergibt 24 Rasten. Bei Endlos-Encodern im Absolut-Modus geht es über den Umbruch ohne Sprung weiter.
 - **Pads und Tasten**: auf ◀ / ▶, PUSH, REC, HOLD INF, MENU (Note oder CC).
 
+## Panel: Performance oder Large
+
+Rechtsklick auf das Modul → **Panel**:
+
+- **Performance (22 HP):** das Spielpanel, wie oben.
+- **Large (22 + 12 HP):** Rechts kommt ein Feld mit **12 zuweisbaren Reglern** dazu. Module rechts daneben rücken zur Seite. Die Wahl wird mit dem Patch gespeichert.
+
+**Zuweisen:** Rechtsklick auf einen der kleinen Regler → **Assign this knob to** → Seite → Parameter. Ein Häkchen zeigt das aktuelle Ziel. **Nothing** gibt den Regler frei, **Default** stellt die Werksbelegung wieder her (für alle auf einmal: Rechtsklick aufs Modul → *Assignable knobs: factory targets*). Routing-Parameter (Ein-/Ausgänge, Output mode) und Auslöser (*Clear trails*, *Reset all mods*) stehen nicht zur Wahl.
+
+**Werksbelegung**, eine Reihe je Bereich, alles, was nicht schon auf einem Poti, Encoder oder Taster liegt:
+
+| Reihe | links | Mitte | rechts |
+|---|---|---|---|
+| Spectra | Partials | Waveshape | Umbra/Aurora |
+| Pitch | Ensemble | Pitch Spectra | Pitch Swarm |
+| Swarm | Spread | Scatter | Direction |
+| Reso / Zeit | Reso decay | Reso pitch | Hold |
+
+**So verhalten sich die Regler:**
+- Drehen setzt den Parameter über seinen ganzen Bereich (min … max, gerundet).
+- Ändert sich der Wert anders, über das Menü am Display, ein Preset oder das Laden eines Patches, springt der Regler mit.
+- Der Tooltip zeigt Name und Wert wie am NT, z. B. „Hold: 15 s“ oder „Direction: Rev“.
+- Unter dem Regler steht der Name des Ziels.
+- Die Ziele werden nach Namen mit dem Patch gespeichert. Die Regler arbeiten auch, wenn das kleine Panel gewählt ist; man sieht sie dann nur nicht.
+
+**MIDI-Map mit Hardware-Encodern:** Jeder zuweisbare Regler ist ein eigener Rack-Parameter. In MIDI-Map einen Eintrag anklicken, dann den kleinen Regler anfassen. MIDI-Map arbeitet absolut: Ein CC 0…127 fährt den ganzen Bereich des Ziels ab.
+- **Endlos-Encoder** am Controller dafür auf **absolut** stellen (0…127). Relative Encoder-Modi versteht MIDI-Map nicht, der Wert springt dann zwischen den Enden. Wer relative Encoder braucht, nimmt ein Mapping-Modul, das sie kann (z. B. Stoermelder MIDI-CAT).
+- Weil die Regler ihrem Ziel folgen, gibt es keinen Sprung, wenn du die Belegung wechselst: Der Rack-Regler steht sofort auf dem neuen Wert. Beim ersten Bewegen des Hardware-Reglers springt der Wert allerdings auf dessen Stellung. MIDI-Map hat dafür keinen Pickup.
+
 ## Buchsen
 
 | Panel | NT-Eingang | ab Werk |
@@ -59,7 +88,7 @@ Die CV-Eingänge sind frei zuweisbar, über dieselben Routing-Parameter wie am N
 - `src/nt_host.*`: der NT-Host. Er verwaltet Speicher, Parameter, 64 Busse (12 Eingänge, 8 Ausgänge, 44 Aux), die Bedienung (`customUi`), das Parametermenü und das Display. Alles läuft im Audio-Thread von Rack, das Panel liest nur eine Kopie des Bildschirms. Der Host ist portables C++ ohne Rack-Header.
 - `src/nt_api.cpp`, `src/nt_globals.cpp`: die NT-API, wie das Plug-in sie sieht. Die Zeichenfunktionen sind die von nt_emu, siehe `../render/nt_raster.h`. Mehrere Module teilen keinen Zustand.
 - `src/Perseids.cpp`: das Rack-Modul, Panel-Widget, Endlos-Encoder und Display.
-- `panel_def.py` erzeugt `res/Perseids.svg` und `src/panel_layout.hpp`. Positionen nur dort ändern. Farben, Schriften, Bauteilgrößen und Abstände kommen aus dem 3F4-Panel-Kit `style/panel_3f4.py`, die Regeln dazu in `style/3F4_PANEL_STYLE.md`.
+- `panel_def.py` erzeugt `res/Perseids.svg`, `res/Perseids-Large.svg` und `src/panel_layout.hpp`. Positionen nur dort ändern. Farben, Schriften, Bauteilgrößen und Abstände kommen aus dem 3F4-Panel-Kit `style/panel_3f4.py`, die Regeln dazu in `style/3F4_PANEL_STYLE.md`.
 - `src/fonts/`: die NT-Schriften aus nt_emu (MIT, © Neal Sanche). Tom Thumb ist MIT, Selawik steht unter OFL, pixelmix ist freeware von Andrew Tyler.
 - `tools/mklibrack.py`: Import-Bibliothek für libRack.dll, damit die Windows-DLL ohne Rack SDK gebaut werden kann (Cross-Build unter Linux).
 

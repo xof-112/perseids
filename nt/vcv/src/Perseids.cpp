@@ -3,6 +3,10 @@
 // follows the NT: 3 pots with push, 2 encoders with push, buttons, the
 // 256 × 64 display 1:1. Every control is a Rack parameter, so MIDI-Map can
 // learn each one; the encoders also have ◀ / ▶ buttons for note mapping.
+//
+// Panel "Large" (22 + 12 HP) adds 12 assignable knobs: right-click a knob to
+// put any Perseids parameter on it, then MIDI-Map the knob to the controller.
+#include <atomic>
 #include <cmath>
 #include <mutex>
 
@@ -23,6 +27,32 @@ constexpr float kStepsPerTurn = 24.f; // encoder detents per full turn (and per 
 constexpr int   kUiDivider    = 32;   // controls → host every 32 frames
 constexpr float kDrawHz       = 30.f;
 constexpr float kRepeatDelayS = 0.4f, kRepeatRateS = 0.08f; // ◀ / ▶ held
+
+// Factory assignment of the assignable knobs (by parameter name), row by row:
+// Spectra, pitch, Swarm, resonator + time. Not on the panel otherwise.
+using panel_layout::kNumSlots;
+const char* const     kSlotDefaults[kNumSlots] = {
+    "Partials",   "Waveshape",     "Umbra/Aurora",
+    "Ensemble",   "Pitch Spectra", "Pitch Swarm",
+    "Spread",     "Scatter",       "Direction",
+    "Reso decay", "Reso pitch",    "Hold",
+};
+
+// Parameters a knob may take: no routing (in/out busses, output mode), no
+// one-shot actions (Clear trails, Reset all mods).
+bool Assignable(const _NT_parameter& d)
+{
+    switch(d.unit)
+    {
+        case kNT_unitAudioInput:
+        case kNT_unitCvInput:
+        case kNT_unitAudioOutput:
+        case kNT_unitCvOutput:
+        case kNT_unitOutputMode:
+        case kNT_unitConfirm: return false;
+        default: return true;
+    }
+}
 } // namespace
 
 struct Perseids : Module
@@ -46,7 +76,8 @@ struct Perseids : Module
         REC_PARAM,
         HOLD_PARAM,
         MENU_PARAM,
-        PARAMS_LEN
+        SLOT_1_PARAM, // … 12 assignable knobs (Large panel); appended, old patches still load
+        PARAMS_LEN = SLOT_1_PARAM + kNumSlots
     };
     enum InputId
     {
@@ -68,9 +99,51 @@ struct Perseids : Module
         std::string getDisplayValueString() override { return "endless"; }
     };
 
+    // Assignable knob: 0…1 for MIDI; label and value are its target's.
+    struct SlotQuantity : ParamQuantity
+    {
+        int         Slot() const { return paramId - SLOT_1_PARAM; }
+        std::string getLabel() override
+        {
+            Perseids* m = static_cast<Perseids*>(module);
+            if(!m)
+                return string::f("Knob %d", Slot() + 1);
+            const std::string n = m->SlotTargetName(Slot());
+            return n.empty() ? string::f("Knob %d (unassigned, right-click to assign)", Slot() + 1) : n;
+        }
+        std::string getDisplayValueString() override
+        {
+            Perseids* m = static_cast<Perseids*>(module);
+            return m ? m->SlotValueString(Slot()) : "";
+        }
+        std::string getUnit() override { return ""; }
+    };
+
     nt_host::Host host;
     std::mutex    host_mutex; // held while the host is rebuilt (UI thread)
     float         sample_rate = 0.f;
+
+    // Changes from the UI thread to the audio thread (single producer).
+    struct Cmd
+    {
+        int p, v; // p >= 0: set parameter p to v; kCmdReset: all to defaults
+    };
+    static constexpr int kCmdReset = -100, kQueueLen = 64;
+    Cmd              queue[kQueueLen];
+    std::atomic<int> q_head{0}, q_tail{0};
+    void             Push(int p, int v)
+    {
+        const int h = q_head.load(std::memory_order_relaxed), n = (h + 1) % kQueueLen;
+        if(n == q_tail.load(std::memory_order_acquire))
+            return; // full: drop (cannot happen at human speed)
+        queue[h] = {p, v};
+        q_head.store(n, std::memory_order_release);
+    }
+
+    // Assignable knobs: target parameter (host index, -1 = nothing).
+    std::atomic<int>  slot_dest[kNumSlots];
+    nt_host::KnobLink slot_link[kNumSlots];
+    std::atomic<bool> large{false};          // panel choice, stored in the patch
 
     float enc_last[2] = {-1.f, -1.f};
     float enc_acc[2]  = {0.f, 0.f};
@@ -99,6 +172,13 @@ struct Perseids : Module
         configButton(REC_PARAM, "Record (NT button 3)");
         configButton(HOLD_PARAM, "Hold INF (NT button 4)");
         configButton(MENU_PARAM, "Menu (parameter pages)");
+        for(int k = 0; k < kNumSlots; ++k)
+        {
+            configParam<SlotQuantity>(SLOT_1_PARAM + k, 0.f, 1.f, 0.f, string::f("Knob %d", k + 1));
+            getParamQuantity(SLOT_1_PARAM + k)->resetEnabled     = false; // follows its target instead
+            getParamQuantity(SLOT_1_PARAM + k)->randomizeEnabled = false;
+            slot_dest[k].store(-1);
+        }
         for(int k = 0; k < 2; ++k)
             getParamQuantity(ENC_L_PARAM + k)->snapEnabled = false;
         configInput(IN_L_INPUT, "In L (NT input 1)");
@@ -110,6 +190,31 @@ struct Perseids : Module
         configBypass(IN_L_INPUT, OUT_L_OUTPUT);
         configBypass(IN_R_INPUT, OUT_R_OUTPUT);
         Rebuild({}, {}, APP->engine->getSampleRate());
+        for(int k = 0; k < kNumSlots; ++k)
+            slot_dest[k].store(DefaultSlot(k));
+    }
+
+    int DefaultSlot(int k) { return host.FindParam(kSlotDefaults[k]); }
+
+    // Name of knob k's target (UI thread; while the host is being rebuilt the
+    // last name seen is kept).
+    std::string slot_name_cache[kNumSlots];
+    std::string SlotTargetName(int k)
+    {
+        const int                    p = slot_dest[k].load();
+        std::unique_lock<std::mutex> l(host_mutex, std::try_to_lock);
+        if(l.owns_lock())
+            slot_name_cache[k] = p >= 0 && p < host.NumParams() ? host.ParamName(p) : "";
+        return slot_name_cache[k];
+    }
+
+    std::string SlotValueString(int k)
+    {
+        const int                    p = slot_dest[k].load();
+        std::unique_lock<std::mutex> l(host_mutex, std::try_to_lock);
+        if(!l.owns_lock() || !host.Ok() || p < 0 || p >= host.NumParams())
+            return "";
+        return host.ValueString(p, host.ParamValue(p));
     }
 
     // New algorithm instance (other Trail length, sample rate, patch load).
@@ -141,8 +246,21 @@ struct Perseids : Module
     void onReset(const ResetEvent& e) override
     {
         Module::onReset(e);
-        std::lock_guard<std::mutex> l(host_mutex);
-        host.ResetParams();
+        Push(kCmdReset, 0); // parameters to defaults, in the audio thread
+        for(int k = 0; k < kNumSlots; ++k)
+            slot_dest[k].store(DefaultSlot(k));
+    }
+
+    // Assignable knobs, at control rate: turned → set the target; otherwise
+    // follow it (menu, preset, CV mapping may change it).
+    void ProcessSlots()
+    {
+        for(int k = 0; k < kNumSlots; ++k)
+        {
+            const float show = nt_host::Link(host, slot_link[k], slot_dest[k].load(), params[SLOT_1_PARAM + k].getValue());
+            if(show >= 0.f)
+                params[SLOT_1_PARAM + k].setValue(show);
+        }
     }
 
     int Steps(int k, float dt)
@@ -189,6 +307,21 @@ struct Perseids : Module
             outputs[OUT_R_OUTPUT].setVoltage(0.f);
             return;
         }
+        // UI-thread changes first.
+        for(int t = q_tail.load(std::memory_order_relaxed); t != q_head.load(std::memory_order_acquire);
+            t = (t + 1) % kQueueLen)
+        {
+            const Cmd c = queue[t];
+            if(c.p == kCmdReset)
+            {
+                host.ResetParams();
+                for(int k = 0; k < kNumSlots; ++k)
+                    slot_link[k] = nt_host::KnobLink{};
+            }
+            else
+                host.SetParam(c.p, c.v);
+            q_tail.store((t + 1) % kQueueLen, std::memory_order_release);
+        }
         float in[kNT_numInputBusses];
         for(int k = 0; k < kNT_numInputBusses; ++k)
             in[k] = inputs[k].getVoltage();
@@ -219,6 +352,7 @@ struct Perseids : Module
             Bit(HOLD_PARAM, kNT_button4);
             c.menu = params[MENU_PARAM].getValue() > 0.5f;
             host.Ui(c);
+            ProcessSlots();
         }
         draw_phase += args.sampleTime * kDrawHz;
         if(draw_phase >= 1.f)
@@ -240,6 +374,12 @@ struct Perseids : Module
         for(const auto& nv : host.Values())
             json_object_set_new(vals, nv.first.c_str(), json_integer(nv.second));
         json_object_set_new(root, "values", vals);
+        // Knob targets by parameter name ("" = nothing), and the panel.
+        json_t* slots = json_array();
+        for(int k = 0; k < kNumSlots; ++k)
+            json_array_append_new(slots, json_string(SlotTargetName(k).c_str()));
+        json_object_set_new(root, "knobs", slots);
+        json_object_set_new(root, "large", json_boolean(large.load()));
         return root;
     }
 
@@ -257,6 +397,15 @@ struct Perseids : Module
             json_object_foreach(vals, key, v) values.emplace_back(key, static_cast<int>(json_integer_value(v)));
         }
         Rebuild(specs, values, sample_rate > 0.f ? sample_rate : APP->engine->getSampleRate());
+        if(json_t* slots = json_object_get(root, "knobs"))
+            for(int k = 0; k < kNumSlots && k < static_cast<int>(json_array_size(slots)); ++k)
+            {
+                const char* n = json_string_value(json_array_get(slots, k));
+                slot_dest[k].store(n && *n ? host.FindParam(n) : -1);
+                slot_link[k] = nt_host::KnobLink{};
+            }
+        if(json_t* l = json_object_get(root, "large"))
+            large.store(json_boolean_value(l));
     }
 };
 
@@ -347,15 +496,130 @@ struct EndlessKnob : RoundLargeBlackKnob
     }
 };
 
+// One assignable knob: right-click → "Assign this knob to" → page → parameter.
+struct SlotKnob : RoundSmallBlackKnob
+{
+    Perseids* m = nullptr;
+    int       k = 0;
+
+    void appendContextMenu(Menu* menu) override
+    {
+        if(!m)
+            return;
+        // Snapshot of the pages (the plug-in may rebuild them while the menu is open).
+        struct Entry
+        {
+            std::string             page;
+            std::vector<std::pair<int, std::string>> params;
+        };
+        std::vector<Entry> pages;
+        {
+            std::unique_lock<std::mutex> l(m->host_mutex, std::try_to_lock);
+            if(!l.owns_lock() || !m->host.Ok())
+                return;
+            for(int pg = 0; pg < m->host.NumPages(); ++pg)
+            {
+                Entry e{m->host.PageName(pg), {}};
+                if(e.page == "Mod overview") // the same amounts as on the Mod n pages
+                    continue;
+                for(int i = 0; i < m->host.PageSize(pg); ++i)
+                {
+                    const int p = m->host.PageParam(pg, i);
+                    if(p >= 0 && p < m->host.NumParams() && Assignable(m->host.ParamDef(p)))
+                        e.params.emplace_back(p, m->host.ParamName(p));
+                }
+                if(!e.params.empty())
+                    pages.push_back(e);
+            }
+        }
+        Perseids* mm = m;
+        const int kk = k;
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createMenuLabel("Assign this knob to"));
+        menu->addChild(createCheckMenuItem("Nothing", "", [=]() { return mm->slot_dest[kk].load() < 0; },
+                                           [=]() { mm->slot_dest[kk].store(-1); }));
+        for(const Entry& e : pages)
+            menu->addChild(createSubmenuItem(e.page, "", [=](Menu* sub) {
+                for(const auto& pr : e.params)
+                {
+                    const int p = pr.first;
+                    sub->addChild(createCheckMenuItem(pr.second, "", [=]() { return mm->slot_dest[kk].load() == p; },
+                                                      [=]() { mm->slot_dest[kk].store(p); }));
+                }
+            }));
+        menu->addChild(createMenuItem("Default", kSlotDefaults[kk], [=]() { mm->slot_dest[kk].store(mm->DefaultSlot(kk)); }));
+    }
+};
+
+// Names under the assignable knobs: they change, so they are drawn here, in
+// the panel's font (cap height as on the SVG: nanovg size = cap / 0.729).
+struct SlotLabels : Widget
+{
+    Perseids* m = nullptr;
+
+    void draw(const DrawArgs& args) override
+    {
+        std::shared_ptr<window::Font> f =
+            APP->window->loadFont(asset::plugin(pluginInstance, "res/fonts/DejaVuSansCondensed-Bold.ttf"));
+        if(!f)
+            return;
+        using namespace panel_layout;
+        NVGcontext* vg = args.vg;
+        nvgFontFaceId(vg, f->handle);
+        nvgFontSize(vg, mm2px(kSlotLabelCap / 0.729f));
+        nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_BASELINE);
+        nvgFillColor(vg, nvgRGB(0x8f, 0xb8, 0xff));
+        const float maxw = mm2px(kSlotLabelMaxW);
+        auto Width = [&](const std::string& t) { return nvgTextBounds(vg, 0, 0, t.c_str(), nullptr, nullptr); };
+        auto Fit   = [&](std::string t) {
+            while(t.size() > 1 && Width(t) > maxw)
+                t.pop_back();
+            return t;
+        };
+        for(int k = 0; k < kNumSlots; ++k)
+        {
+            std::string t = m ? m->SlotTargetName(k) : kSlotDefaults[k];
+            t             = t.empty() ? "-" : string::uppercase(t);
+            const Vec c   = Slot(k);
+            const float y = c.y + mm2px(kSlotLabelDy);
+            if(Width(t) <= maxw)
+            {
+                nvgText(vg, c.x, y, t.c_str(), nullptr);
+                continue;
+            }
+            // Two lines: break at the space or slash nearest the middle.
+            size_t best = std::string::npos;
+            for(size_t i = 1; i + 1 < t.size(); ++i)
+                if((t[i] == ' ' || t[i] == '/')
+                   && (best == std::string::npos || std::abs(int(i) - int(t.size() / 2)) < std::abs(int(best) - int(t.size() / 2))))
+                    best = i;
+            std::string a = t, b;
+            if(best != std::string::npos)
+            {
+                a = t.substr(0, t[best] == '/' ? best + 1 : best);
+                b = t.substr(best + 1);
+            }
+            nvgText(vg, c.x, y, Fit(a).c_str(), nullptr);
+            if(!b.empty())
+                nvgText(vg, c.x, y + mm2px(kSlotLabelLine), Fit(b).c_str(), nullptr);
+        }
+    }
+};
+
 struct PerseidsWidget : ModuleWidget
 {
+    std::vector<Widget*> large_only; // extension field: hidden on the Performance panel
+    Widget*              screw_r    = nullptr;
+    bool                 shown_large = false;
+
     PerseidsWidget(Perseids* module)
     {
         using namespace panel_layout;
         setModule(module);
         setPanel(createPanel(asset::plugin(pluginInstance, "res/Perseids.svg")));
-        for(int k = 0; k < kNumScrews; ++k)
-            addChild(createWidgetCentered<ScrewBlack>(Screw(k)));
+        addChild(createWidgetCentered<ScrewBlack>(Screw(0)));
+        screw_r = createWidgetCentered<ScrewBlack>(Screw(1));
+        addChild(screw_r);
 
         NtDisplay* d = createWidget<NtDisplay>(DisplayPos());
         d->box.size  = DisplaySize();
@@ -381,6 +645,41 @@ struct PerseidsWidget : ModuleWidget
             addInput(createInputCentered<PJ301MPort>(InputPos(k), module, k));
         for(int k = 0; k < Perseids::OUTPUTS_LEN; ++k)
             addOutput(createOutputCentered<PJ301MPort>(OutputPos(k), module, k));
+        for(int k = 0; k < kNumSlots; ++k)
+        {
+            SlotKnob* s = createParamCentered<SlotKnob>(Slot(k), module, Perseids::SLOT_1_PARAM + k);
+            s->m        = module;
+            s->k        = k;
+            addParam(s);
+            large_only.push_back(s);
+        }
+        SlotLabels* labels = createWidget<SlotLabels>(Vec(0, 0));
+        labels->box.size   = mm2px(Vec(kHpLarge * 5.08f, 128.5f));
+        labels->m          = module;
+        addChild(labels);
+        large_only.push_back(labels);
+        Layout(module && module->large.load());
+    }
+
+    // Performance (22 HP) or Large (22 + 12 HP).
+    void Layout(bool lg)
+    {
+        shown_large    = lg;
+        const Vec old  = box.size;
+        setPanel(createPanel(asset::plugin(pluginInstance, lg ? "res/Perseids-Large.svg" : "res/Perseids.svg")));
+        for(Widget* w : large_only)
+            w->visible = lg; // the knobs keep working while hidden
+        screw_r->box.pos = panel_layout::ScrewRight(lg).minus(screw_r->box.size.div(2));
+        if(lg && box.size.x > old.x && APP->scene && APP->scene->rack && parent)
+            APP->scene->rack->setModulePosForce(this, box.pos); // neighbours on the right move aside
+    }
+
+    void step() override
+    {
+        Perseids* m = getModule<Perseids>();
+        if(m && m->large.load() != shown_large)
+            Layout(m->large.load());
+        ModuleWidget::step();
     }
 
     void appendContextMenu(Menu* menu) override
@@ -388,6 +687,14 @@ struct PerseidsWidget : ModuleWidget
         Perseids* m = getModule<Perseids>();
         if(!m)
             return;
+        menu->addChild(new MenuSeparator);
+        menu->addChild(createIndexSubmenuItem(
+            "Panel", {"Performance (22 HP)", "Large (22 + 12 HP): 12 assignable knobs"},
+            [=]() { return m->large.load() ? size_t(1) : size_t(0); }, [=](size_t i) { m->large.store(i == 1); }));
+        menu->addChild(createMenuItem("Assignable knobs: factory targets", "", [=]() {
+            for(int k = 0; k < kNumSlots; ++k)
+                m->slot_dest[k].store(m->DefaultSlot(k));
+        }));
         menu->addChild(new MenuSeparator);
         menu->addChild(createMenuLabel("Trail length (rebuilds; recorded Trails are cleared)"));
         for(int s : {5, 10, 15, 20, 30})

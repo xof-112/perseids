@@ -50,6 +50,7 @@ Logo im Original, auf weißem Grund: Balken hell `#dddddd`, dunkel `#292929`, gr
 | Push- und ◀/▶-Taster | `TL1105` | 5,2 |
 | Buchse | `PJ301MPort` | 8,0 |
 | Schraube | `ScrewBlack` | 5,1 |
+| Zuweisbarer Regler (Zusatzfeld) | `RoundSmallBlackKnob` | 7,7 |
 
 ## 4. Abstände Element ↔ Beschriftung
 
@@ -61,6 +62,7 @@ Die Werte sind vom Mittelpunkt aus gemessen, + heißt nach unten. „Grundlinie�
 | Encoder | Grundlinie +9,6 | ◀/▶ bei ±11,5 auf gleicher Höhe, Pfeil-Dreiecke 4,6 darüber (Kantenlänge 2), Push 13,8 unter dem Encoder, „PUSH …“ 4,8 unter dem Push |
 | Haupttaster | Grundlinie +7,0, Unterzeile +10,0 | Taster nebeneinander im Raster 11 |
 | Buchse | Grundlinie −5,8 (über der Buchse) | Audio-Buchsen mit Farbring r 4,9 |
+| Zuweisbarer Regler | Grundlinie +7,0 (Versalhöhe 1,7, `INK`), zur Laufzeit gezeichnet | zu breite Namen in zwei Zeilen (+2,4), umbrochen an Leerzeichen oder „/“ nahe der Mitte |
 
 ## 5. Raster und Ränder
 
@@ -76,6 +78,16 @@ Die Werte sind vom Mittelpunkt aus gemessen, + heißt nach unten. „Grundlinie�
   - Gruppen (IN | CV | OUT) trennen senkrechte Linien `SEP`, mittig zwischen den Spalten, von 6,5 über bis 4,5 unter der Reihenmitte.
 - **Reihenfolge der Buchsen:** In der unteren Reihe links IN L, IN R mit roten/gelben Ringen, rechts OUT L, OUT R mit violetten/gelben Ringen, CV dazwischen und darüber. CV-Buchsen zählen ab **1**.
 - **Freiraum:** Zwischen Beschriftung und dem nächsten Element mindestens etwa 1 mm. Linien laufen nie durch Text.
+
+## 5a. Großes Panel mit zuweisbaren Reglern
+
+- Ein Modul darf ein zweites, breiteres Panel haben (Rechtsklick → *Panel*). Das kleine Panel bleibt das Spielpanel. Das große hängt rechts ein Zusatzfeld an, ganze HP, bei Perseids 12 HP.
+- Titel, Display und Hauptteil behalten im großen Panel ihre Lage. Das Logo und die rechte Schraube wandern an den neuen rechten Rand.
+- **Trenner:** senkrecht (`SEP`) an der Grenze zum Zusatzfeld, von y 12 bis 2 mm über dem Streifen.
+- **Hinweis oben im Feld:** „RIGHT-CLICK A KNOB TO ASSIGN“, Versalhöhe 1,5, `DIM`, Grundlinie 16,0.
+- **Regler:** `RoundSmallBlackKnob` im Raster 19 (waagrecht) × 22 (senkrecht), mittig im Feld, erste Reihe bei 30,0. Bei 12 HP sind das 3 Spalten × 4 Reihen.
+- **Namen der Ziele:** zur Laufzeit gezeichnet, in derselben Schrift aus `res/fonts`. Die nanovg-Schriftgröße ist Versalhöhe / 0,729. Höchstbreite = Spaltenraster − 1 mm, sonst zweizeilig.
+- Das Kit liefert `Panel.assign_knob(x, y)` und die Konstanten `ASSIGN_LABEL`, `ASSIGN_HINT`, `NVG_CAP`.
 
 ## 6. Bedienung, Regeln für den Code
 

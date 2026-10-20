@@ -25,4 +25,13 @@ inline Vec InputPos(int k)
 inline Vec Screw(int k) { const float x[2] = {7.500f, 104.260f}; const float y[2] = {3.000f, 3.000f}; return mm2px(Vec(x[k], y[k])); }
 constexpr int kNumScrews = 2;
 inline Vec OutputPos(int k) { const float x[2] = {84.000f, 98.000f}; return mm2px(Vec(x[k], 120.000f)); }
+// Large panel: extension field with assignable knobs.
+constexpr int kHpLarge = 34;
+constexpr int kNumSlots = 12;
+inline Vec ScrewRight(bool large) { return large ? mm2px(Vec(165.220f, 3.000f)) : Screw(1); }
+inline Vec Slot(int k) { const float x[12] = {123.240f, 142.240f, 161.240f, 123.240f, 142.240f, 161.240f, 123.240f, 142.240f, 161.240f, 123.240f, 142.240f, 161.240f}; const float y[12] = {30.000f, 30.000f, 30.000f, 52.000f, 52.000f, 52.000f, 74.000f, 74.000f, 74.000f, 96.000f, 96.000f, 96.000f}; return mm2px(Vec(x[k], y[k])); }
+constexpr float kSlotLabelDy = 7.000f;    // baseline of the target name below the knob (mm)
+constexpr float kSlotLabelLine = 2.400f;  // second line (mm)
+constexpr float kSlotLabelMaxW = 18.000f;  // wider names wrap (mm)
+constexpr float kSlotLabelCap = 1.700f;   // cap height (mm); nanovg size = cap / 0.729
 } // namespace panel_layout

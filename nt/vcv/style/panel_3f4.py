@@ -66,12 +66,14 @@ COMPONENTS = {
     "RoundLargeBlackKnob": 12.2,   # encoders
     "VCVButton": 6.1,              # main buttons
     "TL1105": 5.2,                 # small push / step buttons
+    "RoundSmallBlackKnob": 7.7,    # assignable knobs (extension field)
     "PJ301MPort": 8.0,             # jacks
     "ScrewBlack": 5.1,
 }
 # Preview SVG name for each component (Rack res/ComponentLibrary).
 _PREVIEW = {"RoundBigBlackKnob": "RoundBigBlackKnob", "RoundLargeBlackKnob": "RoundLargeBlackKnob",
-            "VCVButton": "VCVButton_0", "TL1105": "TL1105_0", "PJ301MPort": "PJ301M", "ScrewBlack": "ScrewBlack"}
+            "VCVButton": "VCVButton_0", "TL1105": "TL1105_0", "PJ301MPort": "PJ301M", "ScrewBlack": "ScrewBlack",
+            "RoundSmallBlackKnob": "RoundSmallBlackKnob"}
 
 # Label offsets from the part's centre (mm, + = below).
 BIG_KNOB_LABEL, BIG_KNOB_SUB = 12.4, 16.0
@@ -83,6 +85,9 @@ ENC_PUSH_DY, ENC_PUSH_LABEL = 13.8, 4.8
 BUTTON_LABEL, BUTTON_SUB = 7.0, 10.0
 BUTTON_PITCH = 11.0
 JACK_LABEL = -5.8
+ASSIGN_LABEL = 7.0                  # target name below an assignable knob (drawn at runtime, T_JACK)
+ASSIGN_HINT = "RIGHT-CLICK A KNOB TO ASSIGN"
+NVG_CAP = 0.729                     # DejaVu Sans Condensed Bold: cap height / font size (nanovg size = cap / 0.729)
 
 _fonts = {}
 
@@ -211,6 +216,12 @@ class Panel:
         self.out.append(text(label, x, y + BUTTON_LABEL, T_BUTTON))
         if sub:
             self.out.append(text(sub, x, y + BUTTON_SUB, T_SUB, DIM))
+
+    def assign_knob(self, x, y):
+        """Assignable knob; its label (the target) is drawn by the module at runtime.
+        Returns the label's baseline position."""
+        self.parts.append(("RoundSmallBlackKnob", x, y))
+        return (x, y + ASSIGN_LABEL)
 
     def jack(self, x, y, label, ring=None):
         if ring:

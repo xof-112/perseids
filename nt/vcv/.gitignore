@@ -9,3 +9,4 @@ test/preview
 test/frames.txt
 test/screens/
 test/*.ppm
+__pycache__/

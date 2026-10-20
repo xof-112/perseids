@@ -138,6 +138,39 @@ int main()
         CHECK(h.ValueString(clk) == "CV 1", "menu: Clock in = '%s' (bus 3 = jack CV 1)", h.ValueString(clk).c_str());
     }
 
+    // Assignable knob (Large panel): turned → parameter, otherwise it follows.
+    {
+        const int         spread = Param(h, "Spread");
+        nt_host::KnobLink link;
+        float             knob = 0.f;
+        float             show = nt_host::Link(h, link, spread, knob); // first call: sync to the value
+        const int         s0   = h.ParamValue(spread);
+        CHECK(show >= 0.f && std::fabs(show - s0 / 100.f) < 1e-4f, "knob syncs to its target (Spread %d %% → %.2f)", s0, show);
+        knob = show;
+        CHECK(nt_host::Link(h, link, spread, knob) < 0.f, "… and then stays put");
+        knob = 0.8f;
+        nt_host::Link(h, link, spread, knob);
+        CHECK(h.ParamValue(spread) == 80, "turned to 0.8 → Spread %d %%", h.ParamValue(spread));
+        h.SetParam(spread, 25); // menu / preset
+        show = nt_host::Link(h, link, spread, knob);
+        CHECK(std::fabs(show - 0.25f) < 1e-4f && h.ParamValue(spread) == 25, "changed elsewhere → knob follows (%.2f)", show);
+        const int dir = Param(h, "Direction"); // enum 0…2
+        nt_host::KnobLink l2;
+        nt_host::Link(h, l2, dir, 0.f);
+        nt_host::Link(h, l2, dir, 0.7f);
+        CHECK(h.ParamValue(dir) == 1 && h.ValueString(dir, 2).size() > 0, "enum target rounds (0.7 → %d, value text '%s')",
+              h.ParamValue(dir), h.ValueString(dir, h.ParamValue(dir)).c_str());
+        CHECK(h.FindParam("Hold") == Param(h, "Hold") && h.FindParam("nope") < 0, "FindParam by stable name");
+        int pages = 0, mod_overview = -1;
+        for(int pg = 0; pg < h.NumPages(); ++pg)
+        {
+            pages += h.PageSize(pg) > 0;
+            if(std::string(h.PageName(pg)) == "Mod overview")
+                mod_overview = pg;
+        }
+        CHECK(pages > 10 && mod_overview >= 0, "pages for the assign menu (%d, Mod overview at %d)", pages, mod_overview);
+    }
+
     // Pots: Pot L moves Blend once it has caught up.
     c.pots[0] = 0.5f;
     Run(h, 0.05f, c);

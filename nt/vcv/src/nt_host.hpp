@@ -87,6 +87,23 @@ class Host
     void           RequestSetupUi() { setup_ui_ = true; }
     uint8_t*       Screen() { return screen_; }
 
+    // Parameter pages as the plug-in currently defines them (menu order).
+    const _NT_parameterPages* Pages() const;
+    int         NumPages() const;
+    int         PageSize(int page) const;
+    int         PageParam(int page, int i) const;
+    const char* PageName(int page) const;
+    // Live definition (min, max, unit …) and lookup by stable name (-1 if none).
+    const _NT_parameter& ParamDef(int p) const { return alg_->parameters[p]; }
+    int                  FindParam(const char* name) const;
+    // The value v of parameter p as the menu would show it.
+    std::string ValueString(int p, int v) const
+    {
+        char b[kNT_parameterStringSize + 4];
+        FormatValue(p, v, b);
+        return b;
+    }
+
   private:
     void Step();
     void FlushAudioChanges();
@@ -94,10 +111,6 @@ class Host
     void MenuUi(const Controls& c, bool pot_moved[3]);
     void DrawMenu();
     int  FormatValue(int p, int v, char* buff) const;
-    const _NT_parameterPages* Pages() const;
-    int  PageParam(int page, int i) const;
-    int  NumPages() const;
-    int  PageSize(int page) const;
     void ClampMenu();
 
     const _NT_factory*   factory_ = nullptr;
@@ -134,6 +147,17 @@ class Host
     mutable std::atomic_flag lock_                 = ATOMIC_FLAG_INIT;
     int                      slot_                 = -1; // index in the host registry
 };
+
+// An assignable knob (0…1, e.g. MIDI-mapped) bound to parameter p of a host:
+// turned → p = min + x·(max − min), rounded; not turned → the knob follows p.
+// Call at control rate in the audio thread; returns the knob position to show,
+// or < 0 to leave the knob where it is.
+struct KnobLink
+{
+    int   seen = -2;   // target handled last time (-2: none yet → sync first)
+    float last = -1.f; // knob position handled last time
+};
+float Link(Host& h, KnobLink& l, int p, float x);
 
 // The host whose algorithm is being called on this thread (for the NT API).
 Host* Current();

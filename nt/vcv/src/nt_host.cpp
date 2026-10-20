@@ -386,6 +386,22 @@ int Host::PageParam(int page, int i) const
     return pg.params ? pg.params[i] : i;
 }
 
+const char* Host::PageName(int page) const
+{
+    const _NT_parameterPages* pp = Pages();
+    if(!pp)
+        return "Parameters";
+    return page >= 0 && page < static_cast<int>(pp->numPages) && pp->pages[page].name ? pp->pages[page].name : "";
+}
+
+int Host::FindParam(const char* name) const
+{
+    for(int p = 0; p < static_cast<int>(names_.size()); ++p)
+        if(names_[p] == name)
+            return p;
+    return -1;
+}
+
 void Host::ClampMenu()
 {
     const int np = NumPages();
@@ -643,5 +659,33 @@ void Host::CopyScreen(uint8_t dst[kScreenBytes]) const
     }
     std::memcpy(dst, front_, sizeof(front_));
     lock_.clear(std::memory_order_release);
+}
+// --- assignable knobs ---------------------------------------------------------
+float Link(Host& h, KnobLink& l, int p, float x)
+{
+    if(!h.Ok() || p < 0 || p >= h.NumParams())
+    {
+        l.seen = p;
+        return -1.f;
+    }
+    const _NT_parameter& d  = h.ParamDef(p);
+    const int            lo = d.min, hi = d.max;
+    auto                 At = [&](float pos) { return lo + static_cast<int>(std::lround(pos * (hi - lo))); };
+    if(l.seen == p && std::fabs(x - l.last) > 1e-5f)
+    {
+        // Turned: the knob sets the parameter.
+        if(At(x) != h.ParamValue(p))
+            h.SetParam(p, At(x));
+        l.last = x;
+        return -1.f;
+    }
+    // Not turned: follow the parameter (new target, or changed elsewhere).
+    const int  cur   = h.ParamValue(p);
+    const bool fresh = l.seen != p;
+    l.seen           = p;
+    if(!fresh && At(x) == cur)
+        return -1.f;
+    l.last = hi > lo ? static_cast<float>(cur - lo) / static_cast<float>(hi - lo) : 0.f;
+    return l.last;
 }
 } // namespace nt_host

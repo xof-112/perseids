@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Perseids VCV panel: the one place where positions are defined.
 
-Writes res/Perseids.svg (text as paths, Rack's SVG renderer has no fonts) and
-src/panel_layout.hpp (the same positions for the module widget).
+Writes res/Perseids.svg (Performance, 22 HP), res/Perseids-Large.svg (22 + 12 HP:
+assignable knobs), src/panel_layout.hpp (the same positions for the module widget)
+and test/panel_parts*.txt (preview). Text as paths (Rack's SVG renderer has no
+fonts); the knob targets change at runtime and are drawn by the widget.
     python3 panel_def.py
 Built with the 3F4 panel kit (style/panel_3f4.py, rules in style/3F4_PANEL_STYLE.md).
 Needs fontTools and the DejaVu / Liberation fonts (FONT_DIR, LOGO_FONT to override).
@@ -14,11 +16,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "style"))
 import panel_3f4 as p  # noqa: E402  (3F4 house style: colours, fonts, sizes, spacing)
 
-pn = p.Panel(hp=22, title="PERSEIDS")
-HP, W, H, CX = pn.hp, pn.W, pn.H, pn.CX
+HP, HP_EXT = 22, 12          # Performance panel, extension field of the Large panel
+W, H = HP * p.HP_MM, p.PANEL_H
+CX = W / 2
+W_LARGE = (HP + HP_EXT) * p.HP_MM
+EXT_CX = W + HP_EXT * p.HP_MM / 2
 
 # --- positions (mm, centres) ---------------------------------------------------
-DISPLAY = pn.display(y=13.0)  # 256 × 64 NT pixels, 1:1 at 100 % zoom
+DISPLAY = (CX - p.DISPLAY_W / 2, 13.0, p.DISPLAY_W, p.DISPLAY_W / 4)  # 256 × 64 NT pixels, 1:1 at 100 % zoom
 POT_Y, POT_X = 50.0, (20.0, CX, W - 20.0)
 POT_PUSH = p.BIG_KNOB_PUSH
 ENC_Y, ENC_X = 79.0, (22.0, W - 22.0)
@@ -26,32 +31,61 @@ ENC_STEP_DX = p.ENC_STEP_DX
 ENC_PUSH_Y = ENC_Y + p.ENC_PUSH_DY
 CENTER_BTN_Y = 79.0
 CENTER_BTN_X = (CX - p.BUTTON_PITCH, CX, CX + p.BUTTON_PITCH)  # REC (button 3), HOLD INF (button 4), MENU
-SCREWS = pn.screws  # top only: the bottom row is all jacks
-JACK_X = pn.jack_columns(7)
+JACK_X = [14.0 + p.JACK_PITCH * k for k in range(7)]
 JACK_Y = (p.JACK_LAST_ROW_Y - p.JACK_ROW_PITCH, p.JACK_LAST_ROW_Y)
 # Inputs 0…11 = NT busses 1…12: In L, In R, CV 1…10. Outputs 0/1 = busses 13/14.
 INPUTS = [("IN L", 0, 1), ("IN R", 1, 1)] + [("CV %d" % (1 + k), k, 0) for k in range(7)] + \
          [("CV 8", 2, 1), ("CV 9", 3, 1), ("CV 10", 4, 1)]
 OUTPUTS = [("OUT L", 5, 1), ("OUT R", 6, 1)]
+# Extension field (Large panel): 3 × 4 assignable knobs.
+SLOT_COLS, SLOT_ROWS = 3, 4
+SLOT_PITCH_X, SLOT_PITCH_Y, SLOT_Y0 = 19.0, 22.0, 30.0
+SLOT_X = [EXT_CX + SLOT_PITCH_X * (c - 1) for c in range(SLOT_COLS)]
+SLOTS = [(SLOT_X[k % SLOT_COLS], SLOT_Y0 + SLOT_PITCH_Y * (k // SLOT_COLS)) for k in range(SLOT_COLS * SLOT_ROWS)]
+SLOT_LABEL_MAX_W = SLOT_PITCH_X - 1.0   # wider names wrap to a second line (runtime)
+SLOT_LABEL_LINE = 2.4                   # second line below the first
+HINT_Y = 16.0
 
-# Pots: default target, and what a push switches to.
-for x, name, alt in zip(POT_X, ("BLEND", "SCAN", "SIZE"), ("DRY/WET", "RESO MIX", "ATMOS")):
-    pn.big_knob(x, POT_Y, name, sub="PUSH \u21c4 " + alt, push=True)
-# Encoders with ◀ ▶ and push.
-for x, name, push in zip(ENC_X, ("TRAIL", "LEVEL"), ("SOLO", "LOCK")):
-    pn.encoder(x, ENC_Y, name, steps=True, push=push)
-for x, name, sub in zip(CENTER_BTN_X, ("REC", "HOLD", "MENU"), (None, "INF", None)):
-    pn.button(x, CENTER_BTN_Y, name, sub)
-# Jacks
-pn.rule(98.6)
-for xs in ((JACK_X[1] + JACK_X[2]) / 2, (JACK_X[4] + JACK_X[5]) / 2):
-    pn.separator(xs, JACK_Y[1])
-rings = {"IN L": p.RING_IN_L, "IN R": p.RING_IN_R, "OUT L": p.RING_OUT_L, "OUT R": p.RING_OUT_R}
-for label, col, row in INPUTS + OUTPUTS:
-    pn.jack(JACK_X[col], JACK_Y[row], label, rings.get(label))
 
-pn.save(os.path.join(HERE, "res", "Perseids.svg"), os.path.join(HERE, "test", "panel_parts.txt"))
+def build(large):
+    pn = p.Panel(hp=HP + HP_EXT if large else HP, title="" if large else "PERSEIDS")
+    if large:  # title, display and rule belong to the 22-HP part
+        pn.add(p.text("PERSEIDS", CX, p.TITLE_BASELINE, p.T_TITLE, p.INK, face=p.FACE_TITLE, spacing=p.TITLE_SPACING))
+        x, y, w, h = DISPLAY
+        pn.add(p.rect(x - p.BEZEL_PAD, y - p.BEZEL_PAD, w + 2 * p.BEZEL_PAD, h + 2 * p.BEZEL_PAD, p.BEZEL, r=p.BEZEL_R))
+        pn.display_rect = DISPLAY
+    else:
+        pn.display(y=DISPLAY[1])
+    # Pots: default target, and what a push switches to.
+    for x, name, alt in zip(POT_X, ("BLEND", "SCAN", "SIZE"), ("DRY/WET", "RESO MIX", "ATMOS")):
+        pn.big_knob(x, POT_Y, name, sub="PUSH \u21c4 " + alt, push=True)
+    # Encoders with ◀ ▶ and push.
+    for x, name, push in zip(ENC_X, ("TRAIL", "LEVEL"), ("SOLO", "LOCK")):
+        pn.encoder(x, ENC_Y, name, steps=True, push=push)
+    for x, name, sub in zip(CENTER_BTN_X, ("REC", "HOLD", "MENU"), (None, "INF", None)):
+        pn.button(x, CENTER_BTN_Y, name, sub)
+    # Jacks
+    pn.add(p.line(6.0, 98.6, W - 6.0, 98.6, p.RULE))
+    for xs in ((JACK_X[1] + JACK_X[2]) / 2, (JACK_X[4] + JACK_X[5]) / 2):
+        pn.separator(xs, JACK_Y[1])
+    rings = {"IN L": p.RING_IN_L, "IN R": p.RING_IN_R, "OUT L": p.RING_OUT_L, "OUT R": p.RING_OUT_R}
+    for label, col, row in INPUTS + OUTPUTS:
+        pn.jack(JACK_X[col], JACK_Y[row], label, rings.get(label))
+    if large:
+        pn.add(p.line(W, 12.0, W, H - p.STRIPE_H - 2.0, p.SEP))
+        pn.add(p.text(p.ASSIGN_HINT, EXT_CX, HINT_Y, p.T_SUB, p.DIM))
+        for x, y in SLOTS:
+            pn.assign_knob(x, y)
+    return pn
+
+
+small = build(False)
+small.save(os.path.join(HERE, "res", "Perseids.svg"), os.path.join(HERE, "test", "panel_parts.txt"))
+large = build(True)
+large.save(os.path.join(HERE, "res", "Perseids-Large.svg"), os.path.join(HERE, "test", "panel_parts_large.txt"))
 p.save_logo(os.path.join(HERE, "res", "3F4-logo.svg"))
+SCREWS = small.screws
+SCREW_R_LARGE = large.screws[1]
 
 
 def arr(xs):
@@ -85,11 +119,22 @@ inline Vec InputPos(int k)
 inline Vec Screw(int k) { const float x[2] = {%s}; const float y[2] = {%s}; return mm2px(Vec(x[k], y[k])); }
 constexpr int kNumScrews = 2;
 inline Vec OutputPos(int k) { const float x[2] = {%s}; return mm2px(Vec(x[k], %.3ff)); }
+// Large panel: extension field with assignable knobs.
+constexpr int kHpLarge = %d;
+constexpr int kNumSlots = %d;
+inline Vec ScrewRight(bool large) { return large ? mm2px(Vec(%.3ff, %.3ff)) : Screw(1); }
+inline Vec Slot(int k) { const float x[%d] = {%s}; const float y[%d] = {%s}; return mm2px(Vec(x[k], y[k])); }
+constexpr float kSlotLabelDy = %.3ff;    // baseline of the target name below the knob (mm)
+constexpr float kSlotLabelLine = %.3ff;  // second line (mm)
+constexpr float kSlotLabelMaxW = %.3ff;  // wider names wrap (mm)
+constexpr float kSlotLabelCap = %.3ff;   // cap height (mm); nanovg size = cap / %.3f
 } // namespace panel_layout
 """ % (HP, DISPLAY[0], DISPLAY[1], DISPLAY[2], DISPLAY[3], arr(POT_X), POT_Y, arr(POT_X), POT_PUSH[0],
        POT_Y + POT_PUSH[1], arr(ENC_X), ENC_Y, arr(ENC_X), ENC_STEP_DX, ENC_Y, arr(ENC_X), ENC_PUSH_Y,
        arr(CENTER_BTN_X), CENTER_BTN_Y, arr(JACK_X[c] for _, c, _ in INPUTS), arr(JACK_Y[r] for _, _, r in INPUTS),
-       arr(x for x, _ in SCREWS), arr(y for _, y in SCREWS), arr(JACK_X[c] for _, c, _ in OUTPUTS), JACK_Y[1])
+       arr(x for x, _ in SCREWS), arr(y for _, y in SCREWS), arr(JACK_X[c] for _, c, _ in OUTPUTS), JACK_Y[1],
+       HP + HP_EXT, len(SLOTS), SCREW_R_LARGE[0], SCREW_R_LARGE[1], len(SLOTS), arr(x for x, _ in SLOTS), len(SLOTS),
+       arr(y for _, y in SLOTS), p.ASSIGN_LABEL, SLOT_LABEL_LINE, SLOT_LABEL_MAX_W, p.T_JACK, p.NVG_CAP)
 open(os.path.join(HERE, "src", "panel_layout.hpp"), "w").write(hpp)
 
-print("panel: %d HP, %d inputs, %d outputs" % (HP, len(INPUTS), len(OUTPUTS)))
+print("panel: %d / %d HP, %d inputs, %d outputs, %d assignable knobs" % (HP, HP + HP_EXT, len(INPUTS), len(OUTPUTS), len(SLOTS)))
