@@ -45,7 +45,7 @@ fonts = {}
 
 def font(name):
     if name not in fonts:
-        fonts[name] = TTFont(os.path.join(FONT_DIR, name))
+        fonts[name] = TTFont(name if os.path.isabs(name) else os.path.join(FONT_DIR, name))
     return fonts[name]
 
 
@@ -83,8 +83,31 @@ def triangle(x, y, left, col=AMBER):
     return '<path fill="%s" d="M%s Z"/>' % (col, " L".join("%.2f %.2f" % p for p in pts))
 
 
+LOGO_FONT = os.environ.get("LOGO_FONT", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf")
+
+
+def logo_3f4(x0, y0, h, ink="#dcdcdc", light="#dcdcdc", dark="#3b3c41", grey="#5b5c67"):
+    """3F4 (3rdFloor4) logo, vector, for a dark panel: four bars (the top one
+    light, the others dark left / grey right) and the 3F4 wordmark. x0, y0 =
+    top left, h = height in mm. Proportions from the original artwork."""
+    k = h / 296.0  # artwork pixels → mm (content 47…343 px high)
+    parts = []
+    for top, bh, first in ((47, 41, True), (130, 41, False), (212, 41, False), (294, 44, False)):
+        y = y0 + (top - 47) * k
+        if first:
+            parts.append(rect(x0, y, 582 * k, bh * k, light))
+        else:
+            parts.append(rect(x0, y, 145 * k, bh * k, dark))
+            parts.append(rect(x0 + 145 * k, y, 437 * k, bh * k, grey))
+    parts.append(text("3F4", x0 + 750 * k, y0 + h, 288 * k, ink, anchor="start", face=LOGO_FONT))
+    return parts, 1459 * k  # elements, width
+
+
 out = [rect(0, 0, W, H, BG)]
 out.append(text("PERSEIDS", CX, 8.6, 4.0, AMBER, face="DejaVuSans-Bold.ttf", spacing=0.9))
+LOGO_H = 3.2
+_logo, _lw = logo_3f4(0, 0, LOGO_H)
+out += logo_3f4(W - 12.5 - _lw, 8.6 - LOGO_H, LOGO_H)[0]
 dx, dy, dw, dh = DISPLAY
 out.append(rect(dx - 2.0, dy - 2.0, dw + 4.0, dh + 4.0, BEZEL, r=1.5))
 
@@ -120,6 +143,11 @@ svg = ('<?xml version="1.0" encoding="UTF-8"?>\n'
        % (W, H, W, H) + "\n".join(out) + "\n</svg>\n")
 os.makedirs(os.path.join(HERE, "res"), exist_ok=True)
 open(os.path.join(HERE, "res", "Perseids.svg"), "w").write(svg)
+# The logo on its own (for the dark panel), e.g. for other 3F4 modules.
+_lp, _lw2 = logo_3f4(1.0, 1.0, 10.0)
+open(os.path.join(HERE, "res", "3F4-logo.svg"), "w").write(
+    '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="%.2fmm" height="12mm" '
+    'viewBox="0 0 %.2f 12">\n%s\n%s\n</svg>\n' % (_lw2 + 2, _lw2 + 2, rect(0, 0, _lw2 + 2, 12, BG), "\n".join(_lp)))
 
 
 def arr(xs):

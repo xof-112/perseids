@@ -1,10 +1,12 @@
 # Perseids für VCV Rack 2
 
+Von **3F4** (3rdFloor4).
+
 Perseids als natives Rack-Modul (22 HP). Im Modul läuft **derselbe Code wie auf dem disting NT** (`nt/perseids_nt.cpp`, unverändert), getragen von einem kleinen NT-Host (`src/nt_host.*`). Klang, Bedienung und Display sind damit wie am NT: Das Display ist das NT-Display Pixel für Pixel, bei 100 % Zoom genau ein Bildpunkt pro NT-Pixel.
 
 ## Installieren
 
-Mit dem fertigen Paket: `xof-Perseids-2.0.29-win-x64.vcvplugin` nach `%LOCALAPPDATA%\Rack2\plugins-win-x64\` legen und Rack neu starten. Rack entpackt es selbst. Das Modul steht dann unter **xof → Perseids**.
+Mit dem fertigen Paket: `3F4-Perseids-2.0.29-win-x64.vcvplugin` nach `%LOCALAPPDATA%\Rack2\plugins-win-x64\` legen und Rack neu starten. Rack entpackt es selbst. Das Modul steht dann unter **3F4 → Perseids**.
 
 Selbst bauen (MSYS2 MinGW 64 oder Linux/macOS, Rack SDK 2.x):
 

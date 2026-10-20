@@ -1,10 +1,10 @@
 {
-  "slug": "xof-Perseids",
+  "slug": "3F4-Perseids",
   "name": "Perseids",
   "version": "2.0.29",
   "license": "GPL-3.0-or-later",
-  "brand": "xof",
-  "author": "xof",
+  "brand": "3F4",
+  "author": "3rdFloor4",
   "authorEmail": "",
   "authorUrl": "",
   "pluginUrl": "https://github.com/xof-112/perseids",
@@ -17,7 +17,13 @@
       "slug": "Perseids",
       "name": "Perseids",
       "description": "Ambient resynthesizer: 5 Trails, Spectra + Swarm, Resonator, 12 mod slots. The disting NT algorithm, natively in Rack.",
-      "tags": ["Granular", "Effect", "Reverb", "Sampler", "Recording"]
+      "tags": [
+        "Granular",
+        "Effect",
+        "Reverb",
+        "Sampler",
+        "Recording"
+      ]
     }
   ]
 }
