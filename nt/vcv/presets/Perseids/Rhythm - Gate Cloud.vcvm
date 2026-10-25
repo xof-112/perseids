@@ -1,0 +1,60 @@
+{
+ "plugin": "3F4-Perseids",
+ "model": "Perseids",
+ "version": "2.0.30",
+ "params": [
+  {
+   "value": 0.5,
+   "id": 0
+  },
+  {
+   "value": 0.4,
+   "id": 1
+  },
+  {
+   "value": 0.2,
+   "id": 2
+  }
+ ],
+ "data": {
+  "specifications": [
+   10
+  ],
+  "values": {
+   "Clock in": 3,
+   "Reset in": 4,
+   "Clock res": 0,
+   "Beats/bar": 4,
+   "Count": 4,
+   "Cont. Rec": 1,
+   "Threshold": 10,
+   "Buffer": 15,
+   "Hold": 6,
+   "Fade in": 2,
+   "Fade out": 5,
+   "Blend": 50,
+   "Size": 8,
+   "Spread": 30,
+   "Scan": 40,
+   "Scatter": 30,
+   "Partials": 16,
+   "Mod 1 dest": 11,
+   "Mod 1 amount": 50,
+   "Mod 1 offset": 0,
+   "Mod 1 shape": 5,
+   "Mod 1 sync": 6,
+   "Mod 1 LFO rate": 25,
+   "Mod 1 mode": 0,
+   "Mod 1 in": 0,
+   "Mod 2 dest": 21,
+   "Mod 2 amount": 40,
+   "Mod 2 offset": 0,
+   "Mod 2 shape": 10,
+   "Mod 2 sync": 7,
+   "Mod 2 LFO rate": 25,
+   "Mod 2 mode": 0,
+   "Mod 2 in": 0
+  },
+  "note": "Square on Blend switches Spectra/Swarm on every beat, random Scan steps on every half beat."
+ }
+}

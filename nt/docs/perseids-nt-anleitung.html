@@ -134,7 +134,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
 </ol>
 <p class="toc-grp">Nachschlagen</p><ol>
 <li><a class="tl" href="#parameter"><span class="tn">11</span><span class="tt">Parameter</span></a></li>
-<li><a class="tl" href="#vcv"><span class="tn">12</span><span class="tt">Perseids als VCV-Modul</span></a><div class="ts"><a class="sl" href="#vcv-panel">Panel</a> · <a class="sl" href="#vcv-large">Großes Panel</a> · <a class="sl" href="#vcv-buchsen">Buchsen</a> · <a class="sl" href="#vcv-midi">MIDI-Controller</a> · <a class="sl" href="#vcv-speichern">Speichern</a></div></li>
+<li><a class="tl" href="#vcv"><span class="tn">12</span><span class="tt">Perseids als VCV-Modul</span></a><div class="ts"><a class="sl" href="#vcv-panel">Panel</a> · <a class="sl" href="#vcv-large">Großes Panel</a> · <a class="sl" href="#vcv-buchsen">Buchsen</a> · <a class="sl" href="#vcv-midi">MIDI-Controller</a> · <a class="sl" href="#vcv-presets">Werkspresets</a> · <a class="sl" href="#vcv-speichern">Speichern</a></div></li>
 <li><a class="tl" href="#grenzen"><span class="tn">13</span><span class="tt">Grenzen und Stand der Prüfung</span></a><div class="ts"><a class="sl" href="#anders-als-am-modul">Anders als am Modul</a> · <a class="sl" href="#grenzen-liste">Grenzen</a> · <a class="sl" href="#stand-der-pruefung">Stand der Prüfung</a></div></li>
 <li><a class="tl" href="#anhang"><span class="tn">14</span><span class="tt">Anhang: Wo steht was</span></a></li>
 <li><a class="tl" href="#versionen"><span class="tn">15</span><span class="tt">Versionshistorie</span></a></li>
@@ -555,6 +555,22 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
     <li><b>Pads und Tasten</b> auf ◀ / ▶, PUSH, REC, HOLD INF und MENU legen, per Note oder CC.</li>
     <li>Im Menü wirken die Potis absolut: Poti L sucht die Seite, Poti C den Parameter, Poti R setzt den Wert. Damit lässt sich jeder Parameter mit drei Reglern erreichen.</li>
   </ul>
+  <h3 id="vcv-presets">Werkspresets</h3>
+  <p>Rechtsklick auf das Modul → <b>Preset</b>. Ein Preset setzt alle Perseids-Parameter (nicht genannte auf Werkseinstellung) und stellt die drei Potis passend, damit sie nichts nachholen müssen. Die aufgenommenen Trails sind danach leer.</p>
+  <ul class="lst">
+    <li><b>Rhythm:</b> Clock auf <b>CV 1</b>, ihren Reset auf <b>CV 2</b>. <i>Bar Swell</i> nimmt nur über <b>CV 3</b> auf (<i>Rec trig in</i>): dort einen Takt- oder 4-Takt-Ausgang des Clock-Moduls anschließen. Der Rhythmus kommt aus <i>Mod sync</i>, gezählt in Clock-Pulsen.</li>
+    <li><b>Ambient:</b> keine Clock nötig, langsame freie LFOs. <i>Frozen Choir</i> nimmt nur auf Tastendruck (REC) auf und hält die Trails unendlich.</li>
+  </ul>
+  <div class="tbl"><table><tr><th>Preset</th><th>Was es zeigt</th></tr>
+  <tr><td>Ambient - Dust Drift</td><td>Swarm only, an octave down, random direction and radiation; the scan head wanders in slow random steps.</td></tr>
+  <tr><td>Ambient - Frozen Choir</td><td>Press REC: three takes held forever, Spectra an octave up with a wide ensemble over a major resonator.</td></tr>
+  <tr><td>Ambient - Long Exposure</td><td>Long takes, slow fades, wide blurred Swarm; Blend and Umbra/Aurora drift on their own.</td></tr>
+  <tr><td>Ambient - Resonant Shore</td><td>The resonator in front: pentatonic, just tuning, its pitch drifting slowly; the cloud washes underneath.</td></tr>
+  <tr><td>Rhythm - Bar Swell</td><td>Takes only from Rec trig in (patch a bar clock to CV 3); Atmosphere swells once per bar, Dry/Wet pumps on the beat.</td></tr>
+  <tr><td>Rhythm - Gate Cloud</td><td>Square on Blend switches Spectra/Swarm on every beat, random Scan steps on every half beat.</td></tr>
+  <tr><td>Rhythm - Pitch Steps</td><td>The resonator steps through a pentatonic scale on every beat; Umbra/Aurora breathes over a bar.</td></tr>
+  <tr><td>Rhythm - Scan Stutter</td><td>Swarm reads the take with a saw-tooth scan over two beats: repeats on the grid. Grain size jumps twice per beat.</td></tr></table></div>
+  <p>Am NT selbst gibt es diese Presets nicht als Datei. Die Werte stehen in <code>nt/vcv/tools/make_presets.py</code> und lassen sich im Menü nachstellen.</p>
   <h3 id="vcv-speichern">Speichern</h3>
   <ul class="lst">
     <li>Alle Parameter werden mit dem Rack-Patch gespeichert, nach Namen wie im NT-Preset. Die aufgenommenen Trails werden nicht gespeichert.</li>

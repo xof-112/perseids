@@ -67,6 +67,26 @@ Rechtsklick auf das Modul → **Panel**:
 - **Endlos-Encoder** am Controller dafür auf **absolut** stellen (0…127). Relative Encoder-Modi versteht MIDI-Map nicht, der Wert springt dann zwischen den Enden. Wer relative Encoder braucht, nimmt ein Mapping-Modul, das sie kann (z. B. Stoermelder MIDI-CAT).
 - Weil die Regler ihrem Ziel folgen, gibt es keinen Sprung, wenn du die Belegung wechselst: Der Rack-Regler steht sofort auf dem neuen Wert. Beim ersten Bewegen des Hardware-Reglers springt der Wert allerdings auf dessen Stellung. MIDI-Map hat dafür keinen Pickup.
 
+## Werkspresets
+
+Rechtsklick auf das Modul → **Preset** → die Namen unten. Ein Preset setzt alle Perseids-Parameter (nicht genannte auf Werkseinstellung) und die drei Potis passend dazu. Die aufgenommenen Trails sind danach leer.
+
+**Rhythm:** eine Clock auf **CV 1**, ihren Reset auf **CV 2**. *Bar Swell* nimmt zusätzlich nur über **CV 3** auf: einen Takt- oder /4-Takt aus dem Clock-Modul dort anschließen. Die rhythmischen Presets arbeiten mit *Mod sync*, das Clock-Pulse zählt (1 PPQN: ein Puls = ein Schlag).
+**Ambient:** brauchen keine Clock; langsame freie LFOs.
+
+| Preset | Was es zeigt |
+|---|---|
+| Ambient - Dust Drift | Swarm only, an octave down, random direction and radiation; the scan head wanders in slow random steps. |
+| Ambient - Frozen Choir | Press REC: three takes held forever, Spectra an octave up with a wide ensemble over a major resonator. |
+| Ambient - Long Exposure | Long takes, slow fades, wide blurred Swarm; Blend and Umbra/Aurora drift on their own. |
+| Ambient - Resonant Shore | The resonator in front: pentatonic, just tuning, its pitch drifting slowly; the cloud washes underneath. |
+| Rhythm - Bar Swell | Takes only from Rec trig in (patch a bar clock to CV 3); Atmosphere swells once per bar, Dry/Wet pumps on the beat. |
+| Rhythm - Gate Cloud | Square on Blend switches Spectra/Swarm on every beat, random Scan steps on every half beat. |
+| Rhythm - Pitch Steps | The resonator steps through a pentatonic scale on every beat; Umbra/Aurora breathes over a bar. |
+| Rhythm - Scan Stutter | Swarm reads the take with a saw-tooth scan over two beats: repeats on the grid. Grain size jumps twice per beat. |
+
+Erzeugt mit `tools/make_presets.py` (Werte wie im NT-Menü). `make -C test` lädt jedes Preset in den Host und prüft, dass alle Namen existieren, die Werte passen und es klingt.
+
 ## Buchsen
 
 | Panel | NT-Eingang | ab Werk |

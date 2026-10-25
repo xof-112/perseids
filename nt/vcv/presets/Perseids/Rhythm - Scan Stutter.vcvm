@@ -1,0 +1,61 @@
+{
+ "plugin": "3F4-Perseids",
+ "model": "Perseids",
+ "version": "2.0.30",
+ "params": [
+  {
+   "value": 0.9,
+   "id": 0
+  },
+  {
+   "value": 0.5,
+   "id": 1
+  },
+  {
+   "value": 0.1,
+   "id": 2
+  }
+ ],
+ "data": {
+  "specifications": [
+   10
+  ],
+  "values": {
+   "Clock in": 3,
+   "Reset in": 4,
+   "Clock res": 0,
+   "Beats/bar": 4,
+   "Count": 3,
+   "Cont. Rec": 1,
+   "Threshold": 10,
+   "Buffer": 20,
+   "Hold": 10,
+   "Fade in": 1,
+   "Fade out": 3,
+   "Blend": 90,
+   "Size": 6,
+   "Spread": 10,
+   "Scan": 50,
+   "Scatter": 5,
+   "Direction": 0,
+   "Atmosphere": -20,
+   "Mod 1 dest": 21,
+   "Mod 1 amount": 100,
+   "Mod 1 offset": 0,
+   "Mod 1 shape": 3,
+   "Mod 1 sync": 5,
+   "Mod 1 LFO rate": 25,
+   "Mod 1 mode": 1,
+   "Mod 1 in": 0,
+   "Mod 2 dest": 19,
+   "Mod 2 amount": 30,
+   "Mod 2 offset": 0,
+   "Mod 2 shape": 5,
+   "Mod 2 sync": 7,
+   "Mod 2 LFO rate": 25,
+   "Mod 2 mode": 0,
+   "Mod 2 in": 0
+  },
+  "note": "Swarm reads the take with a saw-tooth scan over two beats: repeats on the grid. Grain size jumps twice per beat."
+ }
+}

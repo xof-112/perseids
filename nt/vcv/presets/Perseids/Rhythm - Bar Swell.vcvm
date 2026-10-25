@@ -1,0 +1,66 @@
+{
+ "plugin": "3F4-Perseids",
+ "model": "Perseids",
+ "version": "2.0.30",
+ "params": [
+  {
+   "value": 0.4,
+   "id": 0
+  },
+  {
+   "value": 0.2,
+   "id": 1
+  },
+  {
+   "value": 0.6,
+   "id": 2
+  }
+ ],
+ "data": {
+  "specifications": [
+   10
+  ],
+  "values": {
+   "Clock in": 3,
+   "Reset in": 4,
+   "Clock res": 0,
+   "Beats/bar": 4,
+   "Rec trig in": 5,
+   "Count": 5,
+   "Cont. Rec": 0,
+   "Threshold": 100,
+   "Overwrite": 1,
+   "Buffer": 20,
+   "Hold": 12,
+   "Fade in": 10,
+   "Fade out": 20,
+   "Blend": 40,
+   "Rec style": 2,
+   "Mod 1 dest": 23,
+   "Mod 1 amount": 70,
+   "Mod 1 offset": 0,
+   "Mod 1 shape": 6,
+   "Mod 1 sync": 3,
+   "Mod 1 LFO rate": 25,
+   "Mod 1 mode": 0,
+   "Mod 1 in": 0,
+   "Mod 2 dest": 40,
+   "Mod 2 amount": 25,
+   "Mod 2 offset": 0,
+   "Mod 2 shape": 8,
+   "Mod 2 sync": 6,
+   "Mod 2 LFO rate": 25,
+   "Mod 2 mode": 0,
+   "Mod 2 in": 0,
+   "Mod 3 dest": 20,
+   "Mod 3 amount": 40,
+   "Mod 3 offset": 0,
+   "Mod 3 shape": 1,
+   "Mod 3 sync": 2,
+   "Mod 3 LFO rate": 25,
+   "Mod 3 mode": 0,
+   "Mod 3 in": 0
+  },
+  "note": "Takes only from Rec trig in (patch a bar clock to CV 3); Atmosphere swells once per bar, Dry/Wet pumps on the beat."
+ }
+}

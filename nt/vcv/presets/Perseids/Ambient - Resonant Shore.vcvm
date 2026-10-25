@@ -1,0 +1,62 @@
+{
+ "plugin": "3F4-Perseids",
+ "model": "Perseids",
+ "version": "2.0.30",
+ "params": [
+  {
+   "value": 0.6,
+   "id": 0
+  },
+  {
+   "value": 0.2,
+   "id": 1
+  },
+  {
+   "value": 0.7,
+   "id": 2
+  }
+ ],
+ "data": {
+  "specifications": [
+   10
+  ],
+  "values": {
+   "Count": 4,
+   "Cont. Rec": 1,
+   "Threshold": 10,
+   "Buffer": 40,
+   "Hold": 20,
+   "Fade in": 30,
+   "Fade out": 40,
+   "Blend": 60,
+   "Size": 18,
+   "Spread": 50,
+   "Atmosphere": -30,
+   "Reso mix": 70,
+   "Reso decay": 90,
+   "Reso damping": 30,
+   "Reso spread": 65,
+   "Reso quantize": 1,
+   "Reso scale": 2,
+   "Reso tuning": 1,
+   "Dry/Wet": 85,
+   "Mod 1 dest": 45,
+   "Mod 1 amount": 30,
+   "Mod 1 offset": 0,
+   "Mod 1 shape": 9,
+   "Mod 1 sync": 0,
+   "Mod 1 LFO rate": 2,
+   "Mod 1 mode": 0,
+   "Mod 1 in": 0,
+   "Mod 2 dest": 42,
+   "Mod 2 amount": 15,
+   "Mod 2 offset": 0,
+   "Mod 2 shape": 1,
+   "Mod 2 sync": 0,
+   "Mod 2 LFO rate": 4,
+   "Mod 2 mode": 0,
+   "Mod 2 in": 0
+  },
+  "note": "The resonator in front: pentatonic, just tuning, its pitch drifting slowly; the cloud washes underneath."
+ }
+}

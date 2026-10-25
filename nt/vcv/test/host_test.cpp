@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "../src/nt_host.hpp"
 
@@ -244,6 +245,81 @@ int main()
     CHECK(h.Create(f, h.Specs(), 96000, v2) && h.ParamValue(blend) == v2[blend].second, "rebuilt at 96 kHz, values kept");
     const float rms96 = Run(h, 0.3f, c);
     CHECK(std::isfinite(rms96), "runs at 96 kHz (RMS %.3f)", rms96);
+
+    // Factory presets (test/presets_check.tsv from tools/make_presets.py): every name
+    // exists, every value is taken as written, and each one sounds.
+    {
+        FILE* t = std::fopen("presets_check.tsv", "r");
+        CHECK(t != nullptr, "presets: check.tsv found");
+        std::vector<std::pair<std::string, std::vector<std::pair<std::string, int>>>> presets;
+        std::vector<int> secs;
+        char line[256];
+        while(t && std::fgets(line, sizeof line, t))
+        {
+            char* f[4];
+            int   n = 0;
+            for(char* q = std::strtok(line, "\t\n"); q && n < 4; q = std::strtok(nullptr, "\t\n"))
+                f[n++] = q;
+            if(n < 4)
+                continue;
+            if(presets.empty() || presets.back().first != f[0])
+            {
+                presets.push_back({f[0], {}});
+                secs.push_back(std::atoi(f[1]));
+            }
+            presets.back().second.emplace_back(f[2], std::atoi(f[3]));
+        }
+        if(t)
+            std::fclose(t);
+        for(size_t k = 0; k < presets.size(); ++k)
+        {
+            nt_host::Host ph;
+            const bool    built = ph.Create(f, {secs[k]}, 48000, presets[k].second);
+            std::string   bad;
+            for(const auto& nv : presets[k].second)
+            {
+                const int p = ph.FindParam(nv.first.c_str());
+                if(p < 0 || ph.ParamValue(p) != nv.second)
+                    bad += " " + nv.first;
+            }
+            // 8 s: clock 2 Hz on CV 1 (bus 3), reset with the first pulse on CV 2, a bar
+            // trigger on CV 3, tones in, REC pressed at 0.5 s.
+            nt_host::Controls c;
+            double acc = 0;
+            long   cnt = 0;
+            for(long i = 0; i < 8 * 48000; ++i)
+            {
+                float      in[kNT_numInputBusses] = {};
+                const long ph24                   = i % 24000;
+                in[0] = in[1] = 3.f * std::exp(-(i % 40000) / 9000.f) * std::sin(6.2831853f * 196.f * i / 48000.f);
+                in[2]         = ph24 < 240 ? 5.f : 0.f;
+                in[3]         = i < 240 ? 5.f : 0.f;
+                in[4]         = i % 96000 < 240 && i > 40000 ? 5.f : 0.f;
+                float out[2];
+                ph.Frame(in, out);
+                if(i > 4 * 48000)
+                {
+                    acc += out[0] * out[0] + out[1] * out[1];
+                    ++cnt;
+                }
+                if(i % 32 == 0)
+                {
+                    c.buttons = (i > 24000 && i < 26000) ? kNT_button3 : 0;
+                    nt_host::Controls cc = c;
+                    for(int q = 0; q < 3; ++q)
+                        cc.pots[q] = 0.5f;
+                    ph.Ui(cc);
+                }
+                if(i % 1600 == 0)
+                    ph.Draw();
+            }
+            const float rms = static_cast<float>(std::sqrt(acc / (2.0 * cnt)));
+            CHECK(built && bad.empty() && std::isfinite(rms) && rms > 0.02f, "preset '%s': %zu values ok%s, out RMS %.3f V",
+                  presets[k].first.c_str(), presets[k].second.size(), bad.c_str(), rms);
+            Frame(ph, presets[k].first.c_str());
+        }
+        CHECK(presets.size() == 8, "presets: %zu factory presets", presets.size());
+    }
 
     std::fprintf(stderr, "%s (%d checks, %d failed)\n", g_fail ? "FAILED" : "all checks passed", g_checks, g_fail);
     return g_fail ? 1 : 0;

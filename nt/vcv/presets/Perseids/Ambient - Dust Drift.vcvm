@@ -1,0 +1,58 @@
+{
+ "plugin": "3F4-Perseids",
+ "model": "Perseids",
+ "version": "2.0.30",
+ "params": [
+  {
+   "value": 1.0,
+   "id": 0
+  },
+  {
+   "value": 0.2,
+   "id": 1
+  },
+  {
+   "value": 1.0,
+   "id": 2
+  }
+ ],
+ "data": {
+  "specifications": [
+   10
+  ],
+  "values": {
+   "Count": 4,
+   "Cont. Rec": 1,
+   "Threshold": 10,
+   "Buffer": 60,
+   "Hold": 20,
+   "Fade in": 30,
+   "Fade out": 40,
+   "Blend": 100,
+   "Size": 24,
+   "Spread": 85,
+   "Scatter": 95,
+   "Direction": 2,
+   "Atmosphere": 60,
+   "Pitch Swarm": -12,
+   "Dry/Wet": 90,
+   "Mod 1 dest": 21,
+   "Mod 1 amount": 40,
+   "Mod 1 offset": 0,
+   "Mod 1 shape": 10,
+   "Mod 1 sync": 0,
+   "Mod 1 LFO rate": 10,
+   "Mod 1 mode": 0,
+   "Mod 1 in": 0,
+   "Mod 2 dest": 20,
+   "Mod 2 amount": 25,
+   "Mod 2 offset": 0,
+   "Mod 2 shape": 2,
+   "Mod 2 sync": 0,
+   "Mod 2 LFO rate": 3,
+   "Mod 2 mode": 0,
+   "Mod 2 in": 0
+  },
+  "note": "Swarm only, an octave down, random direction and radiation; the scan head wanders in slow random steps."
+ }
+}

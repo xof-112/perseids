@@ -24,7 +24,7 @@ OBJECTS += $(patsubst %,build/ext/%.o,$(notdir $(EXT_SRC)))
 vpath %.cpp $(sort $(dir $(filter %.cpp,$(EXT_SRC))))
 vpath %.c   $(sort $(dir $(filter %.c,$(EXT_SRC))))
 
-DISTRIBUTABLES += res README.md
+DISTRIBUTABLES += res presets README.md
 
 include $(RACK_DIR)/plugin.mk
 

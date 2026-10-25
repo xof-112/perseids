@@ -1,0 +1,62 @@
+{
+ "plugin": "3F4-Perseids",
+ "model": "Perseids",
+ "version": "2.0.30",
+ "params": [
+  {
+   "value": 0.7,
+   "id": 0
+  },
+  {
+   "value": 0.3,
+   "id": 1
+  },
+  {
+   "value": 0.4,
+   "id": 2
+  }
+ ],
+ "data": {
+  "specifications": [
+   10
+  ],
+  "values": {
+   "Clock in": 3,
+   "Reset in": 4,
+   "Clock res": 0,
+   "Beats/bar": 4,
+   "Count": 4,
+   "Cont. Rec": 1,
+   "Threshold": 10,
+   "Buffer": 20,
+   "Hold": 8,
+   "Fade in": 3,
+   "Fade out": 10,
+   "Blend": 70,
+   "Size": 12,
+   "Spread": 40,
+   "Scan": 30,
+   "Reso mix": 45,
+   "Reso decay": 70,
+   "Reso quantize": 1,
+   "Reso scale": 2,
+   "Mod 1 dest": 45,
+   "Mod 1 amount": 60,
+   "Mod 1 offset": 0,
+   "Mod 1 shape": 10,
+   "Mod 1 sync": 6,
+   "Mod 1 LFO rate": 25,
+   "Mod 1 mode": 0,
+   "Mod 1 in": 0,
+   "Mod 2 dest": 17,
+   "Mod 2 amount": 60,
+   "Mod 2 offset": 0,
+   "Mod 2 shape": 2,
+   "Mod 2 sync": 3,
+   "Mod 2 LFO rate": 25,
+   "Mod 2 mode": 0,
+   "Mod 2 in": 0
+  },
+  "note": "The resonator steps through a pentatonic scale on every beat; Umbra/Aurora breathes over a bar."
+ }
+}

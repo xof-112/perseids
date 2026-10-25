@@ -1,0 +1,59 @@
+{
+ "plugin": "3F4-Perseids",
+ "model": "Perseids",
+ "version": "2.0.30",
+ "params": [
+  {
+   "value": 0.35,
+   "id": 0
+  },
+  {
+   "value": 0.2,
+   "id": 1
+  },
+  {
+   "value": 0.9,
+   "id": 2
+  }
+ ],
+ "data": {
+  "specifications": [
+   20
+  ],
+  "values": {
+   "Count": 5,
+   "Cont. Rec": 1,
+   "Threshold": 8,
+   "Buffer": 80,
+   "Hold": 25,
+   "Fade in": 40,
+   "Fade out": 50,
+   "Blend": 35,
+   "Partials": 24,
+   "Ensemble": 60,
+   "Umbra/Aurora": 40,
+   "Size": 22,
+   "Spread": 70,
+   "Scatter": 80,
+   "Atmosphere": -50,
+   "Reso mix": 15,
+   "Mod 1 dest": 11,
+   "Mod 1 amount": 25,
+   "Mod 1 offset": 0,
+   "Mod 1 shape": 1,
+   "Mod 1 sync": 0,
+   "Mod 1 LFO rate": 5,
+   "Mod 1 mode": 0,
+   "Mod 1 in": 0,
+   "Mod 2 dest": 17,
+   "Mod 2 amount": 30,
+   "Mod 2 offset": 0,
+   "Mod 2 shape": 2,
+   "Mod 2 sync": 0,
+   "Mod 2 LFO rate": 3,
+   "Mod 2 mode": 0,
+   "Mod 2 in": 0
+  },
+  "note": "Long takes, slow fades, wide blurred Swarm; Blend and Umbra/Aurora drift on their own."
+ }
+}

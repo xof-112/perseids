@@ -1,0 +1,271 @@
+Rhythm - Gate Cloud	10	Clock in	3
+Rhythm - Gate Cloud	10	Reset in	4
+Rhythm - Gate Cloud	10	Clock res	0
+Rhythm - Gate Cloud	10	Beats/bar	4
+Rhythm - Gate Cloud	10	Count	4
+Rhythm - Gate Cloud	10	Cont. Rec	1
+Rhythm - Gate Cloud	10	Threshold	10
+Rhythm - Gate Cloud	10	Buffer	15
+Rhythm - Gate Cloud	10	Hold	6
+Rhythm - Gate Cloud	10	Fade in	2
+Rhythm - Gate Cloud	10	Fade out	5
+Rhythm - Gate Cloud	10	Blend	50
+Rhythm - Gate Cloud	10	Size	8
+Rhythm - Gate Cloud	10	Spread	30
+Rhythm - Gate Cloud	10	Scan	40
+Rhythm - Gate Cloud	10	Scatter	30
+Rhythm - Gate Cloud	10	Partials	16
+Rhythm - Gate Cloud	10	Mod 1 dest	11
+Rhythm - Gate Cloud	10	Mod 1 amount	50
+Rhythm - Gate Cloud	10	Mod 1 offset	0
+Rhythm - Gate Cloud	10	Mod 1 shape	5
+Rhythm - Gate Cloud	10	Mod 1 sync	6
+Rhythm - Gate Cloud	10	Mod 1 LFO rate	25
+Rhythm - Gate Cloud	10	Mod 1 mode	0
+Rhythm - Gate Cloud	10	Mod 1 in	0
+Rhythm - Gate Cloud	10	Mod 2 dest	21
+Rhythm - Gate Cloud	10	Mod 2 amount	40
+Rhythm - Gate Cloud	10	Mod 2 offset	0
+Rhythm - Gate Cloud	10	Mod 2 shape	10
+Rhythm - Gate Cloud	10	Mod 2 sync	7
+Rhythm - Gate Cloud	10	Mod 2 LFO rate	25
+Rhythm - Gate Cloud	10	Mod 2 mode	0
+Rhythm - Gate Cloud	10	Mod 2 in	0
+Rhythm - Scan Stutter	10	Clock in	3
+Rhythm - Scan Stutter	10	Reset in	4
+Rhythm - Scan Stutter	10	Clock res	0
+Rhythm - Scan Stutter	10	Beats/bar	4
+Rhythm - Scan Stutter	10	Count	3
+Rhythm - Scan Stutter	10	Cont. Rec	1
+Rhythm - Scan Stutter	10	Threshold	10
+Rhythm - Scan Stutter	10	Buffer	20
+Rhythm - Scan Stutter	10	Hold	10
+Rhythm - Scan Stutter	10	Fade in	1
+Rhythm - Scan Stutter	10	Fade out	3
+Rhythm - Scan Stutter	10	Blend	90
+Rhythm - Scan Stutter	10	Size	6
+Rhythm - Scan Stutter	10	Spread	10
+Rhythm - Scan Stutter	10	Scan	50
+Rhythm - Scan Stutter	10	Scatter	5
+Rhythm - Scan Stutter	10	Direction	0
+Rhythm - Scan Stutter	10	Atmosphere	-20
+Rhythm - Scan Stutter	10	Mod 1 dest	21
+Rhythm - Scan Stutter	10	Mod 1 amount	100
+Rhythm - Scan Stutter	10	Mod 1 offset	0
+Rhythm - Scan Stutter	10	Mod 1 shape	3
+Rhythm - Scan Stutter	10	Mod 1 sync	5
+Rhythm - Scan Stutter	10	Mod 1 LFO rate	25
+Rhythm - Scan Stutter	10	Mod 1 mode	1
+Rhythm - Scan Stutter	10	Mod 1 in	0
+Rhythm - Scan Stutter	10	Mod 2 dest	19
+Rhythm - Scan Stutter	10	Mod 2 amount	30
+Rhythm - Scan Stutter	10	Mod 2 offset	0
+Rhythm - Scan Stutter	10	Mod 2 shape	5
+Rhythm - Scan Stutter	10	Mod 2 sync	7
+Rhythm - Scan Stutter	10	Mod 2 LFO rate	25
+Rhythm - Scan Stutter	10	Mod 2 mode	0
+Rhythm - Scan Stutter	10	Mod 2 in	0
+Rhythm - Pitch Steps	10	Clock in	3
+Rhythm - Pitch Steps	10	Reset in	4
+Rhythm - Pitch Steps	10	Clock res	0
+Rhythm - Pitch Steps	10	Beats/bar	4
+Rhythm - Pitch Steps	10	Count	4
+Rhythm - Pitch Steps	10	Cont. Rec	1
+Rhythm - Pitch Steps	10	Threshold	10
+Rhythm - Pitch Steps	10	Buffer	20
+Rhythm - Pitch Steps	10	Hold	8
+Rhythm - Pitch Steps	10	Fade in	3
+Rhythm - Pitch Steps	10	Fade out	10
+Rhythm - Pitch Steps	10	Blend	70
+Rhythm - Pitch Steps	10	Size	12
+Rhythm - Pitch Steps	10	Spread	40
+Rhythm - Pitch Steps	10	Scan	30
+Rhythm - Pitch Steps	10	Reso mix	45
+Rhythm - Pitch Steps	10	Reso decay	70
+Rhythm - Pitch Steps	10	Reso quantize	1
+Rhythm - Pitch Steps	10	Reso scale	2
+Rhythm - Pitch Steps	10	Mod 1 dest	45
+Rhythm - Pitch Steps	10	Mod 1 amount	60
+Rhythm - Pitch Steps	10	Mod 1 offset	0
+Rhythm - Pitch Steps	10	Mod 1 shape	10
+Rhythm - Pitch Steps	10	Mod 1 sync	6
+Rhythm - Pitch Steps	10	Mod 1 LFO rate	25
+Rhythm - Pitch Steps	10	Mod 1 mode	0
+Rhythm - Pitch Steps	10	Mod 1 in	0
+Rhythm - Pitch Steps	10	Mod 2 dest	17
+Rhythm - Pitch Steps	10	Mod 2 amount	60
+Rhythm - Pitch Steps	10	Mod 2 offset	0
+Rhythm - Pitch Steps	10	Mod 2 shape	2
+Rhythm - Pitch Steps	10	Mod 2 sync	3
+Rhythm - Pitch Steps	10	Mod 2 LFO rate	25
+Rhythm - Pitch Steps	10	Mod 2 mode	0
+Rhythm - Pitch Steps	10	Mod 2 in	0
+Rhythm - Bar Swell	10	Clock in	3
+Rhythm - Bar Swell	10	Reset in	4
+Rhythm - Bar Swell	10	Clock res	0
+Rhythm - Bar Swell	10	Beats/bar	4
+Rhythm - Bar Swell	10	Rec trig in	5
+Rhythm - Bar Swell	10	Count	5
+Rhythm - Bar Swell	10	Cont. Rec	0
+Rhythm - Bar Swell	10	Threshold	100
+Rhythm - Bar Swell	10	Overwrite	1
+Rhythm - Bar Swell	10	Buffer	20
+Rhythm - Bar Swell	10	Hold	12
+Rhythm - Bar Swell	10	Fade in	10
+Rhythm - Bar Swell	10	Fade out	20
+Rhythm - Bar Swell	10	Blend	40
+Rhythm - Bar Swell	10	Rec style	2
+Rhythm - Bar Swell	10	Mod 1 dest	23
+Rhythm - Bar Swell	10	Mod 1 amount	70
+Rhythm - Bar Swell	10	Mod 1 offset	0
+Rhythm - Bar Swell	10	Mod 1 shape	6
+Rhythm - Bar Swell	10	Mod 1 sync	3
+Rhythm - Bar Swell	10	Mod 1 LFO rate	25
+Rhythm - Bar Swell	10	Mod 1 mode	0
+Rhythm - Bar Swell	10	Mod 1 in	0
+Rhythm - Bar Swell	10	Mod 2 dest	40
+Rhythm - Bar Swell	10	Mod 2 amount	25
+Rhythm - Bar Swell	10	Mod 2 offset	0
+Rhythm - Bar Swell	10	Mod 2 shape	8
+Rhythm - Bar Swell	10	Mod 2 sync	6
+Rhythm - Bar Swell	10	Mod 2 LFO rate	25
+Rhythm - Bar Swell	10	Mod 2 mode	0
+Rhythm - Bar Swell	10	Mod 2 in	0
+Rhythm - Bar Swell	10	Mod 3 dest	20
+Rhythm - Bar Swell	10	Mod 3 amount	40
+Rhythm - Bar Swell	10	Mod 3 offset	0
+Rhythm - Bar Swell	10	Mod 3 shape	1
+Rhythm - Bar Swell	10	Mod 3 sync	2
+Rhythm - Bar Swell	10	Mod 3 LFO rate	25
+Rhythm - Bar Swell	10	Mod 3 mode	0
+Rhythm - Bar Swell	10	Mod 3 in	0
+Ambient - Long Exposure	20	Count	5
+Ambient - Long Exposure	20	Cont. Rec	1
+Ambient - Long Exposure	20	Threshold	8
+Ambient - Long Exposure	20	Buffer	80
+Ambient - Long Exposure	20	Hold	25
+Ambient - Long Exposure	20	Fade in	40
+Ambient - Long Exposure	20	Fade out	50
+Ambient - Long Exposure	20	Blend	35
+Ambient - Long Exposure	20	Partials	24
+Ambient - Long Exposure	20	Ensemble	60
+Ambient - Long Exposure	20	Umbra/Aurora	40
+Ambient - Long Exposure	20	Size	22
+Ambient - Long Exposure	20	Spread	70
+Ambient - Long Exposure	20	Scatter	80
+Ambient - Long Exposure	20	Atmosphere	-50
+Ambient - Long Exposure	20	Reso mix	15
+Ambient - Long Exposure	20	Mod 1 dest	11
+Ambient - Long Exposure	20	Mod 1 amount	25
+Ambient - Long Exposure	20	Mod 1 offset	0
+Ambient - Long Exposure	20	Mod 1 shape	1
+Ambient - Long Exposure	20	Mod 1 sync	0
+Ambient - Long Exposure	20	Mod 1 LFO rate	5
+Ambient - Long Exposure	20	Mod 1 mode	0
+Ambient - Long Exposure	20	Mod 1 in	0
+Ambient - Long Exposure	20	Mod 2 dest	17
+Ambient - Long Exposure	20	Mod 2 amount	30
+Ambient - Long Exposure	20	Mod 2 offset	0
+Ambient - Long Exposure	20	Mod 2 shape	2
+Ambient - Long Exposure	20	Mod 2 sync	0
+Ambient - Long Exposure	20	Mod 2 LFO rate	3
+Ambient - Long Exposure	20	Mod 2 mode	0
+Ambient - Long Exposure	20	Mod 2 in	0
+Ambient - Frozen Choir	10	Count	3
+Ambient - Frozen Choir	10	Cont. Rec	0
+Ambient - Frozen Choir	10	Hold	31
+Ambient - Frozen Choir	10	Buffer	50
+Ambient - Frozen Choir	10	Fade in	30
+Ambient - Frozen Choir	10	Fade out	50
+Ambient - Frozen Choir	10	Blend	10
+Ambient - Frozen Choir	10	Partials	32
+Ambient - Frozen Choir	10	Waveshape	-15
+Ambient - Frozen Choir	10	Ensemble	85
+Ambient - Frozen Choir	10	Umbra/Aurora	-30
+Ambient - Frozen Choir	10	Pitch Spectra	12
+Ambient - Frozen Choir	10	Reso mix	30
+Ambient - Frozen Choir	10	Reso decay	85
+Ambient - Frozen Choir	10	Reso quantize	1
+Ambient - Frozen Choir	10	Reso scale	0
+Ambient - Frozen Choir	10	Mod 1 dest	18
+Ambient - Frozen Choir	10	Mod 1 amount	20
+Ambient - Frozen Choir	10	Mod 1 offset	0
+Ambient - Frozen Choir	10	Mod 1 shape	1
+Ambient - Frozen Choir	10	Mod 1 sync	0
+Ambient - Frozen Choir	10	Mod 1 LFO rate	4
+Ambient - Frozen Choir	10	Mod 1 mode	0
+Ambient - Frozen Choir	10	Mod 1 in	0
+Ambient - Frozen Choir	10	Mod 2 dest	16
+Ambient - Frozen Choir	10	Mod 2 amount	25
+Ambient - Frozen Choir	10	Mod 2 offset	0
+Ambient - Frozen Choir	10	Mod 2 shape	9
+Ambient - Frozen Choir	10	Mod 2 sync	0
+Ambient - Frozen Choir	10	Mod 2 LFO rate	2
+Ambient - Frozen Choir	10	Mod 2 mode	0
+Ambient - Frozen Choir	10	Mod 2 in	0
+Ambient - Dust Drift	10	Count	4
+Ambient - Dust Drift	10	Cont. Rec	1
+Ambient - Dust Drift	10	Threshold	10
+Ambient - Dust Drift	10	Buffer	60
+Ambient - Dust Drift	10	Hold	20
+Ambient - Dust Drift	10	Fade in	30
+Ambient - Dust Drift	10	Fade out	40
+Ambient - Dust Drift	10	Blend	100
+Ambient - Dust Drift	10	Size	24
+Ambient - Dust Drift	10	Spread	85
+Ambient - Dust Drift	10	Scatter	95
+Ambient - Dust Drift	10	Direction	2
+Ambient - Dust Drift	10	Atmosphere	60
+Ambient - Dust Drift	10	Pitch Swarm	-12
+Ambient - Dust Drift	10	Dry/Wet	90
+Ambient - Dust Drift	10	Mod 1 dest	21
+Ambient - Dust Drift	10	Mod 1 amount	40
+Ambient - Dust Drift	10	Mod 1 offset	0
+Ambient - Dust Drift	10	Mod 1 shape	10
+Ambient - Dust Drift	10	Mod 1 sync	0
+Ambient - Dust Drift	10	Mod 1 LFO rate	10
+Ambient - Dust Drift	10	Mod 1 mode	0
+Ambient - Dust Drift	10	Mod 1 in	0
+Ambient - Dust Drift	10	Mod 2 dest	20
+Ambient - Dust Drift	10	Mod 2 amount	25
+Ambient - Dust Drift	10	Mod 2 offset	0
+Ambient - Dust Drift	10	Mod 2 shape	2
+Ambient - Dust Drift	10	Mod 2 sync	0
+Ambient - Dust Drift	10	Mod 2 LFO rate	3
+Ambient - Dust Drift	10	Mod 2 mode	0
+Ambient - Dust Drift	10	Mod 2 in	0
+Ambient - Resonant Shore	10	Count	4
+Ambient - Resonant Shore	10	Cont. Rec	1
+Ambient - Resonant Shore	10	Threshold	10
+Ambient - Resonant Shore	10	Buffer	40
+Ambient - Resonant Shore	10	Hold	20
+Ambient - Resonant Shore	10	Fade in	30
+Ambient - Resonant Shore	10	Fade out	40
+Ambient - Resonant Shore	10	Blend	60
+Ambient - Resonant Shore	10	Size	18
+Ambient - Resonant Shore	10	Spread	50
+Ambient - Resonant Shore	10	Atmosphere	-30
+Ambient - Resonant Shore	10	Reso mix	70
+Ambient - Resonant Shore	10	Reso decay	90
+Ambient - Resonant Shore	10	Reso damping	30
+Ambient - Resonant Shore	10	Reso spread	65
+Ambient - Resonant Shore	10	Reso quantize	1
+Ambient - Resonant Shore	10	Reso scale	2
+Ambient - Resonant Shore	10	Reso tuning	1
+Ambient - Resonant Shore	10	Dry/Wet	85
+Ambient - Resonant Shore	10	Mod 1 dest	45
+Ambient - Resonant Shore	10	Mod 1 amount	30
+Ambient - Resonant Shore	10	Mod 1 offset	0
+Ambient - Resonant Shore	10	Mod 1 shape	9
+Ambient - Resonant Shore	10	Mod 1 sync	0
+Ambient - Resonant Shore	10	Mod 1 LFO rate	2
+Ambient - Resonant Shore	10	Mod 1 mode	0
+Ambient - Resonant Shore	10	Mod 1 in	0
+Ambient - Resonant Shore	10	Mod 2 dest	42
+Ambient - Resonant Shore	10	Mod 2 amount	15
+Ambient - Resonant Shore	10	Mod 2 offset	0
+Ambient - Resonant Shore	10	Mod 2 shape	1
+Ambient - Resonant Shore	10	Mod 2 sync	0
+Ambient - Resonant Shore	10	Mod 2 LFO rate	4
+Ambient - Resonant Shore	10	Mod 2 mode	0
+Ambient - Resonant Shore	10	Mod 2 in	0
