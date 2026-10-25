@@ -1,8 +1,4 @@
-<!doctype html>
-<html lang="de">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Perseids – Handbuch</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -86,39 +82,63 @@ section{display:flex; flex-direction:column; gap:28px}
 a:focus-visible{outline:2px solid var(--audio); outline-offset:2px}
 .backtop{display:inline-block; margin-top:14px; font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); text-decoration:none}
 .backtop:hover{color:var(--audio)}
+.patch{display:grid; grid-template-columns:auto 1fr; gap:3px 14px; align-items:baseline; font-family:var(--mono); font-size:12.8px; line-height:1.7; background:var(--surface2); border:1px solid var(--line); border-radius:3px; padding:12px 16px; margin:10px 0 14px}
+.patch .n{color:var(--cv); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em}
+.patch .r{overflow-wrap:anywhere; min-width:0}
+.patch b{font-weight:500; color:var(--audio)}
+header .chip{white-space:normal}
+.box-local{font-size:13.5px; color:var(--muted); border-left:3px solid var(--cv); padding:4px 0 4px 12px; margin:0 0 16px}
+/* Vorlesen */
+.tts-start{display:inline-flex; align-items:center; gap:6px; margin:14px 0 0; font-family:var(--mono); font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--audio); background:var(--audio-soft); border:1px solid var(--audio); border-radius:3px; padding:8px 12px; cursor:pointer}
+.tts-here{margin-top:6px; font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); background:none; border:1px solid var(--line); border-radius:2px; padding:3px 8px; cursor:pointer}
+.tts-start:hover,.tts-here:hover{color:var(--audio); border-color:var(--audio)}
+.tts-start:focus-visible,.tts-here:focus-visible,.tts-bar button:focus-visible,.tts-bar select:focus-visible{outline:2px solid var(--audio); outline-offset:2px}
+.tts-on{background:var(--audio-soft)!important; outline:2px solid var(--audio); outline-offset:2px; border-radius:2px}
+.tts-bar{position:fixed; left:0; right:0; bottom:0; z-index:20; background:var(--surface); border-top:1px solid var(--line); box-shadow:0 -2px 8px rgba(0,0,0,.12);
+  padding-top:8px; padding-bottom:calc(8px + env(safe-area-inset-bottom,0px)); padding-left:max(12px, env(safe-area-inset-left,0px)); padding-right:max(12px, env(safe-area-inset-right,0px))}
+.tts-in{max-width:780px; margin:0 auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.tts-bar button{min-width:44px; height:40px; font-size:17px; color:var(--ink); background:var(--surface2); border:1px solid var(--line); border-radius:3px; cursor:pointer; padding:0 10px}
+.tts-bar .tts-play{color:var(--surface); background:var(--audio); border-color:var(--audio)}
+.tts-bar select{height:40px; font-family:var(--mono); font-size:12px; color:var(--ink); background:var(--surface2); border:1px solid var(--line); border-radius:3px; padding:0 6px}
+.tts-where{flex:1 1 140px; min-width:0; font-family:var(--mono); font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.tts-msg{flex-basis:100%; font-size:12.5px; color:var(--cv)}
+body.tts-open{padding-bottom:calc(120px + env(safe-area-inset-bottom,0px))}
 footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); padding-top:18px}
 @media (max-width:480px){ .ts{margin-left:0} .num{width:30px; font-size:28px} .ph,.pb{padding-left:16px; padding-right:16px} }
 </style>
-</head>
-<body>
-<div class="wrap">
+<div class="wrap" lang="de">
 <header>
-  <p class="eyebrow">disting NT · Plug-in · Perseids-core</p>
+  <p class="eyebrow">disting NT · Plug-in · Perseids-core v0.30</p>
   <h1>Perseids – Handbuch</h1>
   <p class="lede">Perseids-core ist der Kern des Perseids-Moduls als Algorithmus für den Expert Sleepers disting NT: Audio in fünf Trails aufnehmen und daraus mit Spectra (additive Resynthese) und Swarm (Granular) eine Stereo-Wolke formen. Diese Anleitung erklärt Installation, den ersten Patch, Bedienung, Display und alle Parameter.</p>
   <div class="facts"><span>In L/R · Out L/R</span><span>5 Trails, 1–30 s</span><span>Spectra ↔ Swarm</span><span>Rec trig per CV</span><span>12 Mod-Slots</span><span>Clock-Sync</span><span>Dry/Wet auf Poti L</span><span>Resonator mit V/Oct</span><span>159 Parameter</span><span>Bedienung wie am Modul</span></div>
-  <span class="chip chip-now">Stand 10.10.2026 · läuft in nt_emu, am NT noch nicht getestet</span>
+  <span class="chip chip-now">Stand 25.10.2026 · v0.30 · läuft in nt_emu, am NT noch nicht getestet</span>
 </header>
 
 <nav id="inhalt" class="toc" aria-label="Inhalt"><p class="eyebrow">Inhalt</p>
 <p class="toc-grp">Einstieg</p><ol>
 <li><a class="tl" href="#ueberblick"><span class="tn">01</span><span class="tt">Überblick</span></a><div class="ts"><a class="sl" href="#was-drin-ist">Was drin ist</a> · <a class="sl" href="#was-fehlt">Was der NT übernimmt</a></div></li>
-<li><a class="tl" href="#installation"><span class="tn">02</span><span class="tt">Installation</span></a><div class="ts"><a class="sl" href="#am-nt">Am NT</a> · <a class="sl" href="#in-vcv-rack">In VCV Rack (nt_emu)</a> · <a class="sl" href="#vcv-installation">Als VCV-Modul</a></div></li>
+<li><a class="tl" href="#installation"><span class="tn">02</span><span class="tt">Installation</span></a><div class="ts"><a class="sl" href="#am-nt">Am NT</a> · <a class="sl" href="#in-vcv-rack">In VCV Rack (nt_emu)</a> · <a class="sl" href="#vcv-installation">Als VCV-Modul</a> · <a class="sl" href="#namen-und-dateien">Namen und Dateien</a></div></li>
 <li><a class="tl" href="#erster-patch"><span class="tn">03</span><span class="tt">Erster Patch</span></a></li>
 </ol>
 <p class="toc-grp">Spielen</p><ol>
 <li><a class="tl" href="#bedienung"><span class="tn">04</span><span class="tt">Bedienung</span></a></li>
 <li><a class="tl" href="#display"><span class="tn">05</span><span class="tt">Display lesen</span></a><div class="ts"><a class="sl" href="#lebensbalken">Lebensbalken</a> · <a class="sl" href="#rec-style">Rec style</a></div></li>
-<li><a class="tl" href="#trails"><span class="tn">06</span><span class="tt">Wie Trails entstehen und vergehen</span></a></li>
-<li><a class="tl" href="#engines"><span class="tn">07</span><span class="tt">Spectra, Swarm und Resonator</span></a></li>
-<li><a class="tl" href="#modulation"><span class="tn">08</span><span class="tt">Modulation</span></a><div class="ts"><a class="sl" href="#clock">Clock</a> · <a class="sl" href="#mod-slots">Mod-Slots</a> · <a class="sl" href="#mod-shape">LFO-Kurven</a> · <a class="sl" href="#mod-ansicht">Mod-Ansicht</a> · <a class="sl" href="#nt-mapping">CV-Mapping des NT</a></div></li>
+<li><a class="tl" href="#ein-und-ausgaenge"><span class="tn">06</span><span class="tt">Ein- und Ausgänge</span></a></li>
+<li><a class="tl" href="#trails"><span class="tn">07</span><span class="tt">Wie Trails entstehen und vergehen</span></a></li>
+<li><a class="tl" href="#engines"><span class="tn">08</span><span class="tt">Spectra, Swarm und Resonator</span></a></li>
+<li><a class="tl" href="#modulation"><span class="tn">09</span><span class="tt">Modulation</span></a><div class="ts"><a class="sl" href="#clock">Clock</a> · <a class="sl" href="#mod-slots">Mod-Slots</a> · <a class="sl" href="#mod-shape">LFO-Kurven</a> · <a class="sl" href="#mod-ansicht">Mod-Ansicht</a> · <a class="sl" href="#nt-mapping">CV-Mapping des NT</a></div></li>
+</ol>
+<p class="toc-grp">Praxis</p><ol>
+<li><a class="tl" href="#rezepte"><span class="tn">10</span><span class="tt">Rezepte</span></a></li>
 </ol>
 <p class="toc-grp">Nachschlagen</p><ol>
-<li><a class="tl" href="#parameter"><span class="tn">09</span><span class="tt">Parameter</span></a></li>
-<li><a class="tl" href="#rezepte"><span class="tn">10</span><span class="tt">Rezepte</span></a></li>
-<li><a class="tl" href="#grenzen"><span class="tn">11</span><span class="tt">Unterschiede, Grenzen, Stand</span></a></li>
+<li><a class="tl" href="#parameter"><span class="tn">11</span><span class="tt">Parameter</span></a></li>
 <li><a class="tl" href="#vcv"><span class="tn">12</span><span class="tt">Perseids als VCV-Modul</span></a><div class="ts"><a class="sl" href="#vcv-panel">Panel</a> · <a class="sl" href="#vcv-large">Großes Panel</a> · <a class="sl" href="#vcv-buchsen">Buchsen</a> · <a class="sl" href="#vcv-midi">MIDI-Controller</a> · <a class="sl" href="#vcv-speichern">Speichern</a></div></li>
-<li><a class="tl" href="#anhang"><span class="tn">13</span><span class="tt">Anhang: Wo steht was</span></a></li>
+<li><a class="tl" href="#grenzen"><span class="tn">13</span><span class="tt">Grenzen und Stand der Prüfung</span></a><div class="ts"><a class="sl" href="#anders-als-am-modul">Anders als am Modul</a> · <a class="sl" href="#grenzen-liste">Grenzen</a> · <a class="sl" href="#stand-der-pruefung">Stand der Prüfung</a></div></li>
+<li><a class="tl" href="#anhang"><span class="tn">14</span><span class="tt">Anhang: Wo steht was</span></a></li>
+<li><a class="tl" href="#versionen"><span class="tn">15</span><span class="tt">Versionshistorie</span></a></li>
+<li><a class="tl" href="#quellen"><span class="tn">16</span><span class="tt">Quellen und Credits</span></a><div class="ts"><a class="sl" href="#herkunft">Herkunft</a> · <a class="sl" href="#werkzeuge">Werkzeuge</a></div></li>
 </ol>
 </nav>
 
@@ -144,7 +164,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <tr><td>Filter</td><td>NT-Filter, Wasp, SEM</td></tr>
   <tr><td>Pan Drift, Crossfade</td><td>NT-Mixer mit LFO, Four Play; die Stereobreite kommt aus Swarm (<i>Spread</i>)</td></tr>
   <tr><td>Multi Dry/Wet</td><td>eingebaut als <i>Dry/Wet</i>, auf Poti L (drücken)</td></tr>
-  <tr><td>Mod-System</td><td>zwölf Mod-Slots mit Clock-Sync sind eingebaut (siehe 08), dazu das CV-/MIDI-Mapping des NT; Auto-Mod Age/Pitch fehlt noch</td></tr>
+  <tr><td>Mod-System</td><td>zwölf Mod-Slots mit Clock-Sync sind eingebaut (siehe <a href="#modulation">09</a>), dazu das CV-/MIDI-Mapping des NT; Auto-Mod Age/Pitch fehlt noch</td></tr>
     </table></div>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
@@ -163,7 +183,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <p>Der Wert lässt sich später über „Respecify“ ändern; dabei gehen die aufgenommenen Trails verloren.</p>
   <h3 id="in-vcv-rack">In VCV Rack (nt_emu)</h3>
   <ol class="lst">
-    <li>Die für Windows gebaute nt_emu-Fassung verwenden, dieselbe wie für Duett.</li>
+    <li>Die für Windows gebaute nt_emu-Fassung verwenden, dieselbe wie für Collagé.</li>
     <li><code>perseids.dll</code> nach <code>%LOCALAPPDATA%\Rack2\disting-nt-plugins\</code> kopieren, Rack dabei geschlossen lassen.</li>
     <li>Rack starten, im nt_emu-Modul <b>Perseids</b> laden.</li>
   </ol>
@@ -173,6 +193,12 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
     <li>Im Modul-Browser <b>3F4 → Perseids</b> wählen. nt_emu ist dafür nicht nötig.</li>
   </ol>
   <p>Panel, Bedienung und Buchsen dieses Moduls beschreibt <a href="#vcv">Kapitel 12</a>.</p>
+  <h3 id="namen-und-dateien">Namen und Dateien</h3>
+  <div class="tbl"><table><tr><th>Wo</th><th>Name</th><th>Datei / Ordner</th></tr>
+  <tr><td>disting NT</td><td><b>Perseids</b> im Algorithmus-Menü (Plug-in Perseids-core)</td><td><code>perseids.o</code> → <code>/programs/plug-ins/</code></td></tr>
+  <tr><td>nt_emu</td><td>wie am NT</td><td><code>perseids.dll</code> → <code>%LOCALAPPDATA%\Rack2\disting-nt-plugins\</code></td></tr>
+  <tr><td>VCV-Modul</td><td>Marke <b>3F4</b> (3rdFloor4) → <b>Perseids</b>, 22 HP</td><td><code>3F4-Perseids-…-win-x64.vcvplugin</code> → <code>%LOCALAPPDATA%\Rack2\plugins-win-x64\</code></td></tr>
+  </table></div>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 
@@ -195,17 +221,25 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <div class="ph"><div class="num">04</div><div class="ph-main"><h2>Bedienung</h2></div></div>
   <div class="pb">
   <p>Im Algorithmus-Bildschirm übernimmt Perseids Potis, Encoder und die Tasten 3 und 4. Die Tasten 1 und 2 bleiben beim NT.</p>
-  <p><b>In VCV Rack (nt_emu)</b> kommt ein Druck auf Poti oder Encoder nicht beim Plug-in an. Dort schaltet <b>Taste 1</b> Poti L zwischen Blend und Dry/Wet und <b>Taste 2</b> Poti C und Poti R gemeinsam zwischen Scan/Size und Reso mix/Atmosphere. Solo und Lock stellst du in nt_emu auf der Parameterseite <i>Mixer</i> ein. Tasten reagieren in nt_emu beim Loslassen. Ein Druck auf ein Poti wird in nt_emu bewusst ignoriert, weil nt_emu ihn auch beim Anfassen zum Drehen meldet. Die Fußzeile zeigt dort vor jedem Poti-Ziel die zuständige Taste, etwa <code>1 BLEND</code> oder <code>2 SCAN</code>.</p>
-  <div class="tbl"><table><tr><th>Element</th><th>Drehen</th><th>Drücken</th></tr>
-  <tr><td>Poti L</td><td><b>Blend</b> Spectra ↔ Swarm oder <b>Dry/Wet</b></td><td>schaltet zwischen Blend und Dry/Wet</td></tr>
-  <tr><td>Poti C</td><td><b>Scan</b>: wie schnell Swarm durch die Trails wandert, ganz links = Freeze; oder <b>Reso mix</b></td><td>schaltet zwischen Scan und Reso mix</td></tr>
-  <tr><td>Poti R</td><td><b>Size</b> (4–24 Grains) oder <b>Atmosphere</b></td><td>schaltet zwischen Size und Atmosphere</td></tr>
-  <tr><td>Encoder L</td><td>Trail wählen (der gewählte ist umrahmt)</td><td><b>Solo</b> für diesen Trail</td></tr>
-  <tr><td>Encoder R</td><td><b>Level</b> des gewählten Trails, 2 % pro Raste</td><td><b>Lock</b> für diesen Trail</td></tr>
-  <tr><td>Taste 3</td><td colspan="2"><b>Rec</b>: sofort in den nächsten Trail aufnehmen, unabhängig von der Threshold</td></tr>
-  <tr><td>Taste 4</td><td colspan="2"><b>Hold</b> unendlich ein und aus. Wirkt sofort, auch auf Trails, die gerade klingen.</td></tr>
+  <div class="tbl"><table><tr><th>Element</th><th>Am NT</th><th>In nt_emu</th><th>Am VCV-Modul</th></tr>
+  <tr><td>Poti L drehen</td><td><b>Blend</b> Spectra ↔ Swarm oder <b>Dry/Wet</b></td><td>wie NT</td><td>BLEND</td></tr>
+  <tr><td>Poti L drücken</td><td>schaltet zwischen Blend und Dry/Wet</td><td><b>Taste 1</b></td><td>PUSH neben BLEND</td></tr>
+  <tr><td>Poti C drehen</td><td><b>Scan</b>: wie schnell Swarm durch die Trails wandert, ganz links = Freeze; oder <b>Reso mix</b></td><td>wie NT</td><td>SCAN</td></tr>
+  <tr><td>Poti C drücken</td><td>schaltet zwischen Scan und Reso mix</td><td><b>Taste 2</b> (schaltet Poti C und Poti R gemeinsam)</td><td>PUSH neben SCAN</td></tr>
+  <tr><td>Poti R drehen</td><td><b>Size</b> (4–24 Grains) oder <b>Atmosphere</b></td><td>wie NT</td><td>SIZE</td></tr>
+  <tr><td>Poti R drücken</td><td>schaltet zwischen Size und Atmosphere</td><td><b>Taste 2</b> (zusammen mit Poti C)</td><td>PUSH neben SIZE</td></tr>
+  <tr><td>Encoder L drehen</td><td>Trail wählen (der gewählte ist umrahmt), hinter Trail 5 die Mod-Ansicht</td><td>wie NT</td><td>TRAIL, dazu ◀ / ▶</td></tr>
+  <tr><td>Encoder L drücken</td><td><b>Solo</b> für diesen Trail</td><td>– (Solo auf der Parameterseite <i>Mixer</i>)</td><td>PUSH SOLO</td></tr>
+  <tr><td>Encoder R drehen</td><td><b>Level</b> des gewählten Trails, 2 % pro Raste</td><td>wie NT</td><td>LEVEL, dazu ◀ / ▶</td></tr>
+  <tr><td>Encoder R drücken</td><td><b>Lock</b> für diesen Trail</td><td>– (Lock auf der Parameterseite <i>Mixer</i>)</td><td>PUSH LOCK</td></tr>
+  <tr><td>Taste 1 · Taste 2</td><td>bleiben beim NT</td><td>Poti-Umschaltung, siehe oben</td><td>– (nicht vorhanden)</td></tr>
+  <tr><td>Taste 3</td><td><b>Rec</b>: sofort in den nächsten Trail aufnehmen, unabhängig von der Threshold</td><td>wie NT, wirkt beim Loslassen</td><td>REC</td></tr>
+  <tr><td>Taste 4</td><td><b>Hold</b> unendlich ein und aus. Wirkt sofort, auch auf Trails, die gerade klingen.</td><td>wie NT, wirkt beim Loslassen</td><td>HOLD INF</td></tr>
+  <tr><td>Menü</td><td>Parametermenü des NT</td><td>Menü von nt_emu</td><td>MENU</td></tr>
   </table></div>
+  <p><b>In VCV Rack (nt_emu)</b> kommt ein Druck auf Poti oder Encoder nicht beim Plug-in an; die Tasten 1 und 2 übernehmen deshalb die Poti-Umschaltung (Tabelle). Tasten reagieren in nt_emu beim Loslassen. Ein Druck auf ein Poti wird in nt_emu bewusst ignoriert, weil nt_emu ihn auch beim Anfassen zum Drehen meldet. Die Fußzeile zeigt dort vor jedem Poti-Ziel die zuständige Taste, etwa <code>1 BLEND</code> oder <code>2 SCAN</code>.</p>
   <p>Die Potis übernehmen erst, wenn sie den aktuellen Wert erreichen oder darüber hinweg gedreht werden (Catch-up, auch in nt_emu). Bis dahin steht der Wert in der Fußzeile dunkel, nach dem Umschalten genauso wie nach einer Änderung im Menü. Ein Encoder-Druck zählt nur, wenn dabei nicht gedreht wurde; in nt_emu drückt das Ziehen am Encoder ihn mit, das wird als Drehen gewertet.</p>
+  <p>Das VCV-Modul hat dazu eigene Taster und ein Menü am Display; Einzelheiten in <a href="#vcv">Kapitel 12</a>.</p>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 
@@ -241,8 +275,28 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 
+<article class="patch-card" id="ein-und-ausgaenge">
+  <div class="ph"><div class="num">06</div><div class="ph-main"><h2>Ein- und Ausgänge</h2></div></div>
+  <div class="pb">
+  <p>Für den ersten Klang reicht eine Klangquelle an <b>Eingang 1</b> und die <b>Ausgänge 1 und 2</b>. Alle Zuordnungen stehen auf der Seite <i>Routing</i>, die der Clock auf der Seite <i>Clock</i> (Mod-Eingänge auf den Seiten <i>Mod 1</i> … <i>Mod 12</i>); „keiner“ schaltet einen Eingang ab.</p>
+  <div class="tbl"><table><tr><th>Signal</th><th>Standard</th><th>NT-Bus</th><th>Inhalt</th></tr>
+  <tr><td><i>In L</i></td><td>Eingang 1</td><td>1</td><td>Audio links oder mono; ±5 V entsprechen Vollaussteuerung</td></tr>
+  <tr><td><i>In R</i></td><td>Eingang 2</td><td>2</td><td>Audio rechts; auch „keiner“. Ein unbelegter Eingang wird erkannt und nicht mitgezählt</td></tr>
+  <tr><td><i>Clock in</i></td><td>Eingang 3</td><td>3</td><td>Clock: Position in Takt und Schlag, Takt für <i>Mod sync</i>; bleibt sie 4 Perioden (höchstens 3 s) aus, laufen die LFOs frei weiter (Seite <a href="#clock">Clock</a>)</td></tr>
+  <tr><td><i>Reset in</i></td><td>keiner</td><td>–</td><td>Reset der Clock: die nächste Clock-Flanke ist die Eins. Den Reset-Ausgang des Clock-Moduls hier anschließen</td></tr>
+  <tr><td><i>Rec trig in</i></td><td>keiner</td><td>–</td><td>Flanke über 1 V startet eine Aufnahme, wie <b>Taste 3</b></td></tr>
+  <tr><td><i>Reso V/Oct in</i></td><td>keiner</td><td>–</td><td>1 V pro Oktave auf den Grundton des Resonators, 0 V = C2</td></tr>
+  <tr><td><i>Mod 1 in</i> … <i>Mod 12 in</i></td><td>keiner</td><td>–</td><td>±5 V entsprechen ±100 %; keiner = internes LFO</td></tr>
+  <tr><td><i>Out L</i></td><td>Ausgang 1</td><td>13</td><td>Wolke links, Modus <i>Add</i></td></tr>
+  <tr><td><i>Out R</i></td><td>Ausgang 2</td><td>14</td><td>Wolke rechts, Modus <i>Add</i></td></tr>
+  </table></div>
+  <p>Eingänge 1–12 sind die NT-Busse 1–12, Ausgänge 1–8 die Busse 13–20. Jeder Ausgang hat einen Modus <i>Add</i> oder <i>Replace</i> (<i>Out L mode</i>, <i>Out R mode</i>): Replace überschreibt den Bus, Add addiert auf das, was schon darauf liegt. So lässt sich das Original mitführen (Rezept <a href="#rezepte">Spektraler Schatten</a>).</p>
+  <p><i>Output level</i> steht ab Werk auf +12 dB, weil die Wolke deutlich leiser ist als der Eingang. Am VCV-Modul liegen die Eingänge auf festen Buchsen (<a href="#vcv-buchsen">Buchsen</a>).</p>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
 <article class="patch-card" id="trails">
-  <div class="ph"><div class="num">06</div><div class="ph-main"><h2>Wie Trails entstehen und vergehen</h2></div></div>
+  <div class="ph"><div class="num">07</div><div class="ph-main"><h2>Wie Trails entstehen und vergehen</h2></div></div>
   <div class="pb">
   <ul class="lst">
     <li><b>Auslöser:</b> der Eingangspegel steigt über <i>Threshold</i>, <b>Taste 3</b>, oder eine Flanke über 1 V am <i>Rec trig in</i> (Seite Routing, z. B. eine Clock oder ein Gate).</li>
@@ -258,7 +312,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
 </article>
 
 <article class="patch-card" id="engines">
-  <div class="ph"><div class="num">07</div><div class="ph-main"><h2>Spectra, Swarm und Resonator</h2></div></div>
+  <div class="ph"><div class="num">08</div><div class="ph-main"><h2>Spectra, Swarm und Resonator</h2></div></div>
   <div class="pb">
   <h3>Spectra</h3>
   <p>Analysiert die Summe der Trails etwa 47-mal pro Sekunde und spielt die stärksten Teiltöne mit Sinus-Oszillatoren nach. Das Ergebnis ist ein weicher, schwebender Abdruck der Aufnahmen.</p>
@@ -298,7 +352,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
 </article>
 
 <article class="patch-card" id="modulation">
-  <div class="ph"><div class="num">08</div><div class="ph-main"><h2>Modulation</h2></div></div>
+  <div class="ph"><div class="num">09</div><div class="ph-main"><h2>Modulation</h2></div></div>
   <div class="pb">
   <p>Jeder Klang- und Trail-Parameter lässt sich per CV modulieren, auf zwei Wegen, die sich ergänzen.</p>
   <h3 id="clock">Clock: Takt und Schlag</h3>
@@ -375,8 +429,39 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 
+<article class="patch-card" id="rezepte">
+  <div class="ph"><div class="num">10</div><div class="ph-main"><h2>Rezepte</h2></div></div>
+  <div class="pb">
+  <p>Jedes Rezept geht von den Werkseinstellungen aus. Genannt ist nur, was du änderst; Seitennamen links, Werte rechts.</p>
+  <h3>Gefrorene Fläche</h3>
+  <p>Drei Phrasen bleiben unbegrenzt stehen und verschwimmen zu einer Fläche aus Körnern.</p>
+  <div class="patch"><span class="n">Trails</span><span class="r">Count = 3 · Overwrite = Off</span><span class="n">Time</span><span class="r">Hold = INF (<b>Taste 4</b>)</span><span class="n">Engines</span><span class="r">Blend = ganz rechts</span><span class="n">Swarm</span><span class="r">Scan = 0 · Scatter = 100 % · Atmosphere = −80 %</span><span class="n">Spielen</span><span class="r">drei Phrasen</span></div>
+  <p>Danach nur noch mit <b>Poti C</b> (Scan) leicht bewegen.</p>
+  <h3>Spektraler Schatten</h3>
+  <p>Ergibt einen dunklen Orgelton unter dem Original.</p>
+  <div class="patch"><span class="n">Engines</span><span class="r">Blend = ganz links · Pitch Spectra = −12</span><span class="n">Spectra</span><span class="r">Partials = 8 · Umbra/Aurora = −60 % · Ensemble = 40 %</span><span class="n">Routing</span><span class="r">Out L/R = <i>Add</i> auf die Busse, über die das Original zum Ausgang läuft</span></div>
+  <p>Ohne <i>Add</i> ersetzt die Wolke das Original; mit <i>Add</i> klingt beides zusammen.</p>
+  <h3>Getaktete Erinnerung</h3>
+  <p>Jeder Takt hält eine Sekunde fest; die Wolke erneuert sich von selbst.</p>
+  <div class="patch"><span class="n">Kabel</span><span class="r">langsamer Clock-Teiler → <i>Rec trig in</i></span><span class="n">Trails</span><span class="r">Threshold = 100 % (nur noch der Trigger nimmt auf) · Count = 5</span><span class="n">Time</span><span class="r">Buffer = 1 s · Hold = 8 s</span></div>
+  <p>Ein schnellerer Teiler oder ein kürzeres Hold lässt die Wolke rascher wechseln.</p>
+  <h3>Wolke statt Hall</h3>
+  <p>Der Klang wandert von selbst zwischen Körnern und Teiltönen.</p>
+  <div class="patch"><span class="n">Kette</span><span class="r">Perseids vor einen NT-Reverb setzen</span><span class="n">Engines</span><span class="r">Output level = 0 dB · Blend = 60 %</span><span class="n">Routing</span><span class="r">Out = <i>Add</i></span><span class="n">Swarm</span><span class="r">Spread = 80 %</span><span class="n">Time</span><span class="r">Fade in = Fade out = 5 s</span><span class="n">Mod 1</span><span class="r">ohne Kabel (LFO) · Ziel <i>Blend</i> · Amount = 40 % · LFO rate = 0,05 Hz</span></div>
+  <p>Ein langsameres LFO macht den Wechsel kaum merklich.</p>
+  <h3>Resonanz folgt der Melodie</h3>
+  <p>Die Körner aus beliebigem Material klingen jetzt in den Tönen der Sequenz nach.</p>
+  <div class="patch"><span class="n">Kabel</span><span class="r">Pitch-Ausgang einer Sequenz (z. B. Collagé Track A) → NT-Eingang</span><span class="n">Resonator</span><span class="r"><i>Reso V/Oct in</i> = dieser Eingang · Reso mix = 60 % · Reso decay = 80 % · Reso damping = 30 %</span><span class="n">Engines</span><span class="r">Blend = ganz rechts</span></div>
+  <p>Mit <i>Reso quantize</i> und <i>Reso scale</i> Minor werden daraus Akkordflächen.</p>
+  <h3>Lauter = körniger</h3>
+  <p>In leisen Passagen dominiert Spectra, laute Stellen schieben die Wolke zu Swarm.</p>
+  <div class="patch"><span class="n">Kabel</span><span class="r">Hüllkurvenfolger der Quelle → NT-Eingang</span><span class="n">Mod 1</span><span class="r"><i>Mod 1 in</i> = dieser Eingang · Ziel <i>Blend</i> · Amount = 60 % · Offset = −30 %</span></div>
+  <p>Ein zweiter Slot mit demselben Eingang auf <i>Scatter</i> streut sie dabei weiter.</p>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
 <article class="patch-card" id="parameter">
-  <div class="ph"><div class="num">09</div><div class="ph-main"><h2>Parameter</h2></div></div>
+  <div class="ph"><div class="num">11</div><div class="ph-main"><h2>Parameter</h2></div></div>
   <div class="pb">
   <p>Alle Parameter lassen sich im NT auf CV oder MIDI legen und werden mit dem Preset gespeichert.</p>
   <div class="tbl"><table><tr><th>Seite</th><th>Parameter</th><th>Bereich (Standard)</th></tr>
@@ -419,52 +504,17 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <tr><td>Display</td><td>Rec style</td><td>PRS/PLR/CTR (PLR)</td></tr>
   <tr><td></td><td>Mod view</td><td>Graphic/Numbers (Graphic)</td></tr>
   <tr><td>Routing</td><td>In L · In R</td><td>Eingang 1 · 2 (In R auch „keiner“)</td></tr>
-  <tr><td></td><td>Rec trig in · Clock in</td><td>keiner · In 3</td></tr>
+  <tr><td></td><td>Rec trig in</td><td>keiner</td></tr>
   <tr><td></td><td>Out L · Out R, je mit Add/Replace</td><td>Ausgang 1 · 2, Add</td></tr>
+  <tr><td>Clock</td><td>Clock in</td><td>In 3</td></tr>
+  <tr><td></td><td>Clock res</td><td>1/2/4/24 PPQN (1)</td></tr>
+  <tr><td></td><td>Beats/bar</td><td>1–16 (4)</td></tr>
+  <tr><td></td><td>Reset in</td><td>keiner</td></tr>
+  <tr><td></td><td>Resync</td><td>bestätigen</td></tr>
   </table></div>
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 
-<article class="patch-card" id="rezepte">
-  <div class="ph"><div class="num">10</div><div class="ph-main"><h2>Rezepte</h2></div></div>
-  <div class="pb">
-  <h3>Gefrorene Fläche</h3>
-  <p>Count 3, Hold INF (Taste 4), Overwrite Off, Blend ganz rechts, Scan 0, Scatter 100 %, Atmosphere −80 %. Drei Phrasen spielen, dann nur noch mit Poti C (Scan) leicht bewegen.</p>
-  <h3>Spektraler Schatten</h3>
-  <p>Blend ganz links, Partials 8, Umbra/Aurora −60 %, Ensemble 40 %, Pitch Spectra −12. Ergibt einen dunklen Orgelton unter dem Original. Damit beides zusammen klingt, Out L/R mit <i>Add</i> auf die Busse legen, über die das Original zum Ausgang läuft.</p>
-  <h3>Getaktete Erinnerung</h3>
-  <p>Threshold 100 % (nur noch der Trigger nimmt auf), Rec trig in an einen langsamen Clock-Teiler, Buffer 1 s, Hold 8 s, Count 5. Jeder Takt hält eine Sekunde fest; die Wolke erneuert sich von selbst.</p>
-  <h3>Wolke statt Hall</h3>
-  <p>Perseids vor einen NT-Reverb setzen, Output level 0 dB, Out auf <i>Add</i>. Blend 60 %, Spread 80 %, Fade in/out 5 s. Mit Mod 1 ohne Kabel, Ziel <i>Blend</i>, Amount 40 %, LFO 0,05 Hz wandert der Klang von selbst zwischen Körnern und Teiltönen.</p>
-  <h3>Resonanz folgt der Melodie</h3>
-  <p>Den Pitch-Ausgang einer Sequenz (z. B. Duett Track A) an einen NT-Eingang, <i>Reso V/Oct in</i> darauf. Blend ganz rechts, Reso mix 60 %, Reso decay 80 %, Reso damping 30 %. Die Körner aus beliebigem Material klingen jetzt in den Tönen der Sequenz nach. Mit <i>Reso quantize</i> und <i>Reso scale</i> Minor werden daraus Akkordflächen.</p>
-  <h3>Lauter = körniger</h3>
-  <p>Einen Hüllkurvenfolger der Quelle an einen NT-Eingang, <i>Mod 1 in</i> darauf, Ziel <i>Blend</i>, Amount 60 %, Offset −30 %. In leisen Passagen dominiert Spectra, laute Stellen schieben die Wolke zu Swarm. Ein zweiter Slot mit demselben Eingang auf <i>Scatter</i> streut sie dabei weiter.</p>
-  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
-</article>
-
-<article class="patch-card" id="grenzen">
-  <div class="ph"><div class="num">11</div><div class="ph-main"><h2>Unterschiede, Grenzen, Stand</h2></div></div>
-  <div class="pb">
-  <h3>Anders als am Modul</h3>
-  <ul class="lst">
-    <li><b>Pitch</b> in Halbtönen (±24) statt Prozent mit <i>Pitch Both</i>.</li>
-    <li><b>Pegel:</b> ±5 V am Eingang entsprechen Vollaussteuerung. <i>Output level</i> steht ab Werk auf +12 dB, weil die Wolke deutlich leiser ist als der Eingang.</li>
-    <li><b>Blend</b> steht ab Werk auf 50 % (Modul: nur Spectra).</li>
-    <li><b>Trails in 16 Bit</b> statt 32 Bit; im Klang nicht zu unterscheiden.</li>
-    <li><b>Trails stehen in der Mitte</b>, Pan Drift fehlt (siehe 01).</li>
-  </ul>
-  <h3>Grenzen</h3>
-  <ul class="lst">
-    <li>Wird der NT knapp, spart Swarm Grains (Anzeige <code>CPU</code>), mindestens 6 bleiben.</li>
-    <li>Aufnahmen gehen beim Ausschalten, beim Neuladen und bei „Respecify“ verloren; gespeichert werden nur die Einstellungen.</li>
-    <li>Wie viel DRAM der NT einem Plug-in gibt, ist nicht dokumentiert; 30 s pro Trail erst ausprobieren.</li>
-    <li>Das Parametermenü gehört dem NT bzw. nt_emu: Wie lange es offen bleibt und auf welcher Seite es öffnet, kann ein Plug-in nicht einstellen. Perseids stellt nur die Seitenreihenfolge um (Mod overview zuerst, solange die Mod-Ansicht offen ist).</li>
-  </ul>
-  <h3>Stand</h3>
-  <p>In einer Simulation getestet (174 Prüfungen, in der nt_emu-Fassung 173: Tonhöhe, Klicks, Blockgrößen, Modulation, Dry/Wet, Level match, Resonator, Bedienung mit Catch-up, Clock-Sync, Display) und unter Wine mit einem nt_emu-artigen Host. Die DLL läuft in nt_emu (VCV Rack). <b>Am NT selbst noch nicht getestet.</b> Rückmeldungen dazu, besonders zum Nachglimmen der Funken und zur CPU-Last, fließen in die nächste Fassung.</p>
-  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
-</article>
 <article class="patch-card" id="vcv">
   <div class="ph"><div class="num">12</div><div class="ph-main"><h2>Perseids als VCV-Modul</h2></div></div>
   <div class="pb">
@@ -494,7 +544,7 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <h3 id="vcv-buchsen">Buchsen</h3>
   <div class="tbl"><table><tr><th>Panel</th><th>NT-Eingang</th><th>ab Werk</th></tr>
   <tr><td>IN L · IN R</td><td>Input 1 · 2</td><td><i>In L</i> · <i>In R</i></td></tr>
-  <tr><td>CV 1 … CV 10</td><td>Input 3 … 12</td><td><i>Clock in</i> = CV 1, alle anderen frei</td></tr>
+  <tr><td>CV 1 … CV 10</td><td>Input 3 … 12</td><td><i>Clock in</i> = CV 1, alle anderen frei (<i>Reset in</i> z. B. auf CV 2)</td></tr>
   <tr><td>OUT L · OUT R</td><td>Output 1 · 2</td><td><i>Out L</i> · <i>Out R</i></td></tr></table></div>
   <p>Zuweisen kannst du die CV-Buchsen wie am NT: <i>Rec trig in</i> auf der Seite <i>Routing</i>, <i>Clock in</i> und <i>Reset in</i> auf der Seite <i>Clock</i>, <i>Reso V/Oct in</i> auf der Seite <i>Resonator</i>, <i>Mod n in</i> auf den Seiten <i>Mod 1 … Mod 12</i>. Das Menü nennt die Eingänge wie die Buchsen (<i>CV 1</i> … <i>CV 10</i>). Ein Preset vom NT mit „Input 3“ landet auf CV 1.</p>
   <h3 id="vcv-midi">MIDI-Controller</h3>
@@ -515,9 +565,46 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 
+<article class="patch-card" id="grenzen">
+  <div class="ph"><div class="num">13</div><div class="ph-main"><h2>Grenzen und Stand der Prüfung</h2></div></div>
+  <div class="pb">
+  <h3 id="anders-als-am-modul">Anders als am Modul</h3>
+  <ul class="lst">
+    <li><b>Pitch</b> in Halbtönen (±24) statt Prozent mit <i>Pitch Both</i>.</li>
+    <li><b>Pegel:</b> ±5 V am Eingang entsprechen Vollaussteuerung. <i>Output level</i> steht ab Werk auf +12 dB, weil die Wolke deutlich leiser ist als der Eingang.</li>
+    <li><b>Blend</b> steht ab Werk auf 50 % (Modul: nur Spectra).</li>
+    <li><b>Trails in 16 Bit</b> statt 32 Bit; im Klang nicht zu unterscheiden.</li>
+    <li><b>Trails stehen in der Mitte</b>, Pan Drift fehlt (siehe <a href="#ueberblick">01</a>).</li>
+  </ul>
+  <h3 id="grenzen-liste">Grenzen</h3>
+  <ul class="lst">
+    <li>Wird der NT knapp, spart Swarm Grains (Anzeige <code>CPU</code>), mindestens 6 bleiben.</li>
+    <li>Aufnahmen gehen beim Ausschalten, beim Neuladen und bei „Respecify“ verloren; gespeichert werden nur die Einstellungen.</li>
+    <li>Wie viel DRAM der NT einem Plug-in gibt, ist nicht dokumentiert; 30 s pro Trail erst ausprobieren.</li>
+    <li>Das Parametermenü gehört dem NT bzw. nt_emu: Wie lange es offen bleibt und auf welcher Seite es öffnet, kann ein Plug-in nicht einstellen. Perseids stellt nur die Seitenreihenfolge um (Mod overview zuerst, solange die Mod-Ansicht offen ist).</li>
+  </ul>
+  <h3 id="stand-der-pruefung">Stand der Prüfung</h3>
+  <div class="tbl"><table><tr><th>Prüfung</th><th>Ergebnis</th><th>Version</th></tr>
+  <tr><td>Simulation (184 Prüfungen, in der nt_emu-Fassung 183: Tonhöhe, Klicks, Blockgrößen, Modulation, Dry/Wet, Level match, Resonator, Bedienung mit Catch-up, Clock-Sync, Clock-Modell, Display)</td><td>bestanden</td><td>v0.30</td></tr>
+  <tr><td>Unter Wine mit einem nt_emu-artigen Host</td><td>getestet</td><td>v0.30</td></tr>
+  <tr><td>Golden-Test: Ausgabe bitgleich zu v0.29 (Clock, Mod sync, Aufnahme; 4/24/128 Frames)</td><td>bestanden</td><td>v0.30</td></tr>
+  <tr><td>nt_emu (<code>perseids.dll</code>) in VCV Rack</td><td>läuft</td><td>v0.29</td></tr>
+  <tr><td>disting NT Hardware</td><td><b>noch nicht getestet</b></td><td>–</td></tr>
+  </table></div>
+  <p>Was auf der Hardware zuerst zu prüfen ist; Rückmeldungen dazu fließen in die nächste Fassung:</p>
+  <ul class="lst">
+    <li>Plug-in lädt, Abfrage <i>Trail seconds</i> erscheint</li>
+    <li>CPU-Last (Anzeige <code>CPU</code>, gesparte Grains)</li>
+    <li>Nachglimmen der Funken auf dem echten Display</li>
+    <li>DRAM: wie viele Trail-Sekunden der NT tatsächlich zulässt (30 s erst ausprobieren)</li>
+    <li>Bedienung mit Poti- und Encoder-Druck, Preset speichern und laden</li>
+  </ul>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
 <!-- appendix:start -->
 <article class="patch-card" id="anhang">
-  <div class="ph"><div class="num">13</div><div class="ph-main"><h2>Anhang: Wo steht was</h2></div></div>
+  <div class="ph"><div class="num">14</div><div class="ph-main"><h2>Anhang: Wo steht was</h2></div></div>
   <div class="pb">
   <p>Erzeugt aus den Tabellen des Plug-ins (<code>./test/sim --list | python3 docs/appendix.py …</code>), passt also immer zur Version.</p>
   <h3>Parameterseiten in Menü-Reihenfolge</h3>
@@ -627,8 +714,220 @@ footer{font-size:13px; color:var(--muted); border-top:1px solid var(--line); pad
   <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
 </article>
 <!-- appendix:end -->
+
+<article class="patch-card" id="versionen">
+  <div class="ph"><div class="num">15</div><div class="ph-main"><h2>Versionshistorie</h2></div></div>
+  <div class="pb">
+  <div class="tbl"><table><tr><th>Version</th><th>Stand</th><th>Was dazukam</th></tr>
+  <tr><td>v0.30</td><td>25.10.2026</td><td>Stand dieses Handbuchs. Clock-Sync, Stufe 1: Seite <i>Clock</i> (<i>Clock in</i> von <i>Routing</i> hierher, <i>Clock res</i>, <i>Beats/bar</i>, <i>Reset in</i>, <i>Resync</i>), Position <code>Takt.Schlag</code> in der Fußzeile. Klang und <i>Mod sync</i> unverändert</td></tr>
+  <tr><td>v0.29</td><td>10.10.2026</td><td>Fünf Trails, Spectra, Swarm, Blend, Resonator mit V/Oct, Dry/Wet, Level match, zwölf Mod-Slots mit LFO-Kurven und Clock-Sync, Mod-Ansicht, 159 Parameter</td></tr>
+  <tr><td>v0.15</td><td>–</td><td>älterer Stand; in Patches aus dieser Fassung steht <i>Clock in</i> noch auf None</td></tr>
+  </table></div>
+  <p><b>VCV-Modul 3F4-Perseids:</b> 22 HP, großes Panel mit 12 zuweisbaren Reglern.</p>
+  <p>Einzelne Änderungen stehen in der Git-Historie unter <code>nt/</code> im Perseids-Repo.</p>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
+
+<article class="patch-card" id="quellen">
+  <div class="ph"><div class="num">16</div><div class="ph-main"><h2>Quellen und Credits</h2></div></div>
+  <div class="pb">
+  <h3 id="herkunft">Herkunft</h3>
+  <div class="tbl"><table><tr><th>Baustein</th><th>Quelle</th></tr>
+  <tr><td>Klangerzeugung, Trails, Spectra, Swarm, Resonator, Mod-System</td><td>das Eurorack-Modul <b>Perseids</b> (Daisy Seed); derselbe Code, siehe <a href="#ueberblick">01</a></td></tr>
+  <tr><td>Grundidee Trails und Resynthese</td><td>das Coastline-Plug-in als Anregung für das frühe Konzept „Flaresum“</td></tr>
+  </table></div>
+  <h3 id="werkzeuge">Werkzeuge</h3>
+  <div class="tbl"><table><tr><th>Wer</th><th>Was</th></tr>
+  <tr><td>Expert Sleepers</td><td>disting NT und seine C++-Plug-in-API</td></tr>
+  <tr><td>thorinside/nt_emu</td><td>Emulator in VCV Rack, mit dem Perseids ohne Hardware läuft</td></tr>
+  <tr><td>VCV Rack</td><td>Rack SDK für das eigene Modul 3F4-Perseids</td></tr>
+  <tr><td>Electrosmith</td><td>Daisy Seed, die Plattform des Hardware-Moduls</td></tr>
+  </table></div>
+  <a class="backtop" href="#inhalt">↑ zum Inhalt</a></div>
+</article>
 </section>
-<footer>Stand: Perseids-core für den disting NT, 10. Oktober 2026 · Quelltext und Tests: <code>nt/</code> im Perseids-Repo · <a href="#inhalt">↑ zum Inhalt</a></footer>
+<footer>Stand: Perseids-core v0.30 für den disting NT, 25.10.2026 · Display-Bilder und Anhang aus dem Plug-in erzeugt (<code>./test/sim --list | python3 docs/appendix.py</code>) · Quelltext und Tests: <code>nt/</code> im Perseids-Repo · <a href="#inhalt">↑ zum Inhalt</a></footer>
+<script>
+(function(){
+  var S = window.speechSynthesis;
+  var wrap = document.querySelector('.wrap'); if(!wrap) return;
+  var KEY = 'tts-pos:' + document.title;
+  function sget(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function sset(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+
+  // ---------- Text sammeln ----------
+  function clean(t){
+    return t.replace(/ /g,' ')
+      .replace(/↑ zum Inhalt/g,'')
+      .replace(/\s*↔\s*/g,' bis ').replace(/\s*→\s*/g,', dann ').replace(/\s*←\s*/g,', ')
+      .replace(/ · /g,', ').replace(/·/g,', ')
+      .replace(/≈\s*/g,'etwa ').replace(/≥\s*/g,'mindestens ').replace(/±/g,'plus minus ')
+      .replace(/−(?=\d)/g,'minus ').replace(/(\d)\s*–\s*(?=\d)/g,'$1 bis ').replace(/\s+–\s+/g,', ').replace(/–/g,' bis ')
+      .replace(/◀/g,'links').replace(/▶/g,'rechts').replace(/★/g,'Stern ')
+      .replace(/\s+/g,' ').trim();
+  }
+  function textOf(el, dropNested){
+    var c = el.cloneNode(true);
+    c.querySelectorAll('.tts-here, script, style, svg, img' + (dropNested ? ', ul, ol' : '')).forEach(function(n){ n.remove(); });
+    return clean(c.textContent || '');
+  }
+  function rowText(tr){
+    var cells = Array.prototype.slice.call(tr.children);
+    if(!cells.length || cells.every(function(c){ return c.tagName==='TH'; })) return '';
+    var table = tr.closest('table'), head = table && table.querySelector('tr');
+    var heads = head ? Array.prototype.slice.call(head.children).map(function(h){ return clean(h.textContent); }) : [];
+    var first = textOf(cells[0]);
+    var parts = [];
+    for(var i=1;i<cells.length;i++){
+      var v = textOf(cells[i]); if(!v) continue;
+      parts.push((heads[i] ? heads[i].toLowerCase()+': ' : '') + v);
+    }
+    if(!first) return parts.join('. ');
+    return first + (parts.length ? '. ' + parts.join('. ') : '');
+  }
+  function patchText(box){
+    var out=[], kids=box.children;
+    for(var i=0;i<kids.length;i+=2){ out.push(clean(kids[i].textContent)+': '+(kids[i+1]?textOf(kids[i+1]):'')); }
+    return out.join('. ');
+  }
+  var sel = 'header h1, header .lede, article h2, article h3, article h4, article p, article li, article tr, article .patch, article figcaption';
+  var items = [];
+  wrap.querySelectorAll(sel).forEach(function(el){
+    if(el.closest('nav, footer, .tts-bar')) return;
+    if(el.tagName==='P' && (el.closest('td') || el.closest('li'))) return;
+    if(el.tagName==='LI' && el.closest('td')) return;
+    if(el.tagName==='FIGCAPTION' && el.closest('td')) return;
+    var t;
+    if(el.tagName==='TR') t = rowText(el);
+    else if(el.classList.contains('patch')) t = patchText(el);
+    else if(el.tagName==='LI') t = textOf(el, true);
+    else t = textOf(el);
+    if(!t || t.length < 2) return;
+    if(/^H[234]$/.test(el.tagName)){
+      var num = el.tagName==='H2' && el.closest('.ph') ? el.closest('.ph').querySelector('.num') : null;
+      t = (num ? 'Kapitel ' + parseInt(num.textContent,10) + '. ' : '') + t + '.';
+    }
+    var art = el.closest('article');
+    items.push({el:el, text:t, art:art});
+  });
+  if(!items.length) return;
+
+  // ---------- Stimme ----------
+  var voice = null;
+  function pickVoice(){
+    if(!S) return;
+    var vs = S.getVoices() || [];
+    voice = vs.filter(function(v){ return /^de(-|_|$)/i.test(v.lang); })
+              .sort(function(a,b){ return (b.localService?1:0)-(a.localService?1:0); })[0] || null;
+  }
+  if(S){ pickVoice(); if('onvoiceschanged' in S) S.onvoiceschanged = pickVoice; }
+
+  // ---------- Leiste ----------
+  var bar = document.createElement('div');
+  bar.className='tts-bar'; bar.hidden=true; bar.setAttribute('role','region'); bar.setAttribute('aria-label','Vorlesen');
+  bar.innerHTML = '<div class="tts-in">'+
+    '<button type="button" id="tts-prev" aria-label="Vorheriger Absatz">⏮</button>'+
+    '<button type="button" id="tts-play" class="tts-play" aria-label="Abspielen">▶</button>'+
+    '<button type="button" id="tts-next" aria-label="Nächster Absatz">⏭</button>'+
+    '<button type="button" id="tts-chap" aria-label="Nächstes Kapitel">⏭⏭</button>'+
+    '<select id="tts-rate" aria-label="Tempo"><option value="0.8">0,8×</option><option value="1" selected>1×</option><option value="1.2">1,2×</option><option value="1.4">1,4×</option><option value="1.7">1,7×</option></select>'+
+    '<span class="tts-where" id="tts-where"></span>'+
+    '<button type="button" id="tts-close" aria-label="Vorlesen beenden">✕</button>'+
+    '<span class="tts-msg" id="tts-msg" hidden></span></div>';
+  document.body.appendChild(bar);
+  var $ = function(id){ return document.getElementById(id); };
+  var rate = parseFloat(sget('tts-rate')||'1'); $('tts-rate').value = String(rate);
+
+  var idx = 0, playing = false, chunks = [], ci = 0, token = 0;
+  function msg(t){ var m=$('tts-msg'); m.textContent=t||''; m.hidden=!t; }
+  function chapterName(it){
+    var h = it.art && it.art.querySelector('h2');
+    var n = it.art && it.art.querySelector('.num');
+    return h ? ((n ? n.textContent + ' ' : '') + clean(h.textContent)) : 'Einleitung';
+  }
+  function mark(){
+    document.querySelectorAll('.tts-on').forEach(function(e){ e.classList.remove('tts-on'); });
+    var it = items[idx]; if(!it) return;
+    it.el.classList.add('tts-on');
+    $('tts-where').textContent = chapterName(it);
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    try{ it.el.scrollIntoView({block:'center', behavior: reduce ? 'auto' : 'smooth'}); }catch(e){ it.el.scrollIntoView(); }
+    sset(KEY, String(idx));
+  }
+  function split(t){
+    var parts = t.match(/[^.!?;:]+[.!?;:]*\s*/g) || [t], out=[], cur='';
+    parts.forEach(function(p){
+      if((cur+p).length > 200 && cur){ out.push(cur); cur=p; } else cur+=p;
+    });
+    if(cur.trim()) out.push(cur);
+    // sehr lange Stücke ohne Satzzeichen an Kommas teilen
+    var res=[]; out.forEach(function(s){ while(s.length>260){ var k=s.lastIndexOf(',',240); if(k<80) k=240; res.push(s.slice(0,k+1)); s=s.slice(k+1);} res.push(s); });
+    return res.filter(function(s){ return s.trim(); });
+  }
+  function setPlayBtn(){ var b=$('tts-play'); b.textContent = playing ? '⏸' : '▶'; b.setAttribute('aria-label', playing ? 'Pause' : 'Abspielen'); }
+  function speakChunk(my){
+    if(my!==token || !playing) return;
+    if(ci >= chunks.length){
+      if(idx < items.length-1){ idx++; startItem(my); } else { playing=false; setPlayBtn(); msg('Ende des Handbuchs.'); }
+      return;
+    }
+    var u = new SpeechSynthesisUtterance(chunks[ci]);
+    u.lang = 'de-DE'; if(voice) u.voice = voice; u.rate = rate;
+    u.onend = function(){ if(my!==token) return; ci++; speakChunk(my); };
+    u.onerror = function(e){ if(my!==token) return; if(e && (e.error==='interrupted'||e.error==='canceled')) return; ci++; speakChunk(my); };
+    S.speak(u);
+  }
+  function startItem(my){
+    mark(); chunks = split(items[idx].text); ci = 0; speakChunk(my);
+  }
+  function play(){
+    if(!S || typeof SpeechSynthesisUtterance==='undefined'){ msg('Dieser Browser bietet hier keine Sprachausgabe an. Alternative: Android-Einstellungen → Bedienungshilfen → Vorlesen.'); return; }
+    msg(''); if(!voice) pickVoice();
+    S.cancel(); playing = true; token++; setPlayBtn(); startItem(token);
+    setTimeout(function(){ if(playing && S && !S.speaking && !S.pending){ msg('Es kommt kein Ton? Dann blockiert die Ansicht die Sprachausgabe. Alternative: Android-Einstellungen → Bedienungshilfen → Vorlesen.'); } }, 2500);
+  }
+  function stop(){ playing=false; token++; if(S) S.cancel(); setPlayBtn(); }
+  function open(){ bar.hidden=false; document.body.classList.add('tts-open'); }
+  function goto(i, autoplay){ idx = Math.max(0, Math.min(items.length-1, i)); open(); if(autoplay || playing) play(); else mark(); }
+
+  $('tts-play').onclick = function(){ if(playing) stop(); else play(); };
+  $('tts-prev').onclick = function(){ goto(idx-1); };
+  $('tts-next').onclick = function(){ goto(idx+1); };
+  $('tts-chap').onclick = function(){
+    var cur = items[idx].art;
+    for(var i=idx+1;i<items.length;i++){ if(items[i].art!==cur){ goto(i); return; } }
+  };
+  $('tts-rate').onchange = function(){ rate = parseFloat(this.value)||1; sset('tts-rate', String(rate)); if(playing) play(); };
+  $('tts-close').onclick = function(){ stop(); bar.hidden=true; document.body.classList.remove('tts-open'); document.querySelectorAll('.tts-on').forEach(function(e){ e.classList.remove('tts-on'); }); };
+
+  // ---------- Startknöpfe ----------
+  var saved = parseInt(sget(KEY)||'',10);
+  var hdr = document.querySelector('header');
+  if(hdr){
+    var b = document.createElement('button'); b.type='button'; b.className='tts-start';
+    b.textContent = '▶ Vorlesen';
+    b.onclick = function(){ goto(0, true); };
+    var p = document.createElement('div'); p.appendChild(b);
+    if(saved>0 && saved<items.length){
+      var r = document.createElement('button'); r.type='button'; r.className='tts-start'; r.style.marginLeft='8px';
+      r.textContent = '▶ Weiter bei ' + chapterName(items[saved]).slice(0,28);
+      r.onclick = function(){ goto(saved, true); };
+      p.appendChild(r);
+    }
+    hdr.appendChild(p);
+  }
+  document.querySelectorAll('article .ph-main').forEach(function(ph){
+    var art = ph.closest('article');
+    var first = -1; for(var i=0;i<items.length;i++){ if(items[i].art===art){ first=i; break; } }
+    if(first<0) return;
+    var b = document.createElement('button'); b.type='button'; b.className='tts-here'; b.textContent='▶ Ab hier vorlesen';
+    b.onclick = function(){ goto(first, true); };
+    ph.appendChild(b);
+  });
+  document.addEventListener('visibilitychange', function(){ if(document.hidden && playing && S && S.paused){ stop(); } });
+})();
+</script>
+
 </div>
-</body>
-</html>
+
+</body></html>

@@ -69,12 +69,16 @@ block = """<!-- appendix:start -->
 
 path = sys.argv[1]
 doc = open(path, encoding="utf-8").read()
+# Keep the chapter number the handbook gives the appendix (it moves as chapters are added).
+m = re.search(r'<article class="patch-card" id="anhang">\s*<div class="ph"><div class="num">(\d+)</div>', doc)
+if m:
+    block = block.replace('<div class="num">13</div>', '<div class="num">%s</div>' % m.group(1), 1)
 if "<!-- appendix:start -->" in doc:
     doc = re.sub(r"<!-- appendix:start -->.*?<!-- appendix:end -->", lambda m: block, doc, flags=re.S)
 else:
     doc = doc.replace("</section>\n<footer>", block + "\n</section>\n<footer>", 1)
 toc = '<li><a class="tl" href="#anhang"><span class="tn">13</span><span class="tt">Anhang: Wo steht was</span></a></li>'
-if toc not in doc:
+if 'href="#anhang"' not in doc:
     doc = re.sub(r'(<li><a class="tl" href="#grenzen">.*?</li>)', lambda m: m.group(1) + "\n" + toc, doc, count=1, flags=re.S)
 open(path, "w", encoding="utf-8").write(doc)
 print("appendix: %d pages, %d targets" % (len(rows), len(targets)))
