@@ -72,10 +72,10 @@ Rechtsklick auf das Modul → **Panel**:
 | Panel | NT-Eingang | ab Werk |
 |---|---|---|
 | IN L, IN R | Input 1, 2 | Audio *In L* / *In R* |
-| CV 1 … CV 10 | Input 3 … 12 | *Clock in* = CV 1, alle anderen frei |
+| CV 1 … CV 10 | Input 3 … 12 | *Clock in* = CV 1, alle anderen frei (*Reset in* z. B. auf CV 2) |
 | OUT L, OUT R | Output 1, 2 | *Out L* / *Out R* |
 
-Die CV-Eingänge sind frei zuweisbar, über dieselben Routing-Parameter wie am NT. Die Parameter stehen auf der Seite *Routing* (*Rec trig in*, *Clock in*, *Reso V/Oct in*) und auf den Seiten *Mod 1 … Mod 12* (*Mod n in*). Das Menü nennt die Eingänge wie die Buchsen: *In L*, *In R*, *CV 1* … *CV 10*. Damit liegen alle 12 NT-Eingänge auf dem Panel. Ein vom NT übernommenes Preset mit „Input 3“ landet auf CV 1, „Input 12“ auf CV 10.
+Die CV-Eingänge sind frei zuweisbar, über dieselben Routing-Parameter wie am NT. Die Parameter stehen auf den Seiten *Routing* (*Rec trig in*), *Clock* (*Clock in*, *Reset in*), *Resonator* (*Reso V/Oct in*) und auf den Seiten *Mod 1 … Mod 12* (*Mod n in*). Das Menü nennt die Eingänge wie die Buchsen: *In L*, *In R*, *CV 1* … *CV 10*. Damit liegen alle 12 NT-Eingänge auf dem Panel. Ein vom NT übernommenes Preset mit „Input 3“ landet auf CV 1, „Input 12“ auf CV 10.
 
 ## Speichern, Kontextmenü
 

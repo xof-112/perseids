@@ -1101,6 +1101,149 @@ int main(int argc, char** argv)
         CHECK(Peak(oy.l) < 1e-6f, "second instance stays silent while the first plays");
     }
 
+    // --- Clock model (v0.30): pulses → beats → bars, Reset, Resync ---------------
+    {
+        // Drives busses: In 3 = clock, In 4 = reset. Pulses of 3 ms.
+        struct Edge
+        {
+            long t;
+        };
+        auto Drive = [](Inst& I, long len, int f, const std::vector<long>& clk, const std::vector<long>& rst,
+                        std::vector<std::pair<long, long>>* offsets = nullptr) {
+            std::vector<float> bus(64 * 256);
+            size_t             ci = 0, ri = 0;
+            long               clk_hi = -1, rst_hi = -1;
+            for(long pos = 0; pos + f <= len; pos += f)
+            {
+                std::fill(bus.begin(), bus.begin() + 64 * f, 0.f);
+                for(int i = 0; i < f; ++i)
+                {
+                    const long t = pos + i;
+                    while(ci < clk.size() && clk[ci] <= t)
+                        clk_hi = clk[ci++];
+                    while(ri < rst.size() && rst[ri] <= t)
+                        rst_hi = rst[ri++];
+                    bus[2 * f + i] = clk_hi >= 0 && t - clk_hi < 144 ? 5.f : 0.f;
+                    bus[3 * f + i] = rst_hi >= 0 && t - rst_hi < 144 ? 5.f : 0.f;
+                }
+                step(I.a, bus.data(), f / 4);
+                if(offsets && f <= kChunk)
+                    for(int e = 0; e < I.a->clk.n_edges; ++e)
+                        offsets->push_back({pos + I.a->clk.edge_at[e], I.a->clk.edge_pulse[e]});
+            }
+        };
+        auto Pulses = [](double bpm, int ppqn, double from_s, double to_s) {
+            std::vector<long> t;
+            const double      per = 60.0 / bpm / ppqn * kSr;
+            for(double x = from_s * kSr; x < to_s * kSr; x += per)
+                t.push_back(static_cast<long>(x));
+            return t;
+        };
+        const int      res_idx[3] = {0, 2, 3}, res_val[3] = {1, 4, 24};
+        bool           count_ok = true, pos_ok = true;
+        char           why[160] = "";
+        for(double bpm : {90.0, 120.0, 174.0})
+            for(int r = 0; r < 3; ++r)
+                for(int f : {4, 24, 128})
+                {
+                    Inst I = Make(2, g_params);
+                    g_alg  = I.a;
+                    SetP(I, kParamClockRes, res_idx[r]);
+                    SetP(I, kParamBeatsPerBar, 3);
+                    const auto clk = Pulses(bpm, res_val[r], 0.1, 3.0);
+                    Drive(I, static_cast<long>(3.02 * kSr), f, clk, {});
+                    const long n     = static_cast<long>(clk.size());
+                    const long pulse = n - 1; // first edge = the One = pulse 0
+                    const int  beat  = static_cast<int>((pulse / res_val[r]) % 3);
+                    const int  bar   = static_cast<int>(pulse / res_val[r] / 3);
+                    if(I.a->clk.total_edges != n || I.a->clk.pulse != pulse)
+                    {
+                        count_ok = false;
+                        std::snprintf(why, sizeof why, "%.0f BPM %d PPQN %d fr: %d edges, pulse %lld (want %ld)", bpm,
+                                      res_val[r], f, I.a->clk.total_edges, static_cast<long long>(I.a->clk.pulse), n);
+                    }
+                    if(!I.a->clk.PositionValid() || I.a->clk.Beat() != beat || I.a->clk.Bar() != bar)
+                        pos_ok = false;
+                }
+        CHECK(count_ok, "clock: every edge counted at 90/120/174 BPM, 1/4/24 PPQN, 4/24/128 frames per step %s", why);
+        CHECK(pos_ok, "clock: position pulse → beat → bar (Beats/bar 3) right in every case");
+
+        // Offsets: each edge reported at its own sample (one chunk per step).
+        {
+            Inst I = Make(2, g_params);
+            g_alg  = I.a;
+            std::vector<std::pair<long, long>> off;
+            const auto                         clk = Pulses(133.0, 1, 0.05, 1.5);
+            Drive(I, static_cast<long>(1.6 * kSr), 24, clk, {}, &off);
+            bool ok = off.size() == clk.size();
+            for(size_t k = 0; ok && k < off.size(); ++k)
+                ok = off[k].first == clk[k] && off[k].second == static_cast<long>(k);
+            CHECK(ok, "clock: edge offsets sample-accurate (%zu edges, first at %ld)", off.size(), off.empty() ? -1L : off[0].first);
+        }
+        // Several edges in one chunk (ClockScan on its own, 8 kHz: 16-sample debounce).
+        {
+            ClockSync c;
+            ClockInit(c);
+            float ck[64] = {};
+            for(int e : {18, 38, 58})
+                for(int i = e; i < e + 4; ++i)
+                    ck[i] = 5.f;
+            ClockScan(c, ck, nullptr, 64, 8000.f);
+            CHECK(c.n_edges == 3 && c.edge_at[0] == 18 && c.edge_at[1] == 38 && c.edge_at[2] == 58 && c.edge_pulse[2] == 2,
+                  "clock: three edges in one chunk all counted (offsets %d %d %d, pulses 0…%lld)", c.edge_at[0], c.edge_at[1],
+                  c.edge_at[2], static_cast<long long>(c.edge_pulse[2]));
+        }
+        // Reset and clock in the same sample: that edge is the One.
+        {
+            Inst I = Make(2, g_params);
+            g_alg  = I.a;
+            SetP(I, kParamResetIn, 4);
+            auto clk = Pulses(120.0, 1, 0.05, 2.0); // edges every 24000 samples
+            std::vector<std::pair<long, long>> off;
+            Drive(I, static_cast<long>(2.0 * kSr), 4, clk, {clk[2]}, &off);
+            const bool same = off.size() > 3 && off[2].second == 0 && off[3].second == 1 && off[1].second == 1;
+            CHECK(same, "clock: Reset with the clock in the same sample → that edge is bar 1 beat 1 (pulses %ld %ld %ld %ld)",
+                  off.size() > 0 ? off[0].second : -1, off.size() > 1 ? off[1].second : -1,
+                  off.size() > 2 ? off[2].second : -1, off.size() > 3 ? off[3].second : -1);
+        }
+        // Reset alone between edges, and Resync: the next edge is the One.
+        {
+            Inst I = Make(2, g_params);
+            g_alg  = I.a;
+            SetP(I, kParamResetIn, 4);
+            auto clk = Pulses(120.0, 1, 0.05, 2.0);
+            std::vector<std::pair<long, long>> off;
+            Drive(I, static_cast<long>(2.0 * kSr), 32, clk, {clk[1] + 9000}, &off);
+            const bool reset_ok = off.size() > 3 && off[1].second == 1 && off[2].second == 0 && off[3].second == 1;
+            Inst J = Make(2, g_params);
+            g_alg  = J.a;
+            std::vector<std::pair<long, long>> off2;
+            Drive(J, static_cast<long>(0.8 * kSr), 32, Pulses(120.0, 1, 0.05, 0.8), {}, &off2);
+            const bool before = J.a->clk.PositionValid();
+            SetMenu(J, kParamResync, 1);
+            std::vector<std::pair<long, long>> off3;
+            Drive(J, static_cast<long>(0.8 * kSr), 32, Pulses(120.0, 1, 0.3, 0.8), {}, &off3);
+            const bool resync_ok = before && J.v[kParamResync] == 0 && !off3.empty() && off3[0].second == 0 && J.a->clk.PositionValid();
+            CHECK(reset_ok, "clock: Reset between edges → the next edge is the One");
+            CHECK(resync_ok, "clock: Resync → the next edge is the One, the switch falls back to 0");
+        }
+        // Clock lost → position invalid; clock back → its first edge is the One.
+        {
+            Inst I = Make(2, g_params);
+            g_alg  = I.a;
+            auto clk = Pulses(120.0, 1, 0.05, 1.6);
+            Drive(I, static_cast<long>(4.0 * kSr), 64, clk, {});
+            const bool lost = !I.a->clk.PositionValid() && I.a->clk.pulse < 0;
+            std::vector<std::pair<long, long>> off;
+            Drive(I, static_cast<long>(1.6 * kSr), 16, Pulses(100.0, 1, 0.1, 1.6), {}, &off);
+            CHECK(lost && !off.empty() && off[0].second == 0 && I.a->clk.PositionValid(),
+                  "clock: lost after 4 periods → no position; back → first edge = the One (now %d.%d)", I.a->clk.Bar() + 1,
+                  I.a->clk.Beat() + 1);
+            CHECK(g_textOob == 0, "clock: bar.beat fits the footer");
+        }
+        g_alg = A.a;
+    }
+
     // --- Clock in: synced mod LFOs ------------------------------------------------
     {
         Inst I = Make(4, g_params);
@@ -1123,7 +1266,7 @@ int main(int argc, char** argv)
         for(size_t pos = 0; pos + 24 <= len; pos += 24)
         {
             Run(I, s, 24, ck.data() + pos);
-            valid_seen = valid_seen || I.a->clock_valid;
+            valid_seen = valid_seen || I.a->clk.valid;
             if(pos >= 1000 + 24000 * 2 && (pos - 1000) % 6000 < 24) // quarter-pulse marks
             {
                 ph0.push_back(I.a->lfo_phase[0]);
@@ -1131,8 +1274,8 @@ int main(int argc, char** argv)
                 ph2.push_back(I.a->lfo_phase[2]);
             }
         }
-        CHECK(valid_seen && std::fabs(I.a->clock_period - 24000.f) < 30.f,
-              "Clock in: 2 Hz clock detected (period %.0f samples)", I.a->clock_period);
+        CHECK(valid_seen && std::fabs(I.a->clk.period - 24000.f) < 30.f,
+              "Clock in: 2 Hz clock detected (period %.0f samples)", I.a->clk.period);
         // x1 at quarter steps between pulses: 0, .25, .5, .75 (±0.02).
         bool x1_ok = ph0.size() >= 8, d4_ok = ph1.size() >= 8, x4_ok = ph2.size() >= 8;
         for(size_t k = 0; k < ph0.size(); ++k)
@@ -1161,7 +1304,7 @@ int main(int argc, char** argv)
         q.l.assign(none.size(), 0.f);
         q.r = q.l;
         Run(I, q, 24, none.data());
-        CHECK(!I.a->clock_valid, "Clock in: clock lost after 4 missing pulses, LFOs run free");
+        CHECK(!I.a->clk.valid, "Clock in: clock lost after 4 missing pulses, LFOs run free");
         g_textOob = g_shapeOob = 0;
         draw(I.a);
         CHECK(g_textOob == 0 && g_shapeOob == 0, "Clock in: display on screen");

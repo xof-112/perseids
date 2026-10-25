@@ -112,8 +112,13 @@ enum
     kParamModView = kParamModMode1 + 12, // Display: Mod view as graphics or numbers
     kParamModShape1,                     // per slot: internal LFO waveform
     kParamModLine1 = kParamModShape1 + 12, // per slot: the Mod overview line (mirrors the amount)
+    // Added in v0.30 (clock sync, ARCHITECTURE §9): page "Clock".
+    kParamClockRes = kParamModLine1 + 12, // pulses per beat
+    kParamBeatsPerBar,
+    kParamResetIn,                        // rising edge: next clock edge is the One
+    kParamResync,                         // confirm: next clock edge is the One
 
-    kNumParams = kParamModLine1 + 12,
+    kNumParams,
 };
 
 // Mod slot layout: slots 1–4 at kParamMod1 + slot × 5 (+ sync at
@@ -248,7 +253,7 @@ static_assert(sizeof(kModTargetNames) / sizeof(kModTargetNames[0]) == sizeof(kMo
 
 // Plug-in version, shown in the display header and the algorithm description.
 // History in README.md (Versionen).
-#define PERSEIDS_NT_VERSION "0.29"
+#define PERSEIDS_NT_VERSION "0.30"
 const char* const kVersion = "v" PERSEIDS_NT_VERSION;
 
 // Level match. Swarm (overlapping grains) comes out louder than Spectra (one
@@ -281,6 +286,8 @@ constexpr int kHoldInf = 31;
 
 const char* const kOffOn[]     = {"Off", "On", nullptr};
 const char* const kDirection[] = {"Fwd", "Rev", "Rnd", nullptr};
+const char* const kClockRes[]  = {"1 PPQN", "2 PPQN", "4 PPQN", "24 PPQN", nullptr};
+constexpr int     kClockResPulses[] = {1, 2, 4, 24};
 // Recording graphic, as in the firmware's Settings → REC (same order there:
 // 0 PRS centre-out embers, 1 PLR left→right embers, 2 CTR solid centre-out).
 const char* const kRecStyle[] = {"PRS", "PLR", "CTR", nullptr};
@@ -429,6 +436,12 @@ const _NT_parameter kParameterDefs[kNumParams] = {
 #define P_MOD_LINE(n) P_NUM("Mod " n, -100, 100, 0, kNT_unitHasStrings, 0)
     P_MOD_LINE("1") P_MOD_LINE("2") P_MOD_LINE("3") P_MOD_LINE("4") P_MOD_LINE("5") P_MOD_LINE("6")
     P_MOD_LINE("7") P_MOD_LINE("8") P_MOD_LINE("9") P_MOD_LINE("10") P_MOD_LINE("11") P_MOD_LINE("12")
+
+    // Clock (v0.30): position in beats and bars.
+    P_ENUM("Clock res", 3, 0, kClockRes)
+    P_NUM("Beats/bar", 1, 16, 4, kNT_unitNone, 0)
+    NT_PARAMETER_CV_INPUT("Reset in", 0, 0)
+    {.name = "Resync", .min = 0, .max = 1, .def = 0, .unit = kNT_unitConfirm, .scaling = 0, .enumStrings = nullptr},
 };
 
 const uint8_t kPageTrails[]  = {kParamCount, kParamThreshold, kParamContRec,
@@ -461,8 +474,10 @@ const uint8_t kPageModOverview[] = {kParamModReset, ModParam(0, kModDest)}; // i
 const uint8_t kPageMod[kNumModSlots][kModPageParams] = {
     MOD_PAGE(0), MOD_PAGE(1), MOD_PAGE(2), MOD_PAGE(3), MOD_PAGE(4),  MOD_PAGE(5),
     MOD_PAGE(6), MOD_PAGE(7), MOD_PAGE(8), MOD_PAGE(9), MOD_PAGE(10), MOD_PAGE(11)};
-const uint8_t kPageRouting[] = {kParamInL, kParamInR, kParamRecIn, kParamClockIn, kParamOutL,
+const uint8_t kPageRouting[] = {kParamInL, kParamInR, kParamRecIn, kParamOutL,
                                 kParamOutLMode, kParamOutR, kParamOutRMode};
+// Clock in moved here from Routing in v0.30 (same parameter, only the page).
+const uint8_t kPageClock[] = {kParamClockIn, kParamClockRes, kParamBeatsPerBar, kParamResetIn, kParamResync};
 
 const _NT_parameterPage kPages[] = {
     {.name = "Trails", .numParams = ARRAY_SIZE(kPageTrails), .group = 1, .unused = {0, 0}, .params = kPageTrails},
@@ -475,6 +490,7 @@ const _NT_parameterPage kPages[] = {
     {.name = "Mixer", .numParams = ARRAY_SIZE(kPageMixer), .group = 6, .unused = {0, 0}, .params = kPageMixer},
     {.name = "Display", .numParams = ARRAY_SIZE(kPageDisplay), .group = 8, .unused = {0, 0}, .params = kPageDisplay},
     {.name = "Routing", .numParams = ARRAY_SIZE(kPageRouting), .group = 7, .unused = {0, 0}, .params = kPageRouting},
+    {.name = "Clock", .numParams = ARRAY_SIZE(kPageClock), .group = 12, .unused = {0, 0}, .params = kPageClock},
     // Mod slots at the end, the overview first. Same group for the slots: the
     // cursor keeps its row from slot to slot.
     {.name = "Mod overview", .numParams = ARRAY_SIZE(kPageModOverview), .group = 11, .unused = {0, 0}, .params = kPageModOverview},
@@ -493,7 +509,7 @@ const _NT_parameterPage kPages[] = {
 };
 
 constexpr int kNumPages        = static_cast<int>(ARRAY_SIZE(kPages));
-constexpr int kModOverviewPage = 9;
+constexpr int kModOverviewPage = 10;
 // (kPages[kModOverviewPage] is "Mod overview"; checked in the tests.)
 
 // Specification: recording time each Trail can hold. Sets the DRAM request
@@ -506,6 +522,136 @@ enum
 const _NT_specification kSpecs[kNumSpecs] = {
     {.name = "Trail seconds", .min = 1, .max = 30, .def = 10, .type = kNT_typeSeconds},
 };
+
+// ---------------------------------------------------------------------------
+// Clock sync (ARCHITECTURE §9): pulses → beats → bars.
+
+constexpr int kMaxEdgesPerChunk = 8;  // a 64-frame chunk with the 2 ms debounce holds ≤ 1
+constexpr int kMaxClockActions  = 4;  // one slot per kind (stage 2 on)
+
+// Action waiting for a grid point (stage 2 on; unused in v0.30).
+struct ClockAction
+{
+    uint8_t kind;         // 0 = none
+    int64_t target_pulse; // fires on the edge with this pulse number
+};
+
+struct ClockSync
+{
+    // Edge detector of Clock in (as in v0.29; Mod sync reads these).
+    bool     gate;
+    bool     valid;  // clock running: at least two edges, none missing
+    bool     seen;   // at least one edge since the clock was lost
+    uint32_t since;  // samples since the last rising edge
+    float    period; // samples between edges, 0 = not measured yet
+    uint32_t count;  // edges since the clock became valid (Mod sync)
+
+    // Position.
+    int     res;           // pulses per beat (Clock res)
+    int     beats_per_bar;
+    int64_t pulse;         // pulse number of the last edge, 0 = the One; -1 = none yet
+    bool    one_next;      // Reset / Resync: the next edge is the One
+    bool    reset_gate;    // Reset in detector
+
+    // Edges found in the current chunk: offset into the chunk and pulse number.
+    int     n_edges;
+    int     edge_at[kMaxEdgesPerChunk];
+    int64_t edge_pulse[kMaxEdgesPerChunk];
+    int     total_edges; // all edges counted (tests)
+    bool    period_edge; // an edge with a measured period in this chunk (Mod sync, as in v0.29)
+
+    ClockAction actions[kMaxClockActions];
+
+    bool PositionValid() const { return valid && pulse >= 0 && !one_next; }
+    int  Beat() const { return static_cast<int>((pulse / res) % beats_per_bar); }  // 0-based in the bar
+    int  Bar() const { return static_cast<int>(pulse / res / beats_per_bar); }      // 0-based
+};
+
+void ClockInit(ClockSync& c)
+{
+    c = ClockSync{};
+    c.res           = 1;
+    c.beats_per_bar = 4;
+    c.pulse         = -1;
+}
+
+// Scans Clock in and Reset in over frames [0, n) of a chunk. Reset before the
+// clock in the same sample, so a clock edge together with Reset is the One.
+// All edges count; their offsets are kept for sample-accurate actions.
+void ClockScan(ClockSync& c, const float* ck, const float* rs, int n, float sr)
+{
+    c.n_edges     = 0;
+    c.period_edge = false;
+    const uint32_t debounce = static_cast<uint32_t>(0.002f * sr); // 2 ms
+    for(int i = 0; i < n; ++i)
+    {
+        if(rs)
+        {
+            if(!c.reset_gate && rs[i] > 1.f)
+            {
+                c.reset_gate = true;
+                c.one_next   = true;
+            }
+            else if(c.reset_gate && rs[i] < 0.5f)
+                c.reset_gate = false;
+        }
+        if(!ck)
+        {
+            ++c.since;
+            continue;
+        }
+        ++c.since;
+        if(!c.gate && ck[i] > 1.f)
+        {
+            c.gate = true;
+            if(c.since >= debounce)
+            {
+                if(c.seen)
+                {
+                    // Second edge on: the period is known, the clock runs.
+                    c.period = static_cast<float>(c.since);
+                    if(!c.valid)
+                    {
+                        c.valid = true;
+                        c.count = 0;
+                    }
+                    else
+                        ++c.count;
+                    c.period_edge = true;
+                }
+                // Position: the first edge after the clock (re)appeared, or the
+                // first after Reset / Resync, is the One.
+                if(!c.seen || c.one_next || c.pulse < 0)
+                {
+                    c.pulse    = 0;
+                    c.one_next = false;
+                }
+                else
+                    ++c.pulse;
+                if(c.n_edges < kMaxEdgesPerChunk)
+                {
+                    c.edge_at[c.n_edges]    = i;
+                    c.edge_pulse[c.n_edges] = c.pulse;
+                    ++c.n_edges;
+                }
+                ++c.total_edges;
+                c.seen  = true;
+                c.since = 0;
+            }
+        }
+        else if(c.gate && ck[i] < 0.5f)
+            c.gate = false;
+    }
+    // Lost after 4 periods (at most 3 s): position invalid until the next edge.
+    const float lost = c.period > 1.f ? (4.f * c.period < 3.f * sr ? 4.f * c.period : 3.f * sr) : 3.f * sr;
+    if(!ck || static_cast<float>(c.since) > lost)
+    {
+        c.valid  = false;
+        c.seen   = false;
+        c.period = 0.f;
+        c.pulse  = -1;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Instance
@@ -678,13 +824,8 @@ struct PerseidsAlgorithm : public _NT_algorithm
     volatile bool mod_arm_now;                // own screen used: arm at once
     volatile bool mod_reset_ui;               // after Reset all mods
 
-    // Clock in: edge detector and period (samples), for synced mod LFOs.
-    bool     clock_gate;
-    bool     clock_valid;
-    bool     clock_seen;   // at least one edge since the clock was lost
-    uint32_t clock_since;  // samples since the last rising edge
-    float    clock_period; // samples between edges, 0 = not measured yet
-    uint32_t clock_count;  // edges since the clock (re)appeared
+    // Clock in / Reset in: edges, period, position in beats and bars.
+    ClockSync clk;
     float cv_smooth[kNumModSlots];
     float   mod_prev[kNumModSlots][3]; // last chunk's mod on amount / offset / rate
     float   mod_out[kNumModSlots];     // what each slot puts out right now (offset + amount × source)
@@ -968,12 +1109,7 @@ _NT_algorithm* construct(const _NT_algorithmMemoryPtrs& ptrs,
     a->out_gain     = 1.f;
     a->playing      = true;
     a->rec_gate     = false;
-    a->clock_gate   = false;
-    a->clock_valid  = false;
-    a->clock_seen   = false;
-    a->clock_since  = 0;
-    a->clock_period = 0.f;
-    a->clock_count  = 0;
+    ClockInit(a->clk);
     a->sample_clock = 0;
     a->slice_acc    = 0;
     a->gov_acc      = 0;
@@ -1187,53 +1323,15 @@ bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int 
     const float sr     = static_cast<float>(NT_globals.sampleRate > 0 ? NT_globals.sampleRate : 48000);
     int         active = 0;
 
-    // Clock in: rising edge above 1 V (re-armed below 0.5 V), at most one edge
-    // per chunk counts (chunks are ≤ 1.3 ms; faster clocks are not musical here).
-    bool       edge      = false;
-    const int  clock_bus = ParamValue(a, kParamClockIn);
-    if(clock_bus > 0)
-    {
-        const float* ck = busFrames + (clock_bus - 1) * numFrames + at;
-        for(int i = 0; i < n; ++i)
-        {
-            ++a->clock_since;
-            if(!a->clock_gate && ck[i] > 1.f)
-            {
-                a->clock_gate = true;
-                if(a->clock_since >= static_cast<uint32_t>(0.002f * sr)) // 2 ms debounce
-                {
-                    if(a->clock_seen)
-                    {
-                        // Second edge on: the period is known, the clock runs.
-                        a->clock_period = static_cast<float>(a->clock_since);
-                        if(!a->clock_valid)
-                        {
-                            a->clock_valid = true;
-                            a->clock_count = 0;
-                        }
-                        else
-                            ++a->clock_count;
-                        edge = true;
-                    }
-                    a->clock_seen  = true;
-                    a->clock_since = 0;
-                }
-            }
-            else if(a->clock_gate && ck[i] < 0.5f)
-                a->clock_gate = false;
-        }
-    }
-    else
-        a->clock_since += static_cast<uint32_t>(n);
-    {
-        const float lost = a->clock_period > 1.f ? Clampf(4.f * a->clock_period, 0.f, 3.f * sr) : 3.f * sr;
-        if(clock_bus <= 0 || static_cast<float>(a->clock_since) > lost)
-        {
-            a->clock_valid  = false;
-            a->clock_seen   = false;
-            a->clock_period = 0.f;
-        }
-    }
+    // Clock in / Reset in (ClockScan): rising edge above 1 V, re-armed below
+    // 0.5 V. Mod sync keeps its v0.29 rule: one pulse = one "bar".
+    const int clock_bus = ParamValue(a, kParamClockIn);
+    const int reset_bus = ParamValue(a, kParamResetIn);
+    a->clk.res          = kClockResPulses[ParamValue(a, kParamClockRes)];
+    a->clk.beats_per_bar = ParamValue(a, kParamBeatsPerBar);
+    ClockScan(a->clk, clock_bus > 0 ? busFrames + (clock_bus - 1) * numFrames + at : nullptr,
+              reset_bus > 0 ? busFrames + (reset_bus - 1) * numFrames + at : nullptr, n, sr);
+    const bool edge = a->clk.period_edge;
     for(int m = 0; m < kNumModSlots; ++m)
     {
         const int   dest   = kModTargets[a->mod_armed[m][kArmDest]];
@@ -1263,17 +1361,17 @@ bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int 
                 const int div = kModSyncDiv[r];
                 const int mul = kModSyncMul[r];
                 a->lfo_phase[m] += Eff(m, kModRate, 2) * 0.01f * static_cast<float>(n) / sr;
-                if(a->clock_valid && a->clock_period > 1.f)
+                if(a->clk.valid && a->clk.period > 1.f)
                 {
                     if(edge)
                     {
-                        if(a->clock_count % static_cast<uint32_t>(div) == 0)
+                        if(a->clk.count % static_cast<uint32_t>(div) == 0)
                             a->lfo_phase[m] = 0.f;
                         a->lfo_sub[m] = 0;
                     }
                     else if(mul > 1)
                     {
-                        int k = static_cast<int>(static_cast<float>(a->clock_since) * mul / a->clock_period);
+                        int k = static_cast<int>(static_cast<float>(a->clk.since) * mul / a->clk.period);
                         k     = k > mul - 1 ? mul - 1 : k;
                         if(k > a->lfo_sub[m])
                         {
@@ -1283,14 +1381,14 @@ bool UpdateMod(PerseidsAlgorithm* a, const float* busFrames, int numFrames, int 
                     }
                 }
             }
-            else if(sync > 0 && a->clock_valid && a->clock_period > 1.f)
+            else if(sync > 0 && a->clk.valid && a->clk.period > 1.f)
             {
                 // Locked: Mul cycles per Div pulses, phase reset on the bar.
                 const float cycles = static_cast<float>(kModSyncMul[sync]) / static_cast<float>(kModSyncDiv[sync]);
-                if(edge && a->clock_count % static_cast<uint32_t>(kModSyncDiv[sync]) == 0)
+                if(edge && a->clk.count % static_cast<uint32_t>(kModSyncDiv[sync]) == 0)
                     a->lfo_phase[m] = 0.f;
                 else
-                    a->lfo_phase[m] += cycles * static_cast<float>(n) / a->clock_period;
+                    a->lfo_phase[m] += cycles * static_cast<float>(n) / a->clk.period;
             }
             else
                 a->lfo_phase[m] += Eff(m, kModRate, 2) * 0.01f * static_cast<float>(n) / sr;
@@ -1355,6 +1453,12 @@ void step(_NT_algorithm* self, float* busFrames, int numFramesBy4)
         a->eng->capture.ClearAll();
         a->lm_sp_lock = a->lm_sw_lock = 0.f; // new material: lock in again
         SetParamAudio(a, kParamClear, 0);
+    }
+    // "Resync": the next clock edge is the One; the switch falls back.
+    if(a->v[kParamResync])
+    {
+        a->clk.one_next = true;
+        SetParamAudio(a, kParamResync, 0);
     }
     // "Reset all mods": every slot back to off, then the switch falls back.
     if(a->v[kParamModReset])
@@ -2679,7 +2783,16 @@ bool draw(_NT_algorithm* self)
     bool wants_clock = false;
     for(int m = 0; m < kNumModSlots; ++m)
         wants_clock = wants_clock || (a->mod_armed[m][kArmSync] != 0 && a->mod_armed[m][kArmDest] != 0);
-    if(a->clock_valid)
+    if(a->clk.PositionValid())
+    {
+        // Running clock with a known One: bar.beat instead of "CLK" (the
+        // space up to the right pot label holds 7 tiny characters).
+        int len = NT_intToString(buff, (a->clk.Bar() % 1000) + 1);
+        buff[len++] = '.';
+        NT_intToString(buff + len, a->clk.Beat() + 1);
+        NT_drawText(168, 61, buff, 12, kNT_textLeft, kNT_textTiny);
+    }
+    else if(a->clk.valid)
         NT_drawText(168, 61, "CLK", 12, kNT_textLeft, kNT_textTiny);
     else if(wants_clock)
         NT_drawText(168, 61, "CLK?", 6, kNT_textLeft, kNT_textTiny); // synced slot, no clock arriving

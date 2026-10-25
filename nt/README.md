@@ -54,7 +54,8 @@ Alle Regler sind normale NT-Parameter, also per CV oder MIDI steuerbar.
 | Mixer | Level 1–5 · Lock 1–5 · Solo 1–5 |
 | Mod 1–12 | Mod in (CV-Eingang, leer = internes LFO) · Mod dest · Mod amount ±100 % · Mod offset ±100 % · Mod shape · Mod LFO rate 0,01–20 Hz · Mod sync Free / ÷ / × |
 | Display | Rec style PLR / PRS / CTR |
-| Routing | In L · In R (optional) · Rec trig in (Flanke über 1 V) · Clock in (Flanke über 1 V) · Out L/R mit Add/Replace |
+| Routing | In L · In R (optional) · Rec trig in (Flanke über 1 V) · Out L/R mit Add/Replace |
+| Clock | Clock in (Flanke über 1 V, ab Werk In 3) · Clock res 1/2/4/24 PPQN (1) · Beats/bar 1–16 (4) · Reset in (Flanke über 1 V, ab Werk keiner) · Resync (bestätigen; auch per Gate) |
 
 **Dry/Wet** wie der Multi der Firmware: überblendet gleichlaut zwischen dem sauberen Stereo-Eingang (In R leer → In L auf beiden Seiten) und der Wolke, das trockene Signal mit 0,85 wie in der Firmware. Ab Werk 100 % = nur Wolke, wie vor diesem Parameter. Unter 100 % die Ausgänge auf *Replace* oder auf eigene Busse legen, sonst kommt das Original doppelt. Auch Mod-Ziel.
 
@@ -64,6 +65,18 @@ Unterschiede zur Firmware, alle durch den NT bedingt:
 - **Pegel:** NT-Busse führen Volt. Eingang ±5 V = Codec-Vollaussteuerung, Ausgang × 5 V. *Output level* steht ab Werk auf +12 dB, weil der Wet-Bus von Perseids deutlich unter dem Eingang liegt (Trail-Level 50 %, Wolken-Panorama −3 dB). Danach dieselbe weiche Begrenzung wie im Multi der Firmware.
 - **Blend** steht ab Werk auf 50 % (Firmware: 0 = nur Spectra), damit beide Engines gleich zu hören sind.
 - **Trails in 16 Bit** (±2,0 Vollaussteuerung, eine Oktave Reserve über dem Codec-Bereich). Gegen die Float-Fassung gemessen liegt der Unterschied am Ausgang unter der 16-Bit-Quantisierung der Test-WAVs (−45 bis −55 dB).
+
+## Clock
+
+Seite *Clock* (seit v0.30, nach *Routing*; *Clock in* ist von *Routing* hierher umgezogen). Ausbaustufe 1 von 5 der Clock-Synchronisation (ARCHITECTURE §9): Perseids kennt jetzt die **Position** im Takt. Aufnahme, Play und Fades folgen ihr in den nächsten Stufen.
+
+- **Clock res**: Pulse pro Schlag (1, 2, 4 oder 24 PPQN). **Beats/bar**: Schläge pro Takt.
+- **Wo die Eins ist**, steht nicht in der Clock. Ohne *Reset in* ist die erste Flanke nach dem (Wieder-)Auftauchen der Clock die Eins. Mit *Reset in* macht eine Flanke über 1 V die **nächste** Clock-Flanke zur Eins. Kommen Reset und Clock im selben Sample (so starten die meisten VCV-Clocks), ist genau diese Flanke die Eins. *Resync* tut dasselbe von Hand oder per Gate über das CV-Mapping des NT.
+- **Anzeige:** In der Fußzeile steht bei laufender Clock statt `CLK` die Position `Takt.Schlag`, z. B. `3.2`. Nach Reset/Resync bis zur nächsten Flanke steht dort `CLK`.
+- Die Flanken werden sample-genau erfasst, alle, nicht nur eine je Block; das ist die Grundlage für exakte Aufnahmelängen in Stufe 3.
+- Clock-Verlust wie bisher: 4 Perioden ohne Flanke (höchstens 3 s) → keine Position, Mod sync läuft frei.
+- **Mod sync** zählt weiter in Pulsen (1 Puls = 1 „Takt“), unabhängig von *Clock res* und *Beats/bar*, damit Patches ab v0.15 gleich klingen.
+- Alle neuen Parameter auf Werkswert → Ausgabe bitgleich zu v0.29 (`make golden`).
 
 ## Modulation
 
@@ -128,7 +141,7 @@ make render     # render/perseids-screens.png
 
 ## Tests
 
-`test/sim.cpp` läuft ohne Hardware und prüft 101 Punkte (NT-Fassung) bzw. 106 (nt_emu-Fassung, `test/sim_emu`), u. a.:
+`test/sim.cpp` läuft ohne Hardware und prüft 184 Punkte (NT-Fassung) bzw. 183 (nt_emu-Fassung, `test/sim_emu`), u. a.:
 
 - Speicherbedarf je *Trail seconds*, Stille rein = Stille raus
 - Spectra trifft 220 Hz, *Pitch Spectra* +12 → 440 Hz; Swarm mit *Pitch Swarm* +12 → 440 Hz und stereo
@@ -138,6 +151,9 @@ make render     # render/perseids-screens.png
 - Add/Replace, zwei Instanzen ohne gemeinsamen Zustand
 - Bedienung mit NT- und nt_emu-Tastensemantik (Potis, Encoder, Klicks, Ziehen ≠ Klick, Tasten 3/4)
 - Display: alles innerhalb von 256 × 64, alle drei Rec-Stile über eine Aufnahme hinweg
+- Clock-Modell: jede Flanke gezählt bei 90/120/174 BPM, 1/4/24 PPQN und 4/24/128 Frames pro Block; Position Puls → Schlag → Takt; Flanken-Offsets sample-genau; mehrere Flanken in einem Block; Reset und Clock im selben Sample; Reset allein, Resync; Clock weg und zurück
+
+`make golden` baut dasselbe Szenario (Clock, drei synchronisierte Mod-Slots, eine Aufnahme, Clock-Pause) gegen diesen Stand und gegen `GOLDEN_REV` (ab Werk der letzte Commit) und vergleicht die Ausgabe bitgenau, bei 4, 24 und 128 Frames pro Block.
 
 Die Hörproben landen in `test/out/` (Eingang, Spectra, Swarm, Blend, Blur, Radiation, Umbra+Fold, Aurora+Saw). **Eigenes Material:** `./test/sim aufnahme.wav` schickt eine WAV-Datei (16/24/32 Bit oder Float) mit Blend 0/50/100 % durch das Plug-in und schreibt `test/out/yours_blend*.wav`.
 
@@ -177,6 +193,7 @@ Die Version steht im Display neben „PERSEIDS“ und in der Algorithmus-Beschre
 | 0.27 | Amount-Zeile: links „Mod n <Ziel>“ (Name des Amount-Parameters folgt dem Ziel), rechts „40 % > +12 %“ |
 | 0.28 | Markierung und Ziel jetzt im Wert statt im Namen (nt_emu zeigt umbenannte Parameter nicht): modulierte Parameter „37% ~“, Übersicht „Mod 1   Blend 40 % > +12 %“; alle Mod-Ziele zeigen ihren Wert über `parameterString()` |
 | 0.29 | Slot-Seite wieder „Mod n amount   40 % > +12 %“ (ohne Ziel); die Mod overview hat eigene Zeilen „Mod n   Blend 40 % > +12 %“, die mit dem Amount gekoppelt sind; `HOLD`/`CLK` in der Fußzeile weiter links, damit `CLK` in nt_emu nicht mehr in `2 SIZE` steht |
+| 0.30 | Clock-Sync Stufe 1: Seite *Clock* (Clock in hierher, Clock res, Beats/bar, Reset in, Resync), Position Takt.Schlag in der Fußzeile, Flanken sample-genau und alle gezählt; Mod sync und Ausgabe unverändert (Golden-Test) |
 
 ## Stand
 

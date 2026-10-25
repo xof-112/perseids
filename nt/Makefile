@@ -132,3 +132,18 @@ clean:
 -include $(wildcard build/arm/*.d build/win/*.d)
 
 .PHONY: all win wintest test render clean
+
+# Golden test: same scenario through this tree and through GOLDEN_REV
+# (default: the last commit) — audio must be bit-identical.
+GOLDEN_REV ?= HEAD
+GOLDEN_DIR := build/golden
+golden: test/golden.cpp test/stubs.cpp $(PLUGIN_SRC) $(ENGINE_SRC) $(HOST_C)
+	@mkdir -p $(GOLDEN_DIR)
+	git show $(GOLDEN_REV):nt/perseids_nt.cpp > $(GOLDEN_DIR)/perseids_ref.cpp
+	g++ -std=c++17 $(HOST_FLAGS) -I. -DPERSEIDS_SRC='"../perseids_nt.cpp"' -o $(GOLDEN_DIR)/new test/golden.cpp test/stubs.cpp $(ENGINE_SRC) $(HOST_C)
+	g++ -std=c++17 $(HOST_FLAGS) -I. -Itest -DPERSEIDS_SRC='"$(CURDIR)/$(GOLDEN_DIR)/perseids_ref.cpp"' -o $(GOLDEN_DIR)/ref test/golden.cpp test/stubs.cpp $(ENGINE_SRC) $(HOST_C)
+	@for f in 4 24 128; do \
+	  $(GOLDEN_DIR)/new $$f $(GOLDEN_DIR)/new_$$f.raw && $(GOLDEN_DIR)/ref $$f $(GOLDEN_DIR)/ref_$$f.raw && \
+	  if cmp -s $(GOLDEN_DIR)/new_$$f.raw $(GOLDEN_DIR)/ref_$$f.raw; then echo "ok   golden: $$f frames per step bit-identical to $(GOLDEN_REV) ($$(stat -c %s $(GOLDEN_DIR)/new_$$f.raw) bytes)"; \
+	  else echo "FAIL golden: $$f frames per step differs from $(GOLDEN_REV)"; exit 1; fi; done
+.PHONY: golden
